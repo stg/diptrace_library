@@ -14,31 +14,76 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from apps.lib.dch_model import (
-    detect_pattern_records_from_binary,
-    extract_len16_utf16_noterm_stream,
-    extract_len16_utf16_stream,
-    infer_component_records_from_stream,
-    read_bytes,
-)
+# Heuristic path intentionally disabled (kept commented for reference).
+# from apps.lib.dch_heuristic import (
+#     detect_pattern_records_from_binary,
+#     extract_len16_utf16_noterm_stream,
+#     extract_len16_utf16_stream,
+#     infer_component_records_from_stream,
+#     read_bytes,
+# )
+from apps.lib.dch_structural import decode_structural_components
+from apps.lib.component_resolver import iter_component_parts, resolve_part_pattern
 
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".vs", ".idea"}
 
 
-def _extract_file_rows(dch_path: Path) -> list[tuple[str, str, str]]:
-    data = read_bytes(dch_path)
-    lstr = extract_len16_utf16_stream(data, min_len=1, max_len=256)
-    lshort = extract_len16_utf16_noterm_stream(data, min_len=1, max_len=256)
-    comps = infer_component_records_from_stream(lstr, lshort, data=data)
-    comps = detect_pattern_records_from_binary(data, comps)
+# Heuristic path intentionally disabled (kept commented for reference).
+# def _extract_file_rows_heuristic(dch_path: Path) -> list[tuple[str, str, str]]:
+#     data = read_bytes(dch_path)
+#     lstr = extract_len16_utf16_stream(data, min_len=1, max_len=256)
+#     lshort = extract_len16_utf16_noterm_stream(data, min_len=1, max_len=256)
+#     comps = infer_component_records_from_stream(lstr, lshort, data=data)
+#     comps = detect_pattern_records_from_binary(data, comps)
+#
+#     out: list[tuple[str, str, str]] = []
+#     for c in comps:
+#         name = str(c.get("part_name", "")).strip(" \t")
+#         value = str(c.get("value", "")).strip(" \t")
+#         pattern = str(c.get("pattern", {}).get("name", "")).strip(" \t") if isinstance(c.get("pattern"), dict) else ""
+#         # User-specific post-processing rule (not a DipTrace file-format rule):
+#         # collapse generic Name when Pattern starts with that same token, e.g. RES + RES_0603.
+#         if name and pattern.startswith(name):
+#             tail = pattern[len(name) :]
+#             if tail == "" or (tail and not tail[0].isalnum()):
+#                 name = ""
+#         out.append((name, value, pattern))
+#     return out
+
+
+def _extract_file_rows_structural(dch_path: Path) -> list[tuple[str, str, str]]:
+    tree = decode_structural_components(dch_path)
+
+    component_roots = iter_component_parts(tree)
+    branches = tree.get("Branches", []) if isinstance(tree, dict) else []
+    has_components = any(
+        isinstance(b, dict) and b.get("NodeType") == "Branch" and str(b.get("Name", "")) == "Components"
+        for b in branches
+    ) if isinstance(branches, list) else False
+    if not has_components:
+        raise RuntimeError("structural decode missing Components branch")
 
     out: list[tuple[str, str, str]] = []
-    for c in comps:
-        name = str(c.get("part_name", "")).strip(" \t")
-        value = str(c.get("value", "")).strip(" \t")
-        pattern = str(c.get("pattern", {}).get("name", "")).strip(" \t") if isinstance(c.get("pattern"), dict) else ""
-        # Normalize generic names duplicated as prefix in pattern names, e.g. RES + RES_0603.
+    for rec in component_roots:
+        dec = rec.get("Decoded")
+        if not isinstance(dec, dict) or dec.get("RecordType") != "Part":
+            continue
+        fields = dec.get("Fields")
+        if not isinstance(fields, dict):
+            continue
+        ref = str(fields.get("RefDes", "")).strip(" \t")
+        if not ref:
+            continue
+        if ref.startswith("NetPort"):
+            continue
+        name = str(fields.get("Name", "")).strip(" \t")
+        value = str(fields.get("Value", "")).strip(" \t")
+        pattern, _pattern_source = resolve_part_pattern(tree, rec)
+        pattern = str(pattern).strip(" \t")
+
+        # User-specific post-processing rule (not a DipTrace file-format rule):
+        # collapse generic Name when Pattern starts with that same token, e.g. RES + RES_0603.
         if name and pattern.startswith(name):
             tail = pattern[len(name) :]
             if tail == "" or (tail and not tail[0].isalnum()):
@@ -47,10 +92,17 @@ def _extract_file_rows(dch_path: Path) -> list[tuple[str, str, str]]:
     return out
 
 
-def _worker(dch_str: str) -> dict[str, Any]:
+def _extract_file_rows(dch_path: Path, decoder: str) -> list[tuple[str, str, str]]:
+    # Heuristic path intentionally disabled (kept commented for reference).
+    # if decoder == "heuristic":
+    #     return _extract_file_rows_heuristic(dch_path)
+    return _extract_file_rows_structural(dch_path)
+
+
+def _worker(dch_str: str, decoder: str) -> dict[str, Any]:
     dch = Path(dch_str)
     st = dch.stat()
-    rows = _extract_file_rows(dch)
+    rows = _extract_file_rows(dch, decoder=decoder)
     unique_rows = sorted(set(rows))
     missing_value = sum(1 for _, value, _ in rows if value == "")
     missing_pattern = sum(1 for _, _, pat in rows if pat == "")
@@ -141,7 +193,9 @@ def _print_progress(
     )
 
 
-def build_db(root: Path, workers: int, prev_index: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+def build_db(
+    root: Path, workers: int, prev_index: dict[str, dict[str, Any]] | None = None, decoder: str = "structural"
+) -> dict[str, Any]:
     if prev_index is None:
         prev_index = {}
     failures: list[dict[str, str]] = []
@@ -241,7 +295,7 @@ def build_db(root: Path, workers: int, prev_index: dict[str, dict[str, Any]] | N
                                         if prev is not None and isinstance(prev.get("unique_rows"), list):
                                             for a, b, c in prev["unique_rows"]:
                                                 unique_total_estimate.add((str(a), str(b), str(c)))
-                                        fut = ex.submit(_worker, ent.path)
+                                        fut = ex.submit(_worker, ent.path, decoder)
                                         pending.add(fut)
                                         fut_to_path[fut] = Path(ent.path)
                             except OSError:
@@ -337,6 +391,12 @@ def main() -> int:
     ap.add_argument("--out", default="analysis/component_combo_db.json", help="Output JSON file.")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 4) - 1), help="Worker process count.")
     ap.add_argument("--clean", action="store_true", help="Ignore existing output DB cache and do a full rebuild.")
+    ap.add_argument(
+        "--decoder",
+        choices=["structural", "heuristic"],
+        default="structural",
+        help="Decoder base for extracting component triples.",
+    )
     args = ap.parse_args()
 
     root = Path(args.root)
@@ -346,6 +406,7 @@ def main() -> int:
 
     print(f"scan_root={root}")
     print(f"workers={args.workers}")
+    print(f"decoder={args.decoder}")
     prev_index: dict[str, dict[str, Any]] = {}
     if not args.clean:
         prev_index = _load_previous_index(out)
@@ -353,7 +414,7 @@ def main() -> int:
             print(f"cache_index_files={len(prev_index)}")
     else:
         print("cache=disabled (--clean)")
-    db = build_db(root, workers=max(1, args.workers), prev_index=prev_index)
+    db = build_db(root, workers=max(1, args.workers), prev_index=prev_index, decoder=args.decoder)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(db, indent=2), encoding="utf-8")

@@ -527,6 +527,74 @@ def _decode_s8(data: bytes, pos: int) -> int | None:
     return v - 256 if v >= 128 else v
 
 
+def _decode_be_len16_string_at(data: bytes, pos: int, min_len: int = 0, max_len: int = 256) -> tuple[int, str] | None:
+    if pos < 0 or pos + 2 > len(data):
+        return None
+    ln = (data[pos] << 8) | data[pos + 1]
+    if not (min_len <= ln <= max_len):
+        return None
+    end = pos + 2 + 2 * ln
+    if end > len(data):
+        return None
+    raw = data[pos + 2 : end]
+    try:
+        text = raw.decode("utf-16be")
+    except UnicodeDecodeError:
+        return None
+    if _has_disallowed_controls(text):
+        return None
+    return end, text
+
+
+def _extract_component_head_fields_be(
+    data: bytes, ref: str, ref_offset_hint: int, part_name_hint: str
+) -> tuple[str, str, str, str] | None:
+    # Deterministic local component head shape observed in binary:
+    #   <len16be part_name><len16be refdes><len16be value><len16be base_ref><len16be base_name>...
+    token = bytes([(len(ref) >> 8) & 0xFF, len(ref) & 0xFF]) + ref.encode("utf-16be")
+    s = max(0, ref_offset_hint - 96)
+    e = min(len(data), ref_offset_hint + 96)
+    cands: list[int] = []
+    i = s
+    while True:
+        j = data.find(token, i, e)
+        if j < 0:
+            break
+        cands.append(j)
+        i = j + 1
+    if not cands:
+        return None
+    cands.sort(key=lambda p: abs(p - ref_offset_hint))
+
+    for ref_pos in cands:
+        # Validate previous part-name token when available.
+        part_name = part_name_hint
+        pn_pos = ref_pos - (2 + 2 * len(part_name_hint))
+        if part_name_hint != "" and pn_pos >= 0:
+            prev = _decode_be_len16_string_at(data, pn_pos, min_len=1, max_len=256)
+            if prev is not None:
+                _, prev_text = prev
+                if prev_text != part_name_hint and not part_name_hint.startswith("#"):
+                    continue
+                part_name = prev_text
+
+        p = ref_pos + 2 + 2 * len(ref)
+        v = _decode_be_len16_string_at(data, p, min_len=0, max_len=256)
+        if v is None:
+            continue
+        p, value = v
+        br = _decode_be_len16_string_at(data, p, min_len=0, max_len=32)
+        if br is None:
+            continue
+        p, base_ref = br
+        bn = _decode_be_len16_string_at(data, p, min_len=0, max_len=256)
+        if bn is None:
+            continue
+        _, base_name = bn
+        return part_name, value, base_ref, base_name
+    return None
+
+
 def _decode_branch_index_guess(b: int | None) -> int:
     # Wire branch indices appear to use small non-negative values with -1 sentinel.
     # Empirically, value 63 behaves like sentinel.
@@ -1821,16 +1889,26 @@ def detect_pattern_records_from_binary(
         return components
 
     anchors: list[tuple[int, int]] = []
+    cut_anchors: set[int] = set()
     for idx, c in enumerate(components):
         a = int(c.get("anchor_part_name_start", -1))
         if a >= 0:
             anchors.append((a, idx))
+            cut_anchors.add(a)
+        for aa in c.get("all_part_name_starts", []):
+            try:
+                av = int(aa)
+            except (TypeError, ValueError):
+                continue
+            if av >= 0:
+                cut_anchors.add(av)
     if not anchors:
         for c in components:
             c["pattern"] = {"name": ""}
         return components
 
     anchors.sort(key=lambda t: t[0])
+    cut_sorted = sorted(cut_anchors)
     for _, ci in anchors:
         components[ci]["pattern"] = {"name": ""}
 
@@ -1840,7 +1918,11 @@ def detect_pattern_records_from_binary(
         if NET_PORT_RE.match(ref):
             components[ci]["pattern"] = {"name": ""}
             continue
-        end = anchors[ai + 1][0] if ai + 1 < len(anchors) else n
+        end = n
+        for a2 in cut_sorted:
+            if a2 > start:
+                end = a2
+                break
         end = min(end, start + max_scan)
         scan_start = max(0, start - back_scan)
         best: dict[str, Any] | None = None
@@ -1883,6 +1965,17 @@ def detect_pattern_records_from_binary(
             row["holes"] = holes
             row["model3d_file"] = _detect_pattern_model3d_file_from_binary(data, start_pos=holes_end, span_end=end)
             components[ci]["pattern"] = row
+        else:
+            # Deterministic fallback: some symbols expose package token via base_name
+            # but have no local binary pattern block near this anchor.
+            bname = str(components[ci].get("base_name", "")).strip()
+            if (
+                bname != ""
+                and " " not in bname
+                and any(ch.isdigit() for ch in bname)
+                and any(ch in bname for ch in ("_", "-", "/", "."))
+            ):
+                components[ci]["pattern"] = {"name": bname}
 
     return components
 
@@ -1981,6 +2074,25 @@ def _parse_component_occurrence(
     part_name = prev if _good_text_payload(prev) else "UNKNOWN"
     ref_offset = seq[idx].offset
 
+    # Deterministic repair for truncated part-name tokens:
+    # some records expose a shortened len16 name in seq while short_seq
+    # carries the full text immediately before the same ref anchor.
+    if part_name.startswith("#"):
+        short_idx = -1
+        for si, srec in enumerate(short_seq):
+            if srec.offset == ref_offset and srec.text == ref:
+                short_idx = si
+                break
+        if short_idx > 0:
+            prev_short = short_seq[short_idx - 1].text
+            if (
+                _good_text_payload(prev_short)
+                and not PART_REF_RE.match(prev_short)
+                and not prev_short.startswith("Part ")
+                and len(prev_short) > len(part_name)
+            ):
+                part_name = prev_short
+
     local_short_tokens, lib_path = _extract_local_short_fields(ref, ref_offset, short_seq)
     if local_short_tokens:
         tail_tokens = local_short_tokens
@@ -2002,6 +2114,19 @@ def _parse_component_occurrence(
                 break
 
     value, base_ref, base_name = _parse_component_tail_tokens(ref, tail_tokens, part_name)
+
+    if data is not None:
+        head = _extract_component_head_fields_be(data, ref=ref, ref_offset_hint=ref_offset, part_name_hint=part_name)
+        if head is not None:
+            pn_be, value_be, base_ref_be, base_name_be = head
+            if pn_be != "":
+                part_name = pn_be
+            if value_be != "":
+                value = value_be
+            if base_ref_be != "":
+                base_ref = base_ref_be
+            if base_name_be != "":
+                base_name = base_name_be
     part_name_from_base = 0
     if NET_PORT_RE.match(ref):
         base_ref = ""
@@ -2186,8 +2311,19 @@ def infer_component_records_from_stream(
                 break
 
     pending: list[dict] = []
+    parsed_occ_cache: dict[tuple[str, int], dict[str, Any]] = {}
+
+    def _get_occ(ref_key: str, idx_key: int) -> dict[str, Any]:
+        key = (ref_key, idx_key)
+        cached = parsed_occ_cache.get(key)
+        if cached is not None:
+            return cached
+        parsed = _parse_component_occurrence(seq, short_seq, data, ref_key, idx_key)
+        parsed_occ_cache[key] = parsed
+        return parsed
+
     for _, ref, idx in chosen:
-        occ = _parse_component_occurrence(seq, short_seq, data, ref, idx)
+        occ = _get_occ(ref, idx)
 
         if not NET_PORT_RE.match(ref) and occ["value"] == "":
             best_alt: dict[str, Any] | None = None
@@ -2195,7 +2331,7 @@ def infer_component_records_from_stream(
                 alt_idx = int(it["index"])
                 if alt_idx == idx:
                     continue
-                alt = _parse_component_occurrence(seq, short_seq, data, ref, alt_idx)
+                alt = _get_occ(ref, alt_idx)
                 if alt["part_name"] != occ["part_name"]:
                     continue
                 if alt["value"] == "" or _looks_base_ref_token(str(alt["value"])):
@@ -2203,6 +2339,15 @@ def infer_component_records_from_stream(
                 best_alt = alt
             if best_alt is not None:
                 occ = best_alt
+
+        all_starts: list[int] = []
+        for it in by_ref.get(ref, []):
+            alt_idx = int(it["index"])
+            alt = _get_occ(ref, alt_idx)
+            a = int(alt.get("part_name_start", -1))
+            if a >= 0:
+                all_starts.append(a)
+        occ["all_part_name_starts"] = sorted(set(all_starts)) if all_starts else []
 
         if occ["lib_path"] == "" and ref in lib_hint_by_ref:
             occ["lib_path"] = lib_hint_by_ref[ref]

@@ -1,0 +1,4 @@
+﻿- Work on ASC parity for `CacheLib` (full `cl_Component`-level decoding, not partial marker coverage).
+- Derive a universal structural framing/length rule for records (avoid record-type-dependent assumptions).
+- Work on unifying codec and decoders; identify and encode underlying common patterns.
+- Add XML-like search/selection logic to the tree to keep apps minimal and clean.
