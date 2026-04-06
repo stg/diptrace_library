@@ -441,6 +441,12 @@ def _decode_layout_record_by_descriptor(
             if not isinstance(v, str) or v == "":
                 return None
 
+    required_eq = descriptor.get("required_field_equals", {})
+    if isinstance(required_eq, dict):
+        for k, expected in required_eq.items():
+            if fields_out.get(str(k)) != expected:
+                return None
+
     segment_plan = build_segment_plan(segments)
 
     out = {
@@ -525,14 +531,25 @@ def decode_pattern_children_by_descriptors(
             scan = dsc.get("scan", {})
             if not isinstance(scan, dict):
                 continue
-            rule = str(scan.get("prelude_rule", ""))
-            marker_hex = str(scan.get("marker_hex", ""))
-            marker = bytes.fromhex(marker_hex) if marker_hex else b""
-            if not marker:
-                continue
-            if not _pattern_prelude_matches(pre, rule):
-                continue
-            if data[p : p + len(marker)] != marker:
+            signatures = scan.get("signatures")
+            if not isinstance(signatures, list) or not signatures:
+                signatures = [scan]
+            matched_sig = False
+            for sig in signatures:
+                if not isinstance(sig, dict):
+                    continue
+                rule = str(sig.get("prelude_rule", ""))
+                marker_hex = str(sig.get("marker_hex", ""))
+                marker = bytes.fromhex(marker_hex) if marker_hex else b""
+                if not marker:
+                    continue
+                if not _pattern_prelude_matches(pre, rule):
+                    continue
+                if data[p : p + len(marker)] != marker:
+                    continue
+                matched_sig = True
+                break
+            if not matched_sig:
                 continue
             d = decode_len16le_utf16le_noterm(data, p + len(marker), max_chars=256)
             if d is None:
@@ -576,16 +593,26 @@ def decode_pattern_extension_by_descriptor(
     scan = descriptor.get("scan", {})
     if not isinstance(scan, dict):
         return None
-    rule = str(scan.get("prelude_rule", ""))
-    marker_hex = str(scan.get("marker_hex", ""))
-    marker = bytes.fromhex(marker_hex) if marker_hex else b""
-    if not marker:
-        return None
+    signatures = scan.get("signatures")
+    if not isinstance(signatures, list) or not signatures:
+        signatures = [scan]
 
     p = record_start + 12
     while p + 6 < record_end:
         pre = data[p - 12 : p]
-        if _pattern_prelude_matches(pre, rule) and data[p : p + len(marker)] == marker:
+        marker: bytes | None = None
+        for sig in signatures:
+            if not isinstance(sig, dict):
+                continue
+            rule = str(sig.get("prelude_rule", ""))
+            marker_hex = str(sig.get("marker_hex", ""))
+            m = bytes.fromhex(marker_hex) if marker_hex else b""
+            if not m:
+                continue
+            if _pattern_prelude_matches(pre, rule) and data[p : p + len(m)] == m:
+                marker = m
+                break
+        if marker is not None:
             d = decode_len16le_utf16le_noterm(data, p + len(marker), max_chars=256)
             if d is not None:
                 name, s0, s1 = d
@@ -598,11 +625,8 @@ def decode_pattern_extension_by_descriptor(
                     "Length": int(record_end - record_start),
                     "ConsumedEndOffset": int(s1),
                     "ConsumedLength": int(s1 - record_start),
-                    "FieldOffsets": [{"start": int(s0), "end": int(s1)}],
-                    "Fields": {
-                        "PrimaryName": name,
-                        "Names": [name],
-                    },
+                    "FieldOffsets": {"Name": {"start": int(s0), "end": int(s1)}},
+                    "Fields": {"Name": name},
                 }
                 _apply_descriptor_semantics(out, descriptor)
                 return out
@@ -665,6 +689,9 @@ def decode_cache_entry_by_descriptor(
             "Marker40Strings": m40,
             "Marker41Strings": m41,
             "MarkerFields": marker_fields,
+            # Canonical semantic aliases.
+            "PatternCandidates": list(m40),
+            "LinkTokens": list(m41),
         },
     }
     _apply_descriptor_semantics(out, descriptor)

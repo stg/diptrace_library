@@ -14,72 +14,31 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# Heuristic path intentionally disabled (kept commented for reference).
-# from apps.lib.dch_heuristic import (
-#     detect_pattern_records_from_binary,
-#     extract_len16_utf16_noterm_stream,
-#     extract_len16_utf16_stream,
-#     infer_component_records_from_stream,
-#     read_bytes,
-# )
 from apps.lib.dch_structural import decode_structural_components
-from apps.lib.component_resolver import iter_component_parts, resolve_part_pattern
+from apps.lib.tree_query import TreeQuery
 
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".vs", ".idea"}
 
 
-# Heuristic path intentionally disabled (kept commented for reference).
-# def _extract_file_rows_heuristic(dch_path: Path) -> list[tuple[str, str, str]]:
-#     data = read_bytes(dch_path)
-#     lstr = extract_len16_utf16_stream(data, min_len=1, max_len=256)
-#     lshort = extract_len16_utf16_noterm_stream(data, min_len=1, max_len=256)
-#     comps = infer_component_records_from_stream(lstr, lshort, data=data)
-#     comps = detect_pattern_records_from_binary(data, comps)
-#
-#     out: list[tuple[str, str, str]] = []
-#     for c in comps:
-#         name = str(c.get("part_name", "")).strip(" \t")
-#         value = str(c.get("value", "")).strip(" \t")
-#         pattern = str(c.get("pattern", {}).get("name", "")).strip(" \t") if isinstance(c.get("pattern"), dict) else ""
-#         # User-specific post-processing rule (not a DipTrace file-format rule):
-#         # collapse generic Name when Pattern starts with that same token, e.g. RES + RES_0603.
-#         if name and pattern.startswith(name):
-#             tail = pattern[len(name) :]
-#             if tail == "" or (tail and not tail[0].isalnum()):
-#                 name = ""
-#         out.append((name, value, pattern))
-#     return out
-
-
 def _extract_file_rows_structural(dch_path: Path) -> list[tuple[str, str, str]]:
-    tree = decode_structural_components(dch_path)
-
-    component_roots = iter_component_parts(tree)
-    branches = tree.get("Branches", []) if isinstance(tree, dict) else []
-    has_components = any(
-        isinstance(b, dict) and b.get("NodeType") == "Branch" and str(b.get("Name", "")) == "Components"
-        for b in branches
-    ) if isinstance(branches, list) else False
-    if not has_components:
+    tq = TreeQuery(decode_structural_components(dch_path))
+    components = tq.find("Components")
+    component_roots = components.find_all("Part", sort_by_offset=True) if components is not None else []
+    if len(component_roots) == 0:
         raise RuntimeError("structural decode missing Components branch")
 
     out: list[tuple[str, str, str]] = []
     for rec in component_roots:
-        dec = rec.get("Decoded")
-        if not isinstance(dec, dict) or dec.get("RecordType") != "Part":
-            continue
-        fields = dec.get("Fields")
-        if not isinstance(fields, dict):
-            continue
-        ref = str(fields.get("RefDes", "")).strip(" \t")
+        ref = rec.text("RefDes").strip(" \t")
         if not ref:
             continue
         if ref.startswith("NetPort"):
             continue
-        name = str(fields.get("Name", "")).strip(" \t")
-        value = str(fields.get("Value", "")).strip(" \t")
-        pattern, _pattern_source = resolve_part_pattern(tree, rec)
+        name = rec.text("Name").strip(" \t")
+        value = rec.text("Value").strip(" \t")
+        pnode = rec.find("Pattern")
+        pattern = pnode.text("Name") if pnode is not None else ""
         pattern = str(pattern).strip(" \t")
 
         # User-specific post-processing rule (not a DipTrace file-format rule):
@@ -93,9 +52,6 @@ def _extract_file_rows_structural(dch_path: Path) -> list[tuple[str, str, str]]:
 
 
 def _extract_file_rows(dch_path: Path, decoder: str) -> list[tuple[str, str, str]]:
-    # Heuristic path intentionally disabled (kept commented for reference).
-    # if decoder == "heuristic":
-    #     return _extract_file_rows_heuristic(dch_path)
     return _extract_file_rows_structural(dch_path)
 
 

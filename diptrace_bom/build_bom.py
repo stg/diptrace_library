@@ -11,16 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# Heuristic path intentionally disabled (kept commented for reference).
-# from apps.lib.dch_heuristic import (
-#     extract_len16_utf16_noterm_stream,
-#     extract_len16_utf16_stream,
-#     infer_component_records_from_stream,
-#     read_bytes,
-# )
-# from apps.lib.dch_heuristic import detect_pattern_records_from_binary
 from apps.lib.dch_structural import decode_structural_components
-from apps.lib.component_resolver import iter_component_parts, resolve_part_pattern
+from apps.lib.tree_query import TreeQuery
 
 
 NET_PORT_RE = re.compile(r"^NetPort[0-9]{1,5}$")
@@ -53,6 +45,12 @@ def _refdes_sort_key(ref: str):
         else:
             out.append((2, c))
     return out
+
+
+def _diptrace_row_sort_key(ref: str):
+    r = str(ref)
+    prefix_class = 0 if (r != "" and not r[0].isalnum()) else 1
+    return (prefix_class, _refdes_sort_key(r))
 
 
 def _group_bom_rows(comps: list[dict[str, str]], *, sort_mode: str = "stable") -> list[dict[str, str]]:
@@ -90,9 +88,9 @@ def _group_bom_rows(comps: list[dict[str, str]], *, sort_mode: str = "stable") -
         grouped_items.append((sig, unique_refs))
 
     if sort_mode == "diptrace":
-        grouped_items.sort(key=lambda kv: (kv[1][0] if kv[1] else ""))
+        grouped_items.sort(key=lambda kv: _diptrace_row_sort_key(kv[1][0] if kv[1] else ""))
     else:
-        grouped_items.sort(key=lambda kv: _refdes_sort_key(kv[1][0] if kv[1] else ""))
+        grouped_items.sort(key=lambda kv: (kv[1][0] if kv[1] else ""))
 
     for (name, value, pattern), ref_list in grouped_items:
         rows.append(
@@ -106,51 +104,33 @@ def _group_bom_rows(comps: list[dict[str, str]], *, sort_mode: str = "stable") -
     return rows
 
 
-# Heuristic path intentionally disabled (kept commented for reference).
-# def build_bom_rows_heuristic(dch_path: Path, *, sort_mode: str = "stable") -> list[dict[str, str]]:
-#     data = read_bytes(dch_path)
-#     lstr = extract_len16_utf16_stream(data, min_len=1, max_len=256)
-#     lshort = extract_len16_utf16_noterm_stream(data, min_len=1, max_len=256)
-#     comps = infer_component_records_from_stream(lstr, lshort, data=data)
-#     comps = detect_pattern_records_from_binary(data, comps)
-#     return _group_bom_rows(comps, sort_mode=sort_mode)
-
-
 def build_bom_rows_structural(dch_path: Path, *, sort_mode: str = "stable") -> tuple[list[dict[str, str]], bool]:
-    tree = decode_structural_components(dch_path)
-
-    component_roots = iter_component_parts(tree)
-    branches = tree.get("Branches", []) if isinstance(tree, dict) else []
-    has_components = any(
-        isinstance(b, dict) and b.get("NodeType") == "Branch" and str(b.get("Name", "")) == "Components"
-        for b in branches
-    ) if isinstance(branches, list) else False
-    if not has_components:
+    tq = TreeQuery(decode_structural_components(dch_path))
+    components = tq.find("Components")
+    component_roots = components.find_all("Part", sort_by_offset=True) if components is not None else []
+    if len(component_roots) == 0:
         raise RuntimeError("structural decode missing Components branch")
 
     parts: list[dict[str, object]] = []
     for rec in component_roots:
-        dec = rec.get("Decoded")
-        if not isinstance(dec, dict) or dec.get("RecordType") != "Part":
-            continue
-        fields = dec.get("Fields", {})
-        ref = str(fields.get("RefDes", "")).strip()
-        pattern_name, _pattern_source = resolve_part_pattern(tree, rec)
+        ref = rec.text("RefDes")
+        pnode = rec.find("Pattern")
+        pattern_name = pnode.text("Name") if pnode is not None else ""
 
         parts.append(
             {
                 "refdes": ref,
-                "part_name": str(fields.get("Name", "")),
-                "value": str(fields.get("Value", "")),
-                "base_refdes": str(fields.get("BaseRefDes", "")),
-                "base_name": str(fields.get("BaseName", "")),
+                "part_name": rec.text("Name"),
+                "value": rec.text("Value"),
+                "base_refdes": rec.text("BaseRefDes"),
+                "base_name": rec.text("BaseName"),
                 "part_type": 2 if NET_PORT_RE.match(ref) else 0,
                 "part_name_from_base": 0,
                 "pattern": {"name": pattern_name},
             }
         )
 
-    return _group_bom_rows(parts, sort_mode=sort_mode), bool(tree.get("CleanEOF", False))
+    return _group_bom_rows(parts, sort_mode=sort_mode), bool(tq.node.get("clean_eof", False))
 
 
 def main() -> int:
@@ -161,8 +141,6 @@ def main() -> int:
     ap.add_argument("output_csv", help="Output BOM CSV path")
     ap.add_argument(
         "--decoder",
-        # Heuristic path intentionally disabled (kept commented for reference).
-        # choices=["structural", "heuristic"],
         choices=["structural"],
         default="structural",
         help="Decoder base: structural (new record-framing decoder).",
@@ -181,11 +159,6 @@ def main() -> int:
         raise SystemExit(f"input not found: {inp}")
 
     clean_eof = True
-    # Heuristic path intentionally disabled (kept commented for reference).
-    # if args.decoder == "heuristic":
-    #     rows = build_bom_rows_heuristic(inp, sort_mode=args.sort)
-    # else:
-    #     rows, clean_eof = build_bom_rows_structural(inp, sort_mode=args.sort)
     rows, clean_eof = build_bom_rows_structural(inp, sort_mode=args.sort)
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", newline="", encoding="utf-8") as f:

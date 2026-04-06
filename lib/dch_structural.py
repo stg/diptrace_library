@@ -11,10 +11,13 @@ from typing import Any
 
 from apps.lib.codec_segments import decode_pattern_children_by_descriptors
 from apps.lib.codec_segments import decode_record_by_descriptor
+from apps.lib.codec_segments import encode_len16be_utf16be
+from apps.lib.dch_explore import build_explore_record_descriptors, build_explore_stats
 from apps.lib.record.part import PART_RECORD_DESCRIPTOR
-from apps.lib.record.pattern import PATTERN_CHILD_DESCRIPTORS
-from apps.lib.record.pattern_ext import PATTERN_EXTENSION_DESCRIPTOR
+from apps.lib.record.pattern import PATTERN_CHILD_DESCRIPTORS, PATTERN_DESCRIPTOR
 from apps.lib.record.cache_entry import CACHE_ENTRY_DESCRIPTOR
+from apps.lib.record.cachelib import CACHELIB_DESCRIPTOR
+from apps.lib.record.cl_component import CL_COMPONENT_DESCRIPTOR
 from apps.lib.record.token_container import TOKEN_CONTAINER_DESCRIPTOR
 from apps.lib.record.token_named import TOKEN_NAMED_DESCRIPTOR
 from apps.lib.record.unknown import UNKNOWN_RECORD_DESCRIPTOR
@@ -58,6 +61,146 @@ class StructuralRecord:
 
 def read_bytes(path: str | Path) -> bytes:
     return Path(path).read_bytes()
+
+
+def encode_structural_tree(tree: dict[str, Any]) -> bytes:
+    if not isinstance(tree, dict):
+        raise ValueError("tree must be a dict")
+    internal = tree.get("_internal")
+    if not isinstance(internal, dict):
+        raise ValueError("tree missing _internal")
+    prefix = internal.get("prefix_bytes")
+    if not isinstance(prefix, (bytes, bytearray)):
+        raise ValueError("tree missing _internal.prefix_bytes")
+
+    top_records_by_index: dict[int, tuple[int, dict[str, Any]]] = {}
+
+    def _walk(n: dict[str, Any]) -> None:
+        ni = n.get("_internal", {})
+        if isinstance(ni, dict):
+            if bool(ni.get("top_level", False)):
+                ti = ni.get("top_index")
+                off = ni.get("offset")
+                if isinstance(ti, int) and isinstance(off, int):
+                    prev = top_records_by_index.get(ti)
+                    if prev is None or off < int(prev[0]):
+                        top_records_by_index[ti] = (off, n)
+        for ch in n.get("children", []) if isinstance(n.get("children"), list) else []:
+            if isinstance(ch, dict):
+                _walk(ch)
+
+    for b in tree.get("children", []) if isinstance(tree.get("children"), list) else []:
+        if isinstance(b, dict):
+            _walk(b)
+
+    top_records = sorted(((ti, off, n) for ti, (off, n) in top_records_by_index.items()), key=lambda x: x[0])
+    out = bytearray(prefix)
+    for _ti, _off, n in top_records:
+        out.extend(_encode_record_node_bytes(n))
+    return bytes(out)
+
+
+def _encode_len16le_utf16le_noterm(text: str) -> bytes:
+    chars = str(text)
+    n = len(chars)
+    if n <= 0:
+        raise ValueError("len16le_noterm does not support empty string")
+    if n > 0xFFFF:
+        raise ValueError("string too long for len16")
+    body = chars[:-1].encode("utf-16-le") if n > 1 else b""
+    tail = bytes([ord(chars[-1]) & 0xFF])
+    return bytes([n & 0xFF, (n >> 8) & 0xFF]) + body + tail
+
+
+def _encode_record_node_bytes(node: dict[str, Any]) -> bytes:
+    ni = node.get("_internal", {})
+    if not isinstance(ni, dict):
+        raise ValueError("record node missing _internal")
+    raw = ni.get("raw")
+    if not isinstance(raw, (bytes, bytearray)):
+        raise ValueError("record node missing _internal.raw")
+    buf = bytearray(raw)
+    codec = str(ni.get("codec", ""))
+    fields = node.get("props", {}) if isinstance(node.get("props"), dict) else {}
+    original = ni.get("original_props", {}) if isinstance(ni.get("original_props"), dict) else {}
+    field_offsets = ni.get("field_offsets", {}) if isinstance(ni.get("field_offsets"), dict) else {}
+
+    def _patch(field: str, enc: str) -> None:
+        if field not in fields or field not in original:
+            return
+        if str(fields.get(field, "")) == str(original.get(field, "")):
+            return
+        fo = field_offsets.get(field)
+        if not isinstance(fo, dict):
+            raise ValueError(f"cannot encode edited field {field}: missing offsets")
+        s = fo.get("start")
+        e = fo.get("end")
+        if not (isinstance(s, int) and isinstance(e, int) and 0 <= s <= e):
+            raise ValueError(f"cannot encode edited field {field}: invalid offsets")
+        rec_off = ni.get("offset")
+        if not isinstance(rec_off, int):
+            raise ValueError("record missing offset")
+        ls = s - rec_off
+        le = e - rec_off
+        if ls < 0 or le < ls or le > len(buf):
+            raise ValueError(f"cannot encode edited field {field}: offset out of record")
+        if enc == "len16be+utf16be":
+            nb = encode_len16be_utf16be(str(fields.get(field, "")))
+        elif enc == "len16le+utf16le_noterm":
+            nb = _encode_len16le_utf16le_noterm(str(fields.get(field, "")))
+        else:
+            raise ValueError(f"unsupported field encoding {enc}")
+        if len(nb) != (le - ls):
+            raise ValueError(
+                f"edited field {field} changes record length ({len(nb)} != {le - ls}); "
+                "variable-length record rewrite not implemented yet"
+            )
+        buf[ls:le] = nb
+
+    def _patch_unknown_bin(field: str) -> None:
+        if field not in fields or field not in original:
+            return
+        old_v = original.get(field)
+        new_v = fields.get(field)
+        if not isinstance(old_v, (bytes, bytearray)) or not isinstance(new_v, (bytes, bytearray)):
+            return
+        if bytes(old_v) == bytes(new_v):
+            return
+        fo = field_offsets.get(field)
+        if not isinstance(fo, dict):
+            raise ValueError(f"cannot encode edited field {field}: missing offsets")
+        s = fo.get("start")
+        e = fo.get("end")
+        if not (isinstance(s, int) and isinstance(e, int) and 0 <= s <= e):
+            raise ValueError(f"cannot encode edited field {field}: invalid offsets")
+        rec_off = ni.get("offset")
+        if not isinstance(rec_off, int):
+            raise ValueError("record missing offset")
+        ls = s - rec_off
+        le = e - rec_off
+        if ls < 0 or le < ls or le > len(buf):
+            raise ValueError(f"cannot encode edited field {field}: offset out of record")
+        nb = bytes(new_v)
+        if len(nb) != (le - ls):
+            raise ValueError(
+                f"edited field {field} changes record length ({len(nb)} != {le - ls}); "
+                "variable-length record rewrite not implemented yet"
+            )
+        buf[ls:le] = nb
+
+    if codec == "Part.v1":
+        _patch("Name", "len16be+utf16be")
+        _patch("RefDes", "len16be+utf16be")
+        _patch("Value", "len16be+utf16be")
+        _patch("BaseRefDes", "len16be+utf16be")
+        _patch("BaseName", "len16be+utf16be")
+    elif codec == "Pattern.v1":
+        _patch("Name", "len16le+utf16le_noterm")
+    else:
+        for k in list(fields.keys()):
+            _patch_unknown_bin(str(k))
+
+    return bytes(buf)
 
 
 def _is_strict_top_level_start(data: bytes, i: int) -> bool:
@@ -219,6 +362,7 @@ def _decode_one_record(data: bytes, r: StructuralRecord) -> dict[str, Any] | Non
     if r.family in ("token", "nested"):
         dec = _try_descriptors(
             [
+                CACHELIB_DESCRIPTOR,
                 TOKEN_NAMED_DESCRIPTOR,
                 TOKEN_CONTAINER_DESCRIPTOR,
                 PART_RECORD_DESCRIPTOR,
@@ -235,7 +379,7 @@ def _decode_one_record(data: bytes, r: StructuralRecord) -> dict[str, Any] | Non
             descriptor=UNKNOWN_RECORD_DESCRIPTOR,
         )
     if r.family in ("typed", "nested") and r.mode == 1:
-        dec = _try_descriptors([PATTERN_EXTENSION_DESCRIPTOR, CACHE_ENTRY_DESCRIPTOR])
+        dec = _try_descriptors([PATTERN_DESCRIPTOR, CACHE_ENTRY_DESCRIPTOR])
         if dec is not None:
             return dec
         return decode_record_by_descriptor(
@@ -395,9 +539,9 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
     # Nested records are parsed recursively by the same structural header rule.
     def _should_attach_child_by_header(parent: dict[str, Any], child: dict[str, Any]) -> bool:
         try:
-            po = int(parent.get("Offset", -1))
-            pmode = int(parent.get("Header", {}).get("Mode", -1))
-            cmode = int(child.get("Header", {}).get("Mode", -1))
+            po = int(parent.get("_internal", {}).get("offset", -1))
+            pmode = int(parent.get("_internal", {}).get("header", {}).get("Mode", -1))
+            cmode = int(child.get("_internal", {}).get("header", {}).get("Mode", -1))
         except (TypeError, ValueError):
             return False
         if po < 0 or po + 2 >= len(data):
@@ -414,13 +558,13 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
             p = children[i]
             if i + 1 < len(children):
                 c = children[i + 1]
-                pf = str(p.get("Family", ""))
-                cf = str(c.get("Family", ""))
+                pf = str(p.get("_internal", {}).get("family", ""))
+                cf = str(c.get("_internal", {}).get("family", ""))
                 structural_ok = pf not in ("subrecord", "extension") and cf not in ("subrecord", "extension")
                 if structural_ok and _should_attach_child_by_header(p, c):
-                    p_children = p.get("Children")
+                    p_children = p.get("children")
                     if not isinstance(p_children, list):
-                        p["Children"] = [c]
+                        p["children"] = [c]
                     else:
                         p_children.append(c)
                     out.append(p)
@@ -436,7 +580,7 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
         nonlocal nested_scan_shifted_by_consumed
         dec = decoded_by_index.get(r.index) if r.family != "nested" else _decode_cached(r)
         child_nodes: list[dict[str, Any]] = []
-        parse_generic_nested = not (isinstance(dec, dict) and dec.get("RecordType") == "Part")
+        parse_generic_nested = True
         if depth < max_depth and parse_generic_nested:
             nested_scan_start = r.start
             if isinstance(dec, dict):
@@ -461,11 +605,12 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
                 )
                 nnode = _build_record_node(nr, depth=depth + 1, max_depth=max_depth)
                 # Preserve nested-local header type byte.
-                nnode["Header"] = {
-                    "TypeByte": x,
-                    "Lead": clead,
-                    "Mode": cmode,
-                }
+                if isinstance(nnode.get("_internal"), dict):
+                    nnode["_internal"]["header"] = {
+                        "TypeByte": x,
+                        "Lead": clead,
+                        "Mode": cmode,
+                    }
                 child_nodes.append(nnode)
 
         if isinstance(dec, dict) and dec.get("RecordType") == "Part":
@@ -479,15 +624,23 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
             child_nodes.extend(
                 [
                     {
-                        "NodeType": "Record",
-                        "Index": len(child_nodes) + int(c.get("RecordIndex", 0)),
-                        "Offset": int(c.get("Offset", -1)),
-                        "EndOffset": int(c.get("EndOffset", -1)),
-                        "Length": int(c.get("Length", -1)),
-                        "Header": {"Lead": -1, "Mode": -1},
-                        "Family": "subrecord",
-                        "Decoded": c,
-                        "Children": [],
+                        "type": str(c.get("RecordType", "Record")),
+                        "props": c.get("Fields", {}) if isinstance(c.get("Fields"), dict) else {},
+                        "children": [],
+                        "_internal": {
+                            "node_type": "Record",
+                            "index": len(child_nodes) + int(c.get("RecordIndex", 0)),
+                            "offset": int(c.get("Offset", -1)),
+                            "end_offset": int(c.get("EndOffset", -1)),
+                            "length": int(c.get("Length", -1)),
+                            "header": {"Lead": -1, "Mode": -1},
+                            "family": "subrecord",
+                            "decoded_record_type": str(c.get("RecordType", "")),
+                            "codec": str(c.get("Descriptor", "")),
+                            "field_offsets": c.get("FieldOffsets", {}) if isinstance(c.get("FieldOffsets"), dict) else {},
+                            "original_props": dict(c.get("Fields", {})) if isinstance(c.get("Fields"), dict) else {},
+                            "raw": bytearray(),
+                        },
                     }
                     for c in children
                 ]
@@ -497,90 +650,58 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
             ch_node = _build_record_node(cr, depth=depth + 1, max_depth=max_depth)
             rel = header_pair_relation_by_child_index.get(cr.index)
             if isinstance(rel, dict):
-                ch_node["AttachedByHeaderPair"] = rel
+                ch_node.setdefault("_internal", {})
+                ch_node["_internal"]["attached_by_header_pair"] = rel
             child_nodes.append(ch_node)
         for cr in section_group_children_by_parent_index.get(r.index, []):
             child_nodes.append(_build_record_node(cr, depth=depth + 1, max_depth=max_depth))
         for cr in run_group_children_by_parent_index.get(r.index, []):
             child_nodes.append(_build_record_node(cr, depth=depth + 1, max_depth=max_depth))
 
-        child_nodes.sort(key=lambda n: int(n.get("Offset", 0)))
+        child_nodes.sort(key=lambda n: int(n.get("_internal", {}).get("offset", 0)))
         child_nodes = _collapse_children_by_header(child_nodes)
 
+        props: dict[str, Any] = {}
+        rec_type = "Record"
+        codec_desc = ""
+        decoded_record_type = ""
+        if isinstance(dec, dict):
+            rec_type = str(dec.get("RecordType", "Record")) or "Record"
+            decoded_record_type = str(dec.get("RecordType", ""))
+            codec_desc = str(dec.get("Descriptor", ""))
+            f = dec.get("Fields")
+            if isinstance(f, dict):
+                props.update(f)
+
         return {
-            "NodeType": "Record",
-            "Index": r.index,
-            "Offset": r.start,
-            "EndOffset": r.end,
-            "Length": r.length,
-            "Header": {"Lead": r.lead, "Mode": r.mode},
-            "Family": r.family,
-            "Decoded": dec,
-            "Children": child_nodes,
+            "type": rec_type,
+            "props": props,
+            "children": child_nodes,
+            "_internal": {
+                "node_type": "Record",
+                "index": r.index,
+                "top_level": r.family != "nested",
+                "top_index": r.index if r.family != "nested" else -1,
+                "offset": r.start,
+                "end_offset": r.end,
+                "length": r.length,
+                "header": {"Lead": r.lead, "Mode": r.mode},
+                "family": r.family,
+                "decoded_record_type": decoded_record_type,
+                "codec": codec_desc,
+                "field_offsets": dec.get("FieldOffsets", {}) if isinstance(dec.get("FieldOffsets"), dict) else {},
+                "original_props": dict(dec.get("Fields", {})) if isinstance(dec.get("Fields"), dict) else {},
+                "raw": bytearray(data[r.start:r.end]) if 0 <= r.start < r.end <= len(data) else bytearray(),
+            },
         }
 
     collapsed_indices = collapsed_child_indices | section_group_collapsed_indices | run_group_collapsed_indices
     visible_records = [r for r in records if r.index not in collapsed_indices]
     run_nodes: list[dict[str, Any]] = []
-    if visible_records:
-        run_start = 0
-        cur_mode = visible_records[0].mode
-        for i in range(1, len(visible_records)):
-            if visible_records[i].mode != cur_mode:
-                seg = visible_records[run_start:i]
-                seg_children = [_build_record_node(r, depth=0) for r in seg]
-                type_counts: dict[str, int] = {}
-                part_positions: list[int] = []
-                nonpart_positions: list[int] = []
-                for j, r in enumerate(seg):
-                    decj = decoded_by_index.get(r.index)
-                    rtj = str(decj.get("RecordType", "None")) if isinstance(decj, dict) else "None"
-                    type_counts[rtj] = type_counts.get(rtj, 0) + 1
-                    if rtj == "Part":
-                        part_positions.append(j)
-                    else:
-                        nonpart_positions.append(j)
-                branch_hint = "non_token_run"
-                cache_tail_start_offset: int | None = None
-                if int(cur_mode) == 0x0F:
-                    part_count = int(type_counts.get("Part", 0))
-                    nonpart_count = int(len(seg) - part_count)
-                    if part_count == 0 and nonpart_count > 0:
-                        branch_hint = "cache_run"
-                    elif part_count > 0 and nonpart_count == 0:
-                        branch_hint = "components_only"
-                    elif part_count > 0 and nonpart_count > 0:
-                        first_nonpart = min(nonpart_positions) if nonpart_positions else -1
-                        part_after_nonpart = sum(1 for p in part_positions if p > first_nonpart) if first_nonpart >= 0 else 0
-                        if part_after_nonpart == 0 and first_nonpart >= 0:
-                            branch_hint = "components_then_cache_tail"
-                            if 0 <= first_nonpart < len(seg):
-                                cache_tail_start_offset = int(seg[first_nonpart].start)
-                        else:
-                            branch_hint = "components_mixed"
-                            if part_positions:
-                                last_part = max(part_positions)
-                                if 0 <= last_part + 1 < len(seg):
-                                    cache_tail_start_offset = int(seg[last_part + 1].start)
-                run_nodes.append(
-                    {
-                        "NodeType": "ModeRun",
-                        "Mode": int(cur_mode),
-                        "Family": seg[0].family,
-                        "StartIndex": seg[0].index,
-                        "EndIndex": seg[-1].index,
-                        "Offset": seg[0].start,
-                        "EndOffset": seg[-1].end,
-                        "Count": len(seg),
-                        "Children": seg_children,
-                        "RunRecordTypeCounts": dict(sorted(type_counts.items())),
-                        "BranchHint": branch_hint,
-                        "CacheTailStartOffset": cache_tail_start_offset,
-                    }
-                )
-                run_start = i
-                cur_mode = visible_records[i].mode
-        seg = visible_records[run_start:]
+
+    def _append_run_segment(seg: list[StructuralRecord], mode: int) -> None:
+        if not seg:
+            return
         seg_children = [_build_record_node(r, depth=0) for r in seg]
         type_counts: dict[str, int] = {}
         part_positions: list[int] = []
@@ -593,9 +714,10 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
                 part_positions.append(j)
             else:
                 nonpart_positions.append(j)
+
         branch_hint = "non_token_run"
         cache_tail_start_offset: int | None = None
-        if int(cur_mode) == 0x0F:
+        if int(mode) == 0x0F:
             part_count = int(type_counts.get("Part", 0))
             nonpart_count = int(len(seg) - part_count)
             if part_count == 0 and nonpart_count > 0:
@@ -615,10 +737,11 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
                         last_part = max(part_positions)
                         if 0 <= last_part + 1 < len(seg):
                             cache_tail_start_offset = int(seg[last_part + 1].start)
+
         run_nodes.append(
             {
                 "NodeType": "ModeRun",
-                "Mode": int(cur_mode),
+                "Mode": int(mode),
                 "Family": seg[0].family,
                 "StartIndex": seg[0].index,
                 "EndIndex": seg[-1].index,
@@ -632,50 +755,20 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
             }
         )
 
+    if visible_records:
+        run_start = 0
+        cur_mode = visible_records[0].mode
+        for i in range(1, len(visible_records)):
+            if visible_records[i].mode != cur_mode:
+                _append_run_segment(visible_records[run_start:i], cur_mode)
+                run_start = i
+                cur_mode = visible_records[i].mode
+        _append_run_segment(visible_records[run_start:], cur_mode)
+
     nested_type_counts: dict[int, int] = {}
     nested_total = 0
     child_containment_total = 0
     child_containment_violations = 0
-
-    def _walk(n: dict[str, Any]) -> list[dict[str, Any]]:
-        outn = [n]
-        for c in n.get("Children", []) if isinstance(n, dict) else []:
-            if isinstance(c, dict):
-                outn.extend(_walk(c))
-        return outn
-
-    for run in run_nodes:
-        for rec in run.get("Children", []):
-            if not isinstance(rec, dict):
-                continue
-            for ch in _walk(rec):
-                if ch.get("Family") != "nested":
-                    continue
-                hb = ch.get("Header", {}).get("TypeByte")
-                if isinstance(hb, int):
-                    nested_type_counts[hb] = nested_type_counts.get(hb, 0) + 1
-                    nested_total += 1
-
-    def _count_containment(node: dict[str, Any]) -> None:
-        nonlocal child_containment_total, child_containment_violations
-        po = node.get("Offset")
-        pe = node.get("EndOffset")
-        if isinstance(po, int) and isinstance(pe, int):
-            for c in node.get("Children", []) if isinstance(node.get("Children"), list) else []:
-                if not isinstance(c, dict):
-                    continue
-                co = c.get("Offset")
-                ce = c.get("EndOffset")
-                if isinstance(co, int) and isinstance(ce, int):
-                    child_containment_total += 1
-                    if co < po or ce > pe:
-                        child_containment_violations += 1
-                _count_containment(c)
-
-    for run in run_nodes:
-        for rec in run.get("Children", []) if isinstance(run.get("Children"), list) else []:
-            if isinstance(rec, dict):
-                _count_containment(rec)
 
     consumed_exact = 0
     consumed_short = 0
@@ -717,67 +810,72 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
     part_ancestry_counts: dict[str, int] = {}
     component_container_candidates: list[dict[str, int]] = []
 
-    def _walk_with_ancestry(node: dict[str, Any], ancestry: list[tuple[str, str, int | None, int | None]]) -> None:
-        dec = node.get("Decoded")
-        if isinstance(dec, dict) and dec.get("RecordType") == "Part":
-            key = " > ".join(
-                f"{nt}:{fam}:{lead}:{mode}" for nt, fam, lead, mode in ancestry
-            )
+    def _collect_node_metrics(node: dict[str, Any], ancestry: list[tuple[str, str, int | None, int | None]]) -> None:
+        nonlocal nested_total, child_containment_total, child_containment_violations
+
+        internal = node.get("_internal", {}) if isinstance(node.get("_internal"), dict) else {}
+        family = str(internal.get("family", ""))
+        header = internal.get("header", {}) if isinstance(internal.get("header"), dict) else {}
+        lead = header.get("Lead")
+        mode = header.get("Mode")
+        rec_type = str(node.get("type", ""))
+        props = node.get("props", {}) if isinstance(node.get("props"), dict) else {}
+
+        if rec_type == "Part":
+            key = " > ".join(f"{nt}:{fam}:{l}:{m}" for nt, fam, l, m in ancestry)
             part_ancestry_counts[key] = part_ancestry_counts.get(key, 0) + 1
 
-        if node.get("NodeType") == "Record":
-            hdr = node.get("Header", {}) if isinstance(node.get("Header"), dict) else {}
-            lead = hdr.get("Lead")
-            mode = hdr.get("Mode")
-            if (
-                node.get("Family") == "token"
-                and isinstance(lead, int)
-                and isinstance(mode, int)
-                and isinstance(dec, dict)
-                and dec.get("RecordType") == "TokenContainer"
-            ):
-                f = dec.get("Fields", {}) if isinstance(dec.get("Fields"), dict) else {}
-                role = str(f.get("RoleCandidate", ""))
-                internal = f.get("InternalRecordStartCount")
-                if role == "RecordListContainer":
-                    component_container_candidates.append(
-                        {
-                            "offset": int(node.get("Offset", -1)),
-                            "length": int(node.get("Length", -1)),
-                            "lead": int(lead),
-                            "mode": int(mode),
-                            "internal_record_starts": int(internal) if isinstance(internal, int) else -1,
-                        }
-                    )
+        if family == "nested":
+            hb = header.get("TypeByte")
+            if isinstance(hb, int):
+                nested_type_counts[hb] = nested_type_counts.get(hb, 0) + 1
+                nested_total += 1
 
-        for ch in node.get("Children", []) if isinstance(node.get("Children"), list) else []:
+        if (
+            family == "token"
+            and isinstance(lead, int)
+            and isinstance(mode, int)
+            and rec_type in ("TokenContainer", "CacheLib")
+            and str(props.get("RoleCandidate", "")) == "RecordListContainer"
+        ):
+            internal_count = props.get("InternalRecordStartCount")
+            component_container_candidates.append(
+                {
+                    "offset": int(internal.get("offset", -1)),
+                    "length": int(internal.get("length", -1)),
+                    "lead": int(lead),
+                    "mode": int(mode),
+                    "internal_record_starts": int(internal_count) if isinstance(internal_count, int) else -1,
+                }
+            )
+
+        children = node.get("children", []) if isinstance(node.get("children"), list) else []
+        po = internal.get("offset")
+        pe = internal.get("end_offset")
+        for ch in children:
             if not isinstance(ch, dict):
                 continue
-            ch_hdr = ch.get("Header", {}) if isinstance(ch.get("Header"), dict) else {}
-            _walk_with_ancestry(
+            chi = ch.get("_internal", {}) if isinstance(ch.get("_internal"), dict) else {}
+            co = chi.get("offset")
+            ce = chi.get("end_offset")
+            if isinstance(po, int) and isinstance(pe, int) and isinstance(co, int) and isinstance(ce, int):
+                child_containment_total += 1
+                if co < po or ce > pe:
+                    child_containment_violations += 1
+            chh = chi.get("header", {}) if isinstance(chi.get("header"), dict) else {}
+            _collect_node_metrics(
                 ch,
-                ancestry
-                + [
-                    (
-                        str(node.get("NodeType", "")),
-                        str(node.get("Family", "")),
-                        ch_hdr.get("Lead") if isinstance(ch_hdr.get("Lead"), int) else None,
-                        ch_hdr.get("Mode") if isinstance(ch_hdr.get("Mode"), int) else None,
-                    )
-                ],
+                ancestry + [("Record", str(family), chh.get("Lead") if isinstance(chh.get("Lead"), int) else None, chh.get("Mode") if isinstance(chh.get("Mode"), int) else None)],
             )
 
     for run in run_nodes:
         if not isinstance(run, dict):
             continue
+        run_mode = int(run.get("Mode", -1))
+        run_family = str(run.get("Family", ""))
         for rec in run.get("Children", []) if isinstance(run.get("Children"), list) else []:
-            if not isinstance(rec, dict):
-                continue
-            run_mode = int(run.get("Mode", -1))
-            _walk_with_ancestry(
-                rec,
-                [("DCH", "root", None, None), ("ModeRun", str(run.get("Family", "")), None, run_mode)],
-            )
+            if isinstance(rec, dict):
+                _collect_node_metrics(rec, [("DCH", "root", None, None), ("ModeRun", run_family, None, run_mode)])
 
     component_container_candidates.sort(
         key=lambda x: (int(x.get("internal_record_starts", 0)), int(x.get("offset", -1))),
@@ -811,8 +909,7 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
                 if not isinstance(rec, dict):
                     continue
                 cache_branch_records.append(rec)
-                dec = rec.get("Decoded")
-                rt = str(dec.get("RecordType", "Unknown")) if isinstance(dec, dict) else "Unknown"
+                rt = str(rec.get("type", "Unknown"))
                 cache_region_counts["records"] += 1
                 cache_region_counts[rt] = int(cache_region_counts.get(rt, 0)) + 1
             continue
@@ -820,9 +917,8 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
         for rec in children:
             if not isinstance(rec, dict):
                 continue
-            rec_off = int(rec.get("Offset", -1)) if isinstance(rec.get("Offset"), int) else -1
-            dec = rec.get("Decoded")
-            rt = str(dec.get("RecordType", "Unknown")) if isinstance(dec, dict) else "Unknown"
+            rec_off = int(rec.get("_internal", {}).get("offset", -1))
+            rt = str(rec.get("type", "Unknown"))
             in_cache_tail = cache_tail_start_i is not None and rec_off >= cache_tail_start_i
             if in_cache_tail:
                 cache_branch_records.append(rec)
@@ -833,6 +929,110 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
                 if rt == "Part":
                     component_region_part_count += 1
 
+    def _walk_records(node: dict[str, Any]) -> list[dict[str, Any]]:
+        out_nodes: list[dict[str, Any]] = []
+        if not isinstance(node, dict):
+            return out_nodes
+        out_nodes.append(node)
+        for ch in node.get("children", []) if isinstance(node.get("children"), list) else []:
+            if isinstance(ch, dict):
+                out_nodes.extend(_walk_records(ch))
+        return out_nodes
+
+    # Global structural promotion rule:
+    # If a nested TokenContainer is a record-list container, its direct child records
+    # represent cache-list items and are promoted into CacheLib branch.
+    existing_cache_offsets: set[int] = set()
+    for rec in cache_branch_records:
+        if isinstance(rec, dict):
+            off = rec.get("_internal", {}).get("offset")
+            if isinstance(off, int):
+                existing_cache_offsets.add(int(off))
+    promoted_cache_count = 0
+    for top in component_branch_records:
+        if not isinstance(top, dict):
+            continue
+        for node in _walk_records(top):
+            if str(node.get("type", "")) not in ("TokenContainer", "CacheLib"):
+                continue
+            f = node.get("props")
+            if not isinstance(f, dict):
+                continue
+            if str(f.get("RoleCandidate", "")) != "RecordListContainer":
+                continue
+            for child in node.get("children", []) if isinstance(node.get("children"), list) else []:
+                if not isinstance(child, dict):
+                    continue
+                off = int(child.get("_internal", {}).get("offset", -1))
+                if off < 0 or off in existing_cache_offsets:
+                    continue
+                cache_branch_records.append(child)
+                existing_cache_offsets.add(off)
+                promoted_cache_count += 1
+                rtch = str(child.get("type", "Unknown"))
+                cache_region_counts["records"] += 1
+                cache_region_counts[rtch] = int(cache_region_counts.get(rtch, 0)) + 1
+
+    # Deterministic cache branch normalization:
+    # If any RecordListContainer exists, treat its direct children as the canonical
+    # CacheLib entry list. This aligns branch selection with explicit structural nodes
+    # instead of broad mode-run slicing.
+    authoritative_cache_children: list[dict[str, Any]] = []
+    authoritative_offsets: set[int] = set()
+    for top in component_branch_records + cache_branch_records:
+        if not isinstance(top, dict):
+            continue
+        for node in _walk_records(top):
+            if str(node.get("type", "")) not in ("TokenContainer", "CacheLib"):
+                continue
+            f = node.get("props")
+            if not isinstance(f, dict):
+                continue
+            if str(f.get("RoleCandidate", "")) != "RecordListContainer":
+                continue
+            for child in node.get("children", []) if isinstance(node.get("children"), list) else []:
+                if not isinstance(child, dict):
+                    continue
+                off = int(child.get("_internal", {}).get("offset", -1))
+                if off < 0 or off in authoritative_offsets:
+                    continue
+                authoritative_offsets.add(off)
+                authoritative_cache_children.append(child)
+    # Keep top-level cache records intact for exact reconstruction.
+    # authoritative_cache_children remains a diagnostic/canonical subset,
+    # but does not replace the top-level branch contents.
+
+    # Deterministic cache-component decoding for canonical cache children.
+    cache_marker_augmented_count = 0
+    for rec in cache_branch_records:
+        if not isinstance(rec, dict):
+            continue
+        s = rec.get("_internal", {}).get("offset")
+        e = rec.get("_internal", {}).get("end_offset")
+        if not (isinstance(s, int) and isinstance(e, int) and 0 <= s < e <= len(data)):
+            continue
+        cc = decode_record_by_descriptor(
+            data,
+            record_index=int(rec.get("_internal", {}).get("index", 0)),
+            record_start=int(s),
+            record_end=int(e),
+            descriptor=CL_COMPONENT_DESCRIPTOR,
+        )
+        if not isinstance(cc, dict):
+            continue
+        f = cc.get("Fields")
+        if not isinstance(f, dict):
+            continue
+        pattern_candidates = f.get("PatternCandidates")
+        link_tokens = f.get("LinkTokens")
+        if not (
+            (isinstance(pattern_candidates, list) and len(pattern_candidates) > 0)
+            or (isinstance(link_tokens, list) and len(link_tokens) > 0)
+        ):
+            continue
+        rec["_cache_component"] = cc
+        cache_marker_augmented_count += 1
+
     aux_typed_records: list[dict[str, Any]] = []
     for run in run_nodes:
         if not isinstance(run, dict):
@@ -841,148 +1041,101 @@ def decode_structural_components(path: str | Path) -> dict[str, Any]:
         if mode in (0x0F,):
             continue
         for rec in run.get("Children", []) if isinstance(run.get("Children"), list) else []:
-            if isinstance(rec, dict) and rec.get("NodeType") == "Record":
+            if isinstance(rec, dict):
                 aux_typed_records.append(rec)
 
-    branch_nodes: list[dict[str, Any]] = []
+    # Finalize cache nodes in-place: canonical record type and merged cache decode fields.
+    for rec in cache_branch_records:
+        if not isinstance(rec, dict):
+            continue
+        rec["type"] = "cl_Component"
+        ccd = rec.get("_cache_component")
+        if isinstance(ccd, dict):
+            cf = ccd.get("Fields")
+            if isinstance(cf, dict):
+                props = rec.get("props")
+                if not isinstance(props, dict):
+                    props = {}
+                    rec["props"] = props
+                props.update(cf)
+            rec.setdefault("_internal", {})
+            rec["_internal"]["codec"] = str(ccd.get("Descriptor", rec.get("_internal", {}).get("codec", "")))
+
+    normalized_branches: list[dict[str, Any]] = []
     if component_branch_records:
-        branch_nodes.append(
+        normalized_branches.append(
             {
-                "NodeType": "Branch",
-                "Name": "Components",
-                "Children": component_branch_records,
+                "type": "Components",
+                "props": {},
+                "children": [c for c in component_branch_records if isinstance(c, dict)],
+                "_internal": {"node_type": "Branch", "codec": "Components.v1"},
             }
         )
     if cache_branch_records:
-        branch_nodes.append(
+        normalized_branches.append(
             {
-                "NodeType": "Branch",
-                "Name": "CacheLib",
-                "Children": cache_branch_records,
+                "type": "CacheLib",
+                "props": {},
+                "children": [c for c in cache_branch_records if isinstance(c, dict)],
+                "_internal": {"node_type": "Branch", "codec": "CacheLib.v1"},
             }
         )
     if aux_typed_records:
-        branch_nodes.append(
+        normalized_branches.append(
             {
-                "NodeType": "Branch",
-                "Name": "AuxTyped",
-                "Children": aux_typed_records,
+                "type": "AuxTyped",
+                "props": {},
+                "children": [c for c in aux_typed_records if isinstance(c, dict)],
+                "_internal": {"node_type": "Branch", "codec": "AuxTyped.v1"},
             }
         )
 
-    return {
-        "NodeType": "DCH",
-        "Source": str(path),
-        "Offset": 0,
-        "EndOffset": len(data),
-        "RecordStartMarkerHex": START_MARKER.hex(" "),
-        "RecordDescriptors": {
-            "Part.v1": {
-                "RecordType": "Part",
-                "Family": "token",
-                "Header": {
-                    "start_marker_hex": START_MARKER.hex(" "),
-                    "text_head_offset_from_record_start": 40,
-                    "field_encoding": "len16be+utf16be",
-                },
-                "Fields": ["Name", "RefDes", "Value", "BaseRefDes", "BaseName"],
-            },
-            "PatternChild.v2": {
-                "RecordType": "Pattern",
-                "Family": "subrecord",
-                "Header": {
-                    "prelude_pattern_hex": "0f 42 [40|41|42] [00|01] 3b xx xx xx 3b xx xx xx",
-                    "name_marker_hex": "0f 42 40 00",
-                    "field_encoding": "len16le+utf16le_noterm",
-                },
-                "Fields": ["Name"],
-            },
-            "PatternChild.v3": {
-                "RecordType": "Pattern",
-                "Family": "subrecord",
-                "Header": {
-                    "prelude_pattern_hex": "0f 42 [42|44] 01 3b xx xx xx 3b xx xx xx",
-                    "name_marker_hex": "0f 42 41 00",
-                    "field_encoding": "len16le+utf16le_noterm",
-                },
-                "Fields": ["Name"],
-            },
-            "PatternExtension.v1": {
-                "RecordType": "PatternExtension",
-                "Family": "typed",
-                "Header": {
-                    "prelude_pattern_hex": "0f 42 [40|41|42] [00|01] 3b xx xx xx 3b xx xx xx",
-                    "name_marker_hex": "0f 42 40 00",
-                    "field_encoding": "len16le+utf16le_noterm",
-                    "record_mode": 1,
-                },
-                "Fields": ["PrimaryName", "Names"],
-            },
-            "TokenNamed.v1": {
-                "RecordType": "TokenNamed",
-                "Family": "token",
-                "Header": {
-                    "start_pattern_hex": "x 01 01 0f 42 41 0f 42 40 00 00 00",
-                    "field_encoding": "len16le+utf16le",
-                },
-                "Fields": ["RawTypeByte", "RoleCandidate", "Name", "Meta?"],
-            },
-            "TokenContainer.v1": {
-                "RecordType": "TokenContainer",
-                "Family": "token",
-                "Header": {
-                    "start_pattern_hex": "x 01 01 0f 42 41 0f 42 40 00 00 00 00 00 00 01 01 00 00",
-                    "field_encoding": "none",
-                },
-                "Fields": ["RawTypeByte", "InternalRecordStartCount", "RoleCandidate"],
-            },
-            "NestedRecord.v1": {
-                "RecordType": "Nested",
-                "Family": "nested",
-                "Header": {
-                    "start_pattern_hex": "x 01 00 0f 42",
-                    "top_level_excluded_type_bytes": ["00", "0c"],
-                },
-                "Fields": [],
-            }
+    marker_hex = START_MARKER.hex(" ")
+    record_descriptors = build_explore_record_descriptors(marker_hex)
+    prefix_end = records[0].start if records else 0
+    explore_stats = build_explore_stats(
+        records=records,
+        decoded_records=decoded_records,
+        consumed_exact=consumed_exact,
+        consumed_short=consumed_short,
+        consumed_overrun=consumed_overrun,
+        consumed_missing=consumed_missing,
+        consumed_short_samples=consumed_short_samples,
+        nested_total=nested_total,
+        nested_type_counts=nested_type_counts,
+        nested_scan_shifted_by_consumed=nested_scan_shifted_by_consumed,
+        enable_header_pair_collapse=ENABLE_HEADER_PAIR_COLLAPSE,
+        header_pair_candidates=header_pair_candidates,
+        header_pair_collapsed=header_pair_collapsed,
+        header_pair_parent_decoded=header_pair_parent_decoded,
+        header_pair_child_starts_after_consumed=header_pair_child_starts_after_consumed,
+        header_pair_child_starts_at_consumed=header_pair_child_starts_at_consumed,
+        child_containment_total=child_containment_total,
+        child_containment_violations=child_containment_violations,
+        collapsed_indices=collapsed_indices,
+        part_ancestry_counts=part_ancestry_counts,
+        component_container_candidates=component_container_candidates,
+        component_region_part_count=component_region_part_count,
+        cache_region_counts=cache_region_counts,
+        promoted_cache_count=promoted_cache_count,
+        cache_marker_augmented_count=cache_marker_augmented_count,
+    )
+
+    out_tree = {
+        "type": "Schematic",
+        "props": {
+            "Source": str(path),
         },
-        "Stats": {
-            "RecordCount": len(records),
-            "FamilyCounts": {
-                "token": sum(1 for r in records if r.family == "token"),
-                "typed": sum(1 for r in records if r.family == "typed"),
-                "unknown": sum(1 for r in records if r.family == "unknown"),
-            },
-            "DecodedRecordCount": len(decoded_records),
-            "ConsumedBoundaryStats": {
-                "exact": consumed_exact,
-                "short": consumed_short,
-                "overrun": consumed_overrun,
-                "missing": consumed_missing,
-                "short_samples": consumed_short_samples,
-            },
-            "NestedRecordCount": nested_total,
-            "NestedTypeCounts": {str(k): int(v) for k, v in sorted(nested_type_counts.items())},
-            "NestedScanStartShiftedByConsumedCount": int(nested_scan_shifted_by_consumed),
-            "HeaderPairCollapseEvidence": {
-                "enabled": bool(ENABLE_HEADER_PAIR_COLLAPSE),
-                "candidates": int(header_pair_candidates),
-                "collapsed": int(header_pair_collapsed),
-                "parent_decoded": int(header_pair_parent_decoded),
-                "child_starts_after_or_at_parent_consumed": int(header_pair_child_starts_after_consumed),
-                "child_starts_exactly_at_parent_consumed": int(header_pair_child_starts_at_consumed),
-            },
-            "ChildContainment": {
-                "total": int(child_containment_total),
-                "violations": int(child_containment_violations),
-            },
-            "CollapsedTopLevelChildren": len(collapsed_indices),
-            "PartAncestryCounts": dict(sorted(part_ancestry_counts.items(), key=lambda kv: kv[1], reverse=True)),
-            "ComponentContainerCandidatesTop": component_container_candidates[:16],
-            "ComponentRegionPartCount": int(component_region_part_count),
-            "CacheRegionRecordTypeCounts": cache_region_counts,
+        "children": normalized_branches,
+        "_internal": {
+            "codec": "Schematic.v1",
+            "offset": 0,
+            "end_offset": len(data),
+            "record_start_marker_hex": marker_hex,
+            "prefix_bytes": bytearray(data[:prefix_end]),
+            "record_descriptors": record_descriptors,
+            "stats": explore_stats,
         },
-        "CleanEOF": True,
-        "Children": run_nodes,
-        "Branches": branch_nodes,
     }
+    out_tree["clean_eof"] = True
+    return out_tree

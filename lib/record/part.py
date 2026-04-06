@@ -30,7 +30,6 @@ PART_RECORD_DESCRIPTOR: dict[str, object] = {
         {"name": "Value", "format": "len16be_utf16be"},
         {"name": "BaseRefDes", "format": "len16be_utf16be"},
         {"name": "BaseName", "format": "len16be_utf16be"},
-        {"name": "unknown9", "format": "bin[*]"},
     ],
     "required_non_empty_fields": ["RefDes"],
 }
