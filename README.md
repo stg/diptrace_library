@@ -10,9 +10,9 @@ Main focus: I needed to quickly answer:
 Because DipTrace `.dch` files are binary, normal text search does not work well.  
 This repo solves that by decoding `.dch` data and indexing prior component usage across projects.
 
-It already decodes substantially more than component usage from `.dch` files. While not yet a complete DipTrace decoder, and heuristics-rich, it is a practical base for custom tooling and deeper exploration of the DipTrace `.dch` format.
+It already decodes substantially more than component usage from `.dch` files. While not yet a complete DipTrace decoder, it is a practical base for custom tooling and deeper exploration of the DipTrace `.dch` format.
 
-Feel free to contribute any findings that may help improve the decoder, especially removal of any heuristics.
+Feel free to contribute any findings that may help improve the decoder.
 
 ## Apps
 
@@ -32,8 +32,8 @@ Feel free to contribute any findings that may help improve the decoder, especial
 
 ### Run
 
-```powershell
-python diptrace_db/build_db.py --root D:\DiptraceWorkspace --out component_db.json
+```sh
+python diptrace_db/build_db.py --root /path/to/workspace --out component_db.json
 ```
 
 ### Input / Output
@@ -67,8 +67,23 @@ Groups by unique `(Name, Value, Pattern)` and outputs:
 
 Run:
 
-```powershell
+```sh
 python diptrace_bom/build_bom.py input.dch output.csv
+```
+
+### `dch_to_asc`
+
+Early development skeleton for structural `.dch` -> `.asc` work.
+
+Status:
+- Not a functional end-user app yet
+- Used as a development scaffold for decoder parity and future ASC generation
+- Output is intentionally partial/incomplete
+
+Run:
+
+```sh
+python dch_to_asc/build_asc.py input.dch output.asc
 ```
 
 ## `lib/` (shared decoding library)
