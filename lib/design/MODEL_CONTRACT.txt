@@ -1,0 +1,144 @@
+Shared design model and adapter contract
+=======================================
+
+Purpose
+-------
+The library is an alternative way to work with DipTrace designs:
+read a file, inspect or edit the design programmatically, then write a file,
+with optional context. Every supported format imports into the same model.
+Public ASC/DCHXML vocabulary guides names. The current design is the authority.
+Import consumes one supplied design file. It does not discover companion files;
+unavailable external resources remain explicit unresolved references.
+
+Import: modernization
+---------------------
+Readers decode their format and modernize supported earlier representations
+into the current model. Verified version upgrades, equivalent aliases and
+geometry modernization belong here. Verified DipTrace-style modernization is
+the preferred default, implemented independently around our model. Match its
+meaningful loading and normalization results. Each meaningful fact has one authoritative
+representation. Old and current copies must not compete during later editing.
+
+Preserve meaningful authored content, settings, identities, relationships and
+ordering, including data another output format cannot express. A valid resolved
+reference identifies its target; an unresolved reference explicitly retains the
+missing key and relevant domain. Positional file indices are codec concerns.
+Actual persistent identities remain normal design properties.
+
+Import must not narrow a design to the capabilities of a future destination.
+Modernization is distinct from destination adaptation.
+
+Export: adaptation/projection
+----------------------------
+Writers adapt a detached view of the current design to the selected destination
+and output version. They generate required counts, indices, obsolete compatible
+representations and calculated values. Output must depend on current design
+properties, destination/version and explicit context, without hidden dependence
+on the original file or its edit history.
+
+Context provides environment choices, overrides or services. Ordinary output
+uses meaningful stored settings and documented defaults; no mandatory context
+object should be needed just to supply routine choices.
+
+Destination adaptation leaves the author's model unchanged. Expected regeneration
+or equivalent normalization is quiet or informational. Meaningful irreversible
+loss warns. Invalid output and unimplemented semantic mappings remain errors.
+
+Missing and calculated data
+---------------------------
+Use ordinary nullable properties for unavailable optional data. Do not invent
+an extra availability flag when presence already supplies that information.
+An absent value and a known empty collection may differ when the domain requires
+that distinction. Caches have clear ownership and invalidation; they are never
+a second authoritative design value.
+
+Generated component markings illustrate this rule: current component text and
+label choices own content and placement. A MarkingGenerated drawing carries
+appearance and optional calculated TextLine/Points_New caches. DCH and ASC output
+recalculate those caches on a detached view; XML needs only the definitions.
+Editing a value or placement does not require a refresh flag. Authored drawings
+retain their geometry and appearance. Literal text uses FontType/TextShow zero;
+a property or user-field selector instead binds its text to that current value.
+Import and detached export preparation refresh bound text without replacing the
+drawing. Editing its cached text cannot override the selected component property.
+
+Future pour example: filled=True with fill_geometry=None expresses a filled
+state whose calculated geometry is unavailable. A destination permitting that
+combination can retain it. A destination requiring geometry for filled state
+exports it unfilled. The source model remains unchanged. This illustrates the
+contract; exact PCB format rules require their own implementation and evidence.
+
+Numbers and source inspection
+-----------------------------
+Use appropriate discrete types for IDs, enums and flags, and one authoritative
+real value per measured quantity. Prefer a single real-number representation;
+binary64 is the initial simplification candidate. Exact parsing, integer codec
+arithmetic and quantization can remain local to adapters where required.
+Do not carry a second value to reproduce incidental source floating-point errors.
+Conversion must preserve meaningful precision and must not accumulate drift.
+
+Keep schematic angles as angles internally, including values outside a full turn.
+Export normalizes modulo one turn and rounds to the nearest supported quarter
+turn, encoding either a clean angle or an orientation number as required.
+Half-way ties select an even quarter. Placement angles use degrees; text and
+label angles use radians. Footprint pad/dimension and 3D angle domains are
+separate and are not restricted by the schematic orientation rule.
+
+Source spelling, comments, syntax trees, byte spans and transformation history
+may support explicitly requested inspection or private research. Normal model
+editing and serialization must not depend on them. Actual document properties
+and authored library information are ordinary data, even when called metadata.
+Document.representation describes the current schematic or syntax API view,
+independently of diagnostic provenance. Normal imports all use schematic;
+source inspection views normalize before semantic conversion. Clearing import
+metadata cannot change reference binding, writer selection or output eligibility.
+Import and export share ConversionReport and the info/warning/error severity
+contract. Modernization/reconstruction is informational; unresolved constraints
+or meaningful loss warn; invalid input/output fails with its original exception.
+Reports describe operations without adding history to design properties.
+
+Round trips and evidence
+------------------------
+For supported output versions, round trips should preserve meaningful design
+data naturally because the model is complete and the adapters are correct.
+A lost meaningful value identifies a missing model property or adapter mapping.
+Fix that cause rather than adding source backups or preservation-only fields.
+Required target fields with no independent meaning should be regenerated.
+
+Byte equality is a useful diagnostic, not the architectural goal. Normalizing
+an arbitrary file may change bytes just as an editor's own load/save can.
+Keep connectivity, identity and version gates strict. Measure permitted layout
+and rounding differences separately and verify stability through repeated cycles.
+Executable behavior establishes format facts; it does not prescribe our model
+or algorithms. Do not reproduce incidental bugs solely to pass comparisons.
+Never imitate an apparent application rounding bug when our calculation is more
+accurate or stable. Establish and document the numerical difference, preserve
+meaning and verify repeated-conversion stability. Tiny application-induced
+coordinate shifts do not require matching changes to authored geometry.
+Font profiles contain measurable layout metrics in our own representation.
+Character advances and line dimensions must be observable through ordinary
+design-file measurements. Glyph contours and executable font-table structures
+are not needed or included for size calculation.
+
+Required cleanup
+----------------
+The following work belongs to completion of the schematic library:
+
+- Classify existing StoredData and preservation mechanisms by actual meaning.
+- Promote independently meaningful data to proper properties or references.
+- Remove previous geometry, removed-point histories and other upgrade snapshots
+  from ordinary model data after their verified modernization is implemented.
+- Regenerate obsolete label slots and redundant compatibility representations.
+- Replace duplicate numeric truth/calculation values with a simpler numeric path.
+- Express inherited style choices clearly, with optional resolved caches only
+  when useful and with explicit invalidation.
+- Consolidate unresolved-reference state instead of scattering saved keys and
+  positional placeholders through preservation metadata.
+- Remove ordinary editing/export behavior that varies solely with import origin.
+- Keep optional source inspection separate from normal library workflows.
+- Revise tests, diagnostics and capability documentation to enforce this contract.
+
+Cleanup must not blindly delete meaningful data. Determine its role from public
+format semantics and verified behavior, retaining research evidence privately.
+The capability register must distinguish present behavior, cleanup work and
+actual destination limits; existing retention behavior is not a model precedent.

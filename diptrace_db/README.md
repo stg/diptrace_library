@@ -1,17 +1,12 @@
-# diptrace_db
+# Component usage database
 
-Build a central database of unique `(name, value, pattern)` combinations from all DipTrace `.dch` files.
+Scan a supplied directory for DCH files and index component signatures:
 
-## Run
-
-```powershell
-python apps/diptrace_db/build_db.py --root D:\Sync\ExternalProjects --out analysis\component_combo_db.json
+```sh
+python diptrace_db/build_db.py --root inputs --out component_db.json
 ```
 
-Clean rebuild (no input DB cache):
-
-```powershell
-python apps/diptrace_db/build_db.py --clean
-```
-
-Shared helper modules for this and future apps are in `apps/lib`.
+Run with `--help` for incremental scan and output options.
+The shared design reader supplies enabled physical components. Cached results
+from older extraction formats are rebuilt. One worker is the default; use
+`--workers` to trade memory for parallel parsing.

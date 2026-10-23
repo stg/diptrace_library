@@ -14,51 +14,39 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from apps.lib.dch_structural import decode_structural_components
-from apps.lib.tree_query import TreeQuery
+from apps.lib.design import read
+
+EXTRACTION_FORMAT = 1
 
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".vs", ".idea"}
 
 
-def _extract_file_rows_structural(dch_path: Path) -> list[tuple[str, str, str]]:
-    tq = TreeQuery(decode_structural_components(dch_path))
-    components = tq.find("Components")
-    component_roots = components.find_all("Part", sort_by_offset=True) if components is not None else []
-    if len(component_roots) == 0:
-        raise RuntimeError("structural decode missing Components branch")
-
-    out: list[tuple[str, str, str]] = []
-    for rec in component_roots:
-        ref = rec.text("RefDes").strip(" \t")
-        if not ref:
+def _extract_file_rows(dch_path: Path) -> list[tuple[str, str, str]]:
+    document = read(dch_path)
+    out = []
+    for part in document.select('/Schematic/Components/Part'):
+        if part.scalar('Enabled') not in (True, 'Y') or part.scalar('PartType') != 0:
             continue
-        if ref.startswith("NetPort"):
+        if not part.values[1].strip():
             continue
-        name = rec.text("Name").strip(" \t")
-        value = rec.text("Value").strip(" \t")
-        pnode = rec.find("Pattern")
-        pattern = pnode.text("Name") if pnode is not None else ""
-        pattern = str(pattern).strip(" \t")
-
-        # User-specific post-processing rule (not a DipTrace file-format rule):
-        # collapse generic Name when Pattern starts with that same token, e.g. RES + RES_0603.
+        name = part.values[0].strip(' \t')
+        value = part.scalar('Value', '').strip(' \t')
+        footprint = part.child('Pattern')
+        pattern = footprint.values[0].strip(' \t') if footprint is not None else ''
+        # Database presentation: suppress a redundant generic name token.
         if name and pattern.startswith(name):
-            tail = pattern[len(name) :]
-            if tail == "" or (tail and not tail[0].isalnum()):
-                name = ""
+            tail = pattern[len(name):]
+            if not tail or not tail[0].isalnum():
+                name = ''
         out.append((name, value, pattern))
     return out
 
 
-def _extract_file_rows(dch_path: Path, decoder: str) -> list[tuple[str, str, str]]:
-    return _extract_file_rows_structural(dch_path)
-
-
-def _worker(dch_str: str, decoder: str) -> dict[str, Any]:
+def _worker(dch_str: str) -> dict[str, Any]:
     dch = Path(dch_str)
     st = dch.stat()
-    rows = _extract_file_rows(dch, decoder=decoder)
+    rows = _extract_file_rows(dch)
     unique_rows = sorted(set(rows))
     missing_value = sum(1 for _, value, _ in rows if value == "")
     missing_pattern = sum(1 for _, _, pat in rows if pat == "")
@@ -82,6 +70,8 @@ def _load_previous_index(out_path: Path) -> dict[str, dict[str, Any]]:
     except Exception:  # noqa: BLE001
         return {}
 
+    if prev.get("extraction_format") != EXTRACTION_FORMAT:
+        return {}
     prev_files = prev.get("files", [])
     prev_stats = prev.get("file_stats", [])
     prev_unique = prev.get("file_unique", [])
@@ -150,7 +140,7 @@ def _print_progress(
 
 
 def build_db(
-    root: Path, workers: int, prev_index: dict[str, dict[str, Any]] | None = None, decoder: str = "structural"
+    root: Path, workers: int, prev_index: dict[str, dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     if prev_index is None:
         prev_index = {}
@@ -251,7 +241,7 @@ def build_db(
                                         if prev is not None and isinstance(prev.get("unique_rows"), list):
                                             for a, b, c in prev["unique_rows"]:
                                                 unique_total_estimate.add((str(a), str(b), str(c)))
-                                        fut = ex.submit(_worker, ent.path, decoder)
+                                        fut = ex.submit(_worker, ent.path)
                                         pending.add(fut)
                                         fut_to_path[fut] = Path(ent.path)
                             except OSError:
@@ -326,6 +316,7 @@ def build_db(
         for fp in sorted(per_file_rows_map.keys())
     ]
     result = {
+        "extraction_format": EXTRACTION_FORMAT,
         "root": str(root),
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "files_read": extracted,
@@ -343,16 +334,10 @@ def build_db(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Build central database of (name,value,pattern) -> files from all .dch files.")
-    ap.add_argument("--root", default=r"D:\Sync\ExternalProjects", help="Root directory to scan recursively for .dch files.")
-    ap.add_argument("--out", default="analysis/component_combo_db.json", help="Output JSON file.")
-    ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 4) - 1), help="Worker process count.")
+    ap.add_argument("--root", required=True, help="Root directory to scan recursively for .dch files.")
+    ap.add_argument("--out", required=True, help="Output JSON file.")
+    ap.add_argument("--workers", type=int, default=1, help="Worker process count (default: 1; each owns a full schematic model).")
     ap.add_argument("--clean", action="store_true", help="Ignore existing output DB cache and do a full rebuild.")
-    ap.add_argument(
-        "--decoder",
-        choices=["structural", "heuristic"],
-        default="structural",
-        help="Decoder base for extracting component triples.",
-    )
     args = ap.parse_args()
 
     root = Path(args.root)
@@ -362,7 +347,6 @@ def main() -> int:
 
     print(f"scan_root={root}")
     print(f"workers={args.workers}")
-    print(f"decoder={args.decoder}")
     prev_index: dict[str, dict[str, Any]] = {}
     if not args.clean:
         prev_index = _load_previous_index(out)
@@ -370,7 +354,7 @@ def main() -> int:
             print(f"cache_index_files={len(prev_index)}")
     else:
         print("cache=disabled (--clean)")
-    db = build_db(root, workers=max(1, args.workers), prev_index=prev_index, decoder=args.decoder)
+    db = build_db(root, workers=max(1, args.workers), prev_index=prev_index)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(db, indent=2), encoding="utf-8")

@@ -1,17 +1,10 @@
-# diptrace_bom
+# Schematic BOM
 
-Create a simple BOM CSV from a single DipTrace `.dch` schematic.
-
-Groups components by unique `(Name, Value, Pattern)` and merges matching `RefDes` into a comma-separated list.
-
-Output columns:
-- `RefDes`
-- `Name`
-- `Value`
-- `Pattern`
-
-Run:
-
-```powershell
+```sh
 python diptrace_bom/build_bom.py input.dch output.csv
 ```
+
+Groups components by name, value and pattern, with their reference designators.
+The same command accepts ASC and DCHXML inputs through the shared model. Only
+enabled physical components are included; repeated RefDes values contribute once.
+Run with `--help` for command options.

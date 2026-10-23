@@ -1,91 +1,38 @@
-# DipTrace Schematic Decoding
+# DipTrace schematic tools
 
-Decode DipTrace binary schematic files (`.dch`) and build a searchable component usage database.
+The editable design library imports DCH, ASC and DCHXML into one searchable
+schematic model. It supports data inspection, scalar and tuple edits, record
+insertion, cloning, moving, reordering and reference rebuilding.
 
-## Why This Exists
+- [Library API](lib/design/README.txt)
+- [Format capabilities and conversion rules](lib/design/FORMAT_CAPABILITIES.txt)
+- [DCH to ASC command](dch_to_asc/README.md)
 
-Main focus: I needed to quickly answer:
-"Where have I already used this component so I can source compatible spare parts for new designs?"
+DCH input supports schemas 29 through 48. DCH output supports 46, 47 and 48;
+ASC output uses schematic dialect 46. XML adapters cover recognized public
+fields, with explicit limits documented in the capability register.
 
-Because DipTrace `.dch` files are binary, normal text search does not work well.  
-This repo solves that by decoding `.dch` data and indexing prior component usage across projects.
+Routine reconstruction produces quiet informational notices; meaningful losses
+and unresolved input constraints produce warnings. ConversionReport collects
+import and export notices with the same info/warning/error severities. Unknown
+mappings and invalid input/output remain errors. Export
+preparation operates on a detached view of the model.
 
-It already decodes substantially more than component usage from `.dch` files. While not yet a complete DipTrace decoder, it is a practical base for custom tooling and deeper exploration of the DipTrace `.dch` format.
-
-Feel free to contribute any findings that may help improve the decoder.
-
-## Apps
-
-### `diptrace_db`
-
-`diptrace_db` scans workspace, builds JSON database from unique signatures:
-- `name`
-- `value`
-- `pattern`
-
-### Features
-
-- Recursive scan of workspace for DipTrace `.dch` files
-- Incremental rebuild support for fast re-runs
-- Search-ready JSON output for component lookup and BOM reuse
-- Shared `.dch` decoder library for future apps
-
-### Run
+The component database and BOM commands use the shared model:
 
 ```sh
-python diptrace_db/build_db.py --root /path/to/workspace --out component_db.json
-```
-
-### Input / Output
-
-- Input: DipTrace schematic binaries (`.dch`)
-- Output: JSON database mapping unique `(name, value, pattern)` to file usage locations
-
-### Example Output (trimmed)
-
-```json
-{
-  "name": "",
-  "value": "150",
-  "pattern": "RES_0603_N",
-  "files": [
-    "ProjectA/PowerSupply_R3.dch",
-    "ProjectB/ControlBoard_R12.dch"
-  ]
-}
-```
-
-### `diptrace_bom`
-
-Builds a BOM CSV from one `.dch` input.
-
-Groups by unique `(Name, Value, Pattern)` and outputs:
-- `RefDes` list
-- `Name`
-- `Value`
-- `Pattern`
-
-Run:
-
-```sh
+python diptrace_db/build_db.py --root inputs --out component_db.json
 python diptrace_bom/build_bom.py input.dch output.csv
 ```
 
-### `dch_to_asc`
+Earlier decoder experiments and their callers are preserved under `deprecated/`.
+They are separate from the current library and application entry points.
 
-Early development skeleton for structural `.dch` -> `.asc` work.
+Routing, coordinated connection editing and copper-pour calculation are future
+layers. PCB, component-library and pattern-library file adapters are future work.
 
-Status:
-- Not a functional end-user app yet
-- Used as a development scaffold for decoder parity and future ASC generation
-- Output is intentionally partial/incomplete
-
-Run:
+Run the self-contained library tests from this directory:
 
 ```sh
-python dch_to_asc/build_asc.py input.dch output.asc
+python -m unittest discover -s lib/design/tests
 ```
-
-## `lib/` (shared decoding library)
-
-`lib/` contains shared DipTrace `.dch` decoder code used by this app and future apps in this repository.

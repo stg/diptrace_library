@@ -1,0 +1,20 @@
+{
+  "units": "mm",
+  "project_dir": "",
+  "grid_snap": true,
+  "use_part_font_color": false,
+  "marking_style": {
+    "font_size": 2,
+    "font_name": "Tahoma",
+    "font_color": 0,
+    "font_width": -2,
+    "font_scale": 1,
+    "vector": true
+  },
+  "default_line_width": 0.2,
+  "line_widths": {},
+  "text_layout": {
+    "dpi": 96,
+    "font_scale": 1
+  }
+}
