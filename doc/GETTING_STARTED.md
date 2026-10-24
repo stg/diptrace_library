@@ -36,6 +36,8 @@ on a common context, and customize
 with `dataclasses.replace`. `ImportContext` configures legacy binary modernization.
 
 One `ConversionReport` can collect notices from multiple reads and writes.
+Call `report.clear()` to reset it before another operation or batch, or create
+a new report to keep the old results.
 Notices include the operation, format and filename; buffer operations can use
 an optional `label="..."`. Reports contain diagnostics, not a log of clean successes.
 Information describes equivalent normalization or reconstructable omissions;
@@ -48,7 +50,14 @@ vocabulary. These examples cover data inspection and editing; high-level editing
 such as automatic routing, is a separate layer. See the
 [family status sections](../README.md#schematics) for current support.
 
-For detailed limits and advanced options, see the supporting
-[model catalogue](../references/MODEL_REFERENCE.md), [API notes](../references/API_NOTES.txt),
-[capability register](../references/FORMAT_CAPABILITIES.txt) and [model contract](../references/MODEL_CONTRACT.txt).
+Use `format_capabilities("dch")` to query supported input/output versions and the
+default output version. Its `output_version(requested)` requires exact support;
+`output_version(requested, fallback=True)` may select an earlier version. A caller
+using that fallback should report when the result differs from the request.
+Adapter support does not promise that every fact fits the selected format;
+conversion reports describe design-specific limitations.
+
+The [API guide](API.md) covers queries, RefDes helpers, editing, configuration,
+reports and conversion limits. The [schematic catalogue](SCHEMATIC.md) lists
+every declared record and field, generated from the model's schema.
 The [three runnable examples](../examples/schematic/README.md) cover creation, editing and conversion.

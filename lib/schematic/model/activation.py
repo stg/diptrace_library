@@ -126,6 +126,8 @@ def prepare_attachment(document, parent, root, structure):
         modernize_classifications(root)
         establish_records(root)
         memberships, generated = _membership(document, root)
+    from .refdes import validate_name
+    validate_name(document, root)
     scope = ReferenceScope(root)
     children = {parent: parent._child_sequence()}
     parents = {root: parent}

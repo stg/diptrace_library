@@ -1,7 +1,7 @@
 # Schematic model reference
 
 Generated from `schematic_schema()`. Use this as a lookup reference; start with the
-[getting started](../doc/GETTING_STARTED.md) and [model guide](../doc/MODEL.md).
+[getting started](GETTING_STARTED.md), [API guide](API.md) and [model guide](MODEL.md).
 
 Normal DCH, ASC and DCHXML imports share these definitions. Record type names
 identify schemas; owned-child names are the names used in paths. Fields hold
@@ -30,7 +30,7 @@ In-memory `uid` is not a persistent file key. Resolved links use target identity
 unresolved keys and compatibility values are explicit data until resolved.
 
 For relationship ownership, scope, lifecycle and validation see the
-[model guide](../doc/MODEL.md#ownership-and-relationships).
+[model guide](MODEL.md#ownership-and-relationships).
 
 ## Record index
 

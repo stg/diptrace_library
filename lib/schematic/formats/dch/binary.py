@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from ..capabilities import DCH
 
 
-MIN_VERSION = 29
-MAX_KNOWN_VERSION = 52
+MIN_VERSION = min(DCH.read_versions)
+MAX_KNOWN_VERSION = max(DCH.read_versions)
 _LEGACY_HEADERS = {"DTSCHEM2.22": 29, "DTSCHEM2.21": 28, "DTSCHEM2.2": 27}
 
 
@@ -50,7 +51,7 @@ def read_header(data: bytes) -> Header:
         version = _LEGACY_HEADERS[signature]
     else:
         raise UnsupportedVersionError(f"unsupported DCH signature {signature!r}; minimum is DTSCHEM2.22/schema {MIN_VERSION}")
-    if not MIN_VERSION <= version <= MAX_KNOWN_VERSION:
+    if not DCH.supports_read(version):
         raise UnsupportedVersionError(f"DCH schema {version} is outside supported range {MIN_VERSION}..{MAX_KNOWN_VERSION}")
     return Header(signature, version, end)
 

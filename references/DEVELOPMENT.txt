@@ -1,8 +1,19 @@
-# Library development
+Library development record
+==========================
 
-## Completed: examples and model usability
+This file records the completed library-coherence work and decisions that led
+to the current API. Original planning detail is retained as development history,
+not as a second task queue or a source of new instructions. Use AGENTS.md,
+MODEL_CONTRACT.txt and FORMAT_CAPABILITIES.txt for current implementation rules;
+use ../doc/ for the supported public API and model.
 
-- [x] Provide common runnable examples under `examples/schematic/`, using small,
+Historical plans below retain their original scope; mentions of deferred work
+record the boundary of that pass, not a commitment to implement it.
+
+Completed: examples and model usability
+---------------------------------------
+
+- [done] Provide common runnable examples under examples/schematic/, using small,
   self-contained public designs. Keep a small, curated set that covers the common
   tasks below; combine related tasks rather than creating an example for every
   API variant or format combination. Cover:
@@ -13,10 +24,10 @@
   - Creating a small schematic and adding drawing data.
   - Converting between the three formats, choosing output versions, supplying
     optional context and reviewing import/export reports.
-  Prefer named bracket access and assignment in examples (`part["Value"]`,
-  `part["Value"] = "22k"`). Use `get(name, default)` when a fallback read is
+  Prefer named bracket access and assignment in examples (part["Value"],
+  part["Value"] = "22k"). Use get(name, default) when a fallback read is
   intended, and named membership tests when presence itself matters. Show the
-  explicit `get`/`set` equivalents where that helps explain dynamic access.
+  explicit get/set equivalents where that helps explain dynamic access.
   Keep primary documentation readable for library users. Explain each concept
   once, with only the examples needed to use it; leave exhaustive combinations
   and edge-case coverage to tests and supporting references.
@@ -45,42 +56,42 @@
     helpers. Distinguish current data-editing gaps from deferred higher-level
     operations; recording an item does not bring those operations into scope.
 
-- [x] Define and document a model with named fields and a consistent editing API.
+- [done] Define and document a model with named fields and a consistent editing API.
   - Give every meaningful field a declared name, including values currently
     accessed as positional arguments. Public ASC/DCHXML vocabulary guides names;
     neither format's serialized layout defines the shared model.
-  - Support both `get(name, default=None)` / `set(name, value)` and named bracket
-    access (`record[name]`, `record[name] = value`) through the same field lookup
+  - Support both get(name, default=None) / set(name, value) and named bracket
+    access (record[name], record[name] = value) through the same field lookup
     and mutation implementation. Reading an existing field is equivalent in
-    either form; `get` supplies a default for a missing field, while
-    bracket reads raise `KeyError`. Both assignment forms apply identical type
+    either form; get supplies a default for a missing field, while
+    bracket reads raise KeyError. Both assignment forms apply identical type
     validation, reference maintenance, change tracking and cache invalidation.
     Reject unknown field names on assignment and invalid values promptly. Keep child
     navigation and record queries separate from field reads.
-  - Support removing optional fields with `del record[name]`. Reject deletion of
+  - Support removing optional fields with del record[name]. Reject deletion of
     required fields and honor reference/dependency constraints before making
     changes. Use the same coherence, change-tracking and cache-invalidation
     machinery as assignment. A missing field, including an unknown name, raises
-    `KeyError`. Deletion means absence, independently of assigning
-    `None` where the schema allows a nullable value. Writers generate any
+    KeyError. Deletion means absence, independently of assigning
+    None where the schema allows a nullable value. Writers generate any
     required destination defaults on their detached view.
-  - Follow Python mapping conventions for missing-value behavior: `get(name)`
-    returns `None` for a missing field, and `get(name, default)` returns the
+  - Follow Python mapping conventions for missing-value behavior: get(name)
+    returns None for a missing field, and get(name, default) returns the
     supplied default, including for names not declared by the schema.
-    A present nullable value of `None` remains `None`; membership distinguishes
+    A present nullable value of None remains None; membership distinguishes
     that state from absence. Unknown names are absent for membership tests and
-    raise `KeyError` on bracket reads. Schema reflection can check whether a name
+    raise KeyError on bracket reads. Schema reflection can check whether a name
     is declared; schema validation rejects unknown writes and required-field
     deletion without changing the ordinary mapping lookup conventions.
-  - Support named membership checks (`"Datasheet" in record`) for whether a field
+  - Support named membership checks ("Datasheet" in record) for whether a field
     is present, independently of its value's truthiness. Distinguish present
-    values such as `0`, `False` and empty text from absence. Schema reflection
+    values such as 0, False and empty text from absence. Schema reflection
     separately describes whether a field is declared for that record type.
   - Let schema-based reflection discover fields and inspect their definitions,
     using the same named access and mutation path for dynamic reads and writes.
     Reflection must preserve the normal validation and coherence guarantees.
-  - Support named selector predicates such as `//Part[RefDes="R12"]`. Ordinary
-    editing must not require `@N`, `values[N]` or `set_argument(N, ...)`.
+  - Support named selector predicates such as //Part[RefDes="R12"]. Ordinary
+    editing must not require @N, values[N] or set_argument(N, ...).
     Positional file layouts belong in adapters; explicit source inspection can
     expose their syntax separately. Meaningful collection ordering remains.
   - Make these actual schema definitions, rather than convenience aliases over
@@ -90,12 +101,11 @@
     dependence on ASC projection field lists; adapters should consume the model
     definitions where appropriate.
   - Update callers, selectors, examples and tests together. Plan the transition
-    from `scalar`/`set_field` and positional access explicitly, preserving format
+    from scalar/set_field and positional access explicitly, preserving format
     behavior and reference safety throughout the change.
 
 Field access is implemented for supported schema-bound records:
 
-```python
 part = document.one('//Part[RefDes="R1"]')
 part["RefDes"]
 part.get("Datasheet", "")
@@ -104,10 +114,9 @@ part["Value"] = "22k"
 "Datasheet" in part                 # Presence, including an empty value
 del part["Datasheet"]                # Remove an optional field
 pins = part.child("Pins")
-```
 
-- [x] Align the public reading, writing, reporting and configuration APIs.
-  - Review file-based and in-memory operations together: `read`/`parse`, `write`,
+- [done] Align the public reading, writing, reporting and configuration APIs.
+  - Review file-based and in-memory operations together: read/parse, write,
     document save/serialization methods and format-specific entry points. Make
     equivalent operations follow predictable naming, signatures, defaults,
     accepted inputs and return-value conventions.
@@ -133,7 +142,7 @@ pins = part.child("Pins")
     Provide a discoverable way to obtain default configuration and, where
     relevant, inspect the effective choices for a document and destination, then
     derive an independently customized configuration. Existing context constructors,
-    export `resolved(document)` methods and standard dataclass replacement already
+    export resolved(document) methods and standard dataclass replacement already
     provide parts of this; consolidate and document them before adding helpers.
     Distinguish inherited choices from resolved values, preserve validation, and
     keep customization from changing shared defaults or another operation.
@@ -150,7 +159,7 @@ pins = part.child("Pins")
     migration from overlapping existing entry points and configuration classes;
     avoid adding another competing API alongside them.
 
-- [x] Make model coherence automatic during ordinary data editing.
+- [done] Make model coherence automatic during ordinary data editing.
   - Implemented: prospective validation and incremental propagation through
     property/key copy chains, including bound text. Existing relationship mode
     guards cover resolved and unresolved links; conflicting edits fail atomically.
@@ -180,15 +189,15 @@ pins = part.child("Pins")
   - Separate model validation, internal lookup/cache maintenance and generation
     of file-format indices. Define a clear contract for each. Ordinary semantic
     reads, searches, edits and saves must not require callers to remember a
-    `rebuild()` call. Writers already own detached output preparation.
+    rebuild() call. Writers already own detached output preparation.
   - Provide an explicit full-model validation/audit operation. Review whether
-    `rebuild()` remains an advanced projection operation or can become internal;
+    rebuild() remains an advanced projection operation or can become internal;
     document current behavior and the migration from existing callers.
   - Preserve the existing reference, unresolved-identity and topology guards.
     Relationship coherence is data-model work; geometric wire following,
     routing and pour calculation remain deferred.
 
-- [x] Audit and improve speed across the model, readers and writers.
+- [done] Audit and improve speed across the model, readers and writers.
   - Measured all six semantic read/write paths on small, medium and large
     designs, plus lookup scaling and cache memory. Retained bounded selector
     syntax caching, private lookup/reference indexes, ASCII conversion fast
@@ -216,20 +225,20 @@ pins = part.child("Pins")
     precision and diagnostic behavior correct. Measure memory costs as well as
     elapsed time; speed changes must preserve meaningful conversion results.
 
-- [x] Write the object-access and model reference alongside the schema work.
+- [done] Write the object-access and model reference alongside the schema work.
   - Establish a clear documentation hierarchy. The primary user guide should
     provide a short path through reading, inspecting/editing and writing a design,
     with optional configuration and reports introduced when useful. Keep the
     model reference organized for lookup rather than requiring a full read.
-  - Retain `FORMAT_CAPABILITIES.txt`, `MODEL_CONTRACT.txt` and the existing detailed
+  - Retain FORMAT_CAPABILITIES.txt, MODEL_CONTRACT.txt and the existing detailed
     documents as supporting technical/internal references. They are not the
     primary user-facing documentation. Link relevant detail from the guide and
     reference without duplicating it or requiring users to study adapter internals.
   - Begin with a brief, authoritative access-rules section: named bracket reads
-    and writes, equivalent `get`/`set`, defaults, `None`, presence checks, optional
+    and writes, equivalent get/set, defaults, None, presence checks, optional
     field deletion, required-field constraints and errors for invalid operations.
-    Explain that missing bracket reads/deletions raise `KeyError`, `get` returns
-    its default for any missing name, and present `None` is distinct from absence.
+    Explain that missing bracket reads/deletions raise KeyError, get returns
+    its default for any missing name, and present None is distinct from absence.
     Keep child navigation and schema reflection clear, and prefer bracket syntax
     in examples. Use a compact table and a few small examples; avoid showing every
     equivalent spelling or repeating the same examples across documents.
@@ -250,7 +259,7 @@ pins = part.child("Pins")
     the model reference describes the editable design rather than duplicating
     each file format's specification.
 
-- [x] Audit the general structure before carrying out broad moves.
+- [done] Audit the general structure before carrying out broad moves.
   - Review library and application boundaries, module responsibilities,
     dependency direction, duplicated helpers and misplaced format assumptions.
   - Review public entry points, tests, examples, documentation, development
@@ -263,12 +272,12 @@ pins = part.child("Pins")
     resource loading. Record the proposed moves and their reasons, then verify
     callers and navigation after each migration step.
 
-- [x] Restructure `lib/` for shared infrastructure and document domains.
-  - Establish sibling `common/`, `schematic/` and future `pcb/` areas. Shared tree,
+- [done] Restructure lib/ for shared infrastructure and document domains.
+  - Establish sibling common/, schematic/ and future pcb/ areas. Shared tree,
     field-schema infrastructure, queries, reference machinery, diagnostics,
-    physical-unit utilities and general geometry belong in `common/` when they
+    physical-unit utilities and general geometry belong in common/ when they
     are independent of the document domain.
-  - Give `schematic/` some internal structure: model/schema and constructors,
+  - Give schematic/ some internal structure: model/schema and constructors,
     format adapters, data-editing helpers, and layout/calculated geometry.
     Group each adapter's reader, writer and version handling together.
   - Keep schematic-specific reference rules, simulator behavior, sheet concepts
@@ -279,7 +288,7 @@ pins = part.child("Pins")
   - Keep all schematic formats on one schematic model, with future PCB formats
     using one PCB model built on the same common infrastructure. Dispatch must
     distinguish document kind as well as serialization format as support grows.
-  - Preserve the stable `lib` entry point during the transition. Separate
+  - Preserve the stable lib entry point during the transition. Separate
     module moves from behavior changes and update internal imports and callers
     deliberately. Introduce PCB implementation when work on that domain starts;
     the planned directory does not imply existing PCB support.
@@ -288,7 +297,6 @@ pins = part.child("Pins")
 
 Current repository organization:
 
-```text
 lib/
   __init__.py                     # Public API and document dispatch
   common/                         # Generic infrastructure and package tests
@@ -302,20 +310,20 @@ lib/
   tests/                          # Facade and integration tests
   deprecated/                     # Earlier attempts and their callers
 examples/{schematic,pcb}/
-apps/{dch_to_asc,diptrace_bom,diptrace_db}/
+apps/{common,diptrace_convert,diptrace_bom,diptrace_db,diptrace_git}/
 references/                       # Detailed supporting/AI reference material
-doc/{MODEL,GETTING_STARTED}.md     # Primary user guides
+doc/{GETTING_STARTED,API,MODEL,SCHEMATIC}.md # Human guides and generated catalogue
 README.md
-```
 
 The repository is library-first. Applications and examples consume the same
-`lib` entry point. Detailed references supplement the short user guides.
+lib entry point. Detailed references supplement the short user guides.
 
-## Current behavior and further work
+Current behavior and further work
+---------------------------------
 
 - Named bracket/get/set/in/del access and immutable schema reflection cover
   supported schematic records. Names are stored once; positional headers are
-  adapter projections. The generated MODEL_REFERENCE.md and schematic_schema()
+  adapter projections. The generated ../doc/SCHEMATIC.md and schematic_schema()
   catalogue describe supported fields, tuple members and ownership for lookup.
   Label groups, user-field headers, table/title records, border/bounds groups,
   drawing points, text rows, sizes and net-class headers now use named storage.
@@ -375,7 +383,7 @@ The repository is library-first. Applications and examples consume the same
 - A concise library guide and object-access/model reference now lead the docs.
   The existing detailed technical documents remain supporting references.
 - The common current schematic model and DCH/ASC/DCHXML adapters are implemented
-  under design/MODEL_CONTRACT.txt. Import modernizes; detached export adapts.
+  under MODEL_CONTRACT.txt. Import modernizes; detached export adapts.
   Complete imports use current properties and scoped references, without source
   replay or preservation-only snapshots. Portable tests cover editing, natural
   round trips and repeated-conversion stability.
@@ -387,10 +395,47 @@ The repository is library-first. Applications and examples consume the same
   XML automatic marking definitions cannot retain individual appearance overrides
   in the supported readers; conversion warns and retains the authoring data.
   Field-bound authored symbol text refreshes independently of placement/style.
-  See design/FORMAT_CAPABILITIES.txt
+  See FORMAT_CAPABILITIES.txt
   for exact adapter limits and conversion consequences.
 - Keep capability rules and diagnostics current as adapters expand. Companion
   discovery is outside the single-design-file input boundary. ConversionReport
   spans import and export with shared info/warning/error severities.
 - Add coordinated connection editing above the data model.
 - Add PCB, component-library and pattern-library adapters.
+
+RefDes and field-filtering pass
+-------------------------------
+
+- Callable where predicates are shared by select(), one() and find_all().
+  They inspect current fields, including placement X/Y; geometric selection and
+  additional string-selector syntax remain outside this pass.
+- RefDes comparison uses the exact prefix and final ASCII numeric counter.
+  Leading zeros do not create another identity: R003 and R3 are equivalent.
+  An absent suffix means zero, for every prefix; a bare prefix and its explicit
+  zero suffix cannot coexist as different components. R-1 is prefix R- with
+  counter 1. Preserve literal punctuation (including dash, underscore and %).
+  Reject ordinary spaces in authoring/helper inputs; do not mistake the editor's
+  removal of spaces for an import restriction. Authored spelling remains stored.
+  Reuse the common comparison in family
+  matching, numbering, collision checks and consumers such as BOM grouping.
+- Document RefDes views cover enabled physical components across all sheets.
+  They return all multipart records and remain current after ordinary edits.
+  Occupied-name edits are preflighted with other managed reference changes.
+  Group renaming and reservation mechanisms remain separate work.
+
+Documentation pass
+------------------
+
+The agreed documentation hierarchy now uses doc/ Markdown for people (and AI)
+and references/ plain text for implementation/AI work. GETTING_STARTED.md is
+the short entry; API.md documents supported operations and working examples;
+MODEL.md explains design meaning and relationships. SCHEMATIC.md is the single
+schema-generated field/ownership catalogue. Do not keep another catalogue here.
+The API examples cover conversion, reports/contexts, named editing, reflection,
+where filtering, RefDes families, copying, drawings and relationship retargeting.
+ConversionReport.clear() resets the same collector for another operation/batch.
+
+Keep this file as a development record, rather than maintaining completed work
+as another active TODO list. Future actionable work should be scoped explicitly;
+current rules belong in the contracts and AGENTS.md, and user-facing behavior
+belongs in doc/. The generated catalogue remains derived from schematic_schema().

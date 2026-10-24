@@ -372,8 +372,9 @@ class Element:
 
     def find_all(self, kind: str | None = None, *, recursive=False,
                  where: Callable[["Element"], bool] | None = None) -> list["Element"]:
+        from .query import filter_matches
         nodes = self.descendants(kind) if recursive else self.children(kind)
-        return [n for n in nodes if where is None or where(n)]
+        return filter_matches(nodes, where)
 
     def walk(self, *, include_self=False) -> Iterator["Element"]:
         stack = [self] if include_self else list(reversed(self._child_sequence()))
@@ -385,12 +386,12 @@ class Element:
     def descendants(self, kind: str | None = None) -> list["Element"]:
         return [n for n in self.walk() if kind is None or n.kind == kind]
 
-    def select(self, path: str) -> list["Element"]:
+    def select(self, path: str, *, where=None) -> list["Element"]:
         from .query import (select)
-        return select(self, path)
+        return select(self, path, where=where)
 
-    def one(self, path: str) -> "Element":
-        matches = self.select(path)
+    def one(self, path: str, *, where=None) -> "Element":
+        matches = self.select(path, where=where)
         if len(matches) != 1:
             raise LookupError(f"expected one match for {path!r}, found {len(matches)}")
         return matches[0]
@@ -758,11 +759,11 @@ class Document:
         """Current API view, independent of input provenance or export format."""
         return self._representation
 
-    def select(self, path: str) -> list[Element]:
-        return self.root.select(path)
+    def select(self, path: str, *, where=None) -> list[Element]:
+        return self.root.select(path, where=where)
 
-    def one(self, path: str) -> Element:
-        return self.root.one(path)
+    def one(self, path: str, *, where=None) -> Element:
+        return self.root.one(path, where=where)
 
     def find_all(self, kind: str, *, where=None) -> list[Element]:
         return self.root.find_all(kind, recursive=True, where=where)

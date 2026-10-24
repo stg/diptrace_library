@@ -1,8 +1,41 @@
-# The data model and editing API
+# The data model
 
 Every normal import returns the same schematic `Document`. Its ordered tree
 contains records, scalar/tuple fields and collections. Public ASC/DCHXML names
 guide field names; serialized positions are adapter details.
+
+The model represents the current design, rather than the history of a loaded
+file. It owns meaningful values, identities, unresolved references and ordering.
+It does not retain old copies of a fact merely to replay a source file.
+All input formats use this structure; an exporter projects it into its own layout.
+
+## Organization
+
+```text
+Document
+  root
+    Schematic
+      Pages / Page                     sheets, saved views and title blocks
+      Components / Part                placed components
+        Pins / Pin
+        Shapes / Shape                 symbol graphics and text
+        UserFields / UserField
+        Pattern                        assigned footprint data
+      Nets / Net
+        Parts / pt                     ordered pin membership
+        Lines / Line / Points / pt     wire geometry
+      Buses, PageConnectors             other connectivity records
+      Shapes, Tables, Groups           sheet graphics and organization
+      Settings                         project choices
+      CacheLib                         embedded library definitions
+```
+
+This is an ownership outline, not a file layout. Collection names are the names
+used in paths; schema record names identify their types. Different drawing
+contexts have distinct definitions even when their child name is `Shape`.
+The [generated schematic catalogue](SCHEMATIC.md) gives the complete hierarchy,
+fields, types, tuple members and child cardinalities. The [API guide](API.md)
+describes the operations on these records.
 
 ## Field access
 
@@ -25,6 +58,8 @@ Bracket reads of child containers, including empty collections, raise `TypeError
 Tuple fields retain their tuple read/write form and also expose named members
 through `child()`, for example `part.child("ShowRefDes")["Align"]`.
 
+For an existing component `part`:
+
 ```python
 part["Value"] = "22k"
 datasheet = part.get("Datasheet", "")
@@ -38,6 +73,17 @@ Use named predicates such as `//Part[RefDes="R1"]`. A path beginning
 `//Part` also finds cached definitions. `one()` raises `LookupError` unless
 exactly one record matches. Positional access remains available to adapters
 and source inspection; ordinary field editing does not require it.
+
+### Filtering and reference designators
+
+Use `where=` on queries to compare current fields with ordinary Python
+predicates. Placement X/Y filtering tests stored origins, not visible geometry.
+`document.refdes(prefix)` provides a live numbered-family view of enabled
+physical components across all sheets. RefDes identity is the exact prefix and
+trailing ASCII counter: leading zeros do not matter, and a bare prefix means
+zero. Authored spelling remains stored. Named edits preflight collisions.
+See the [query](API.md#searching) and [RefDes](API.md#reference-designators)
+sections for matching, allocation, next/previous modes and multipart rules.
 
 ## Ownership and relationships
 
@@ -104,7 +150,7 @@ component, pin, pattern, pad, drawing, page, net, bus, connector, user-field,
 settings and table records have definitions. Label choices, user-field headers,
 table/title cells, borders, bounds, drawing points and text rows have named
 members. Grid coordinates and title placement come from current collection
-order. The [generated catalogue](../references/MODEL_REFERENCE.md) lists the supported record
+order. The [generated catalogue](SCHEMATIC.md) lists the supported record
 types, fields, tuple members and ownership. `schematic_schema()` returns the same
 immutable definitions without requiring a design instance.
 Symbol, sheet and footprint drawings have separate definitions. Historical
@@ -125,9 +171,44 @@ Wire and bus points expose `X`, `Y` and `Dir`. Classification rows use
 catalog keys remain independent of collection position. `PadTerminalCount` and
 terminal `Index` are calculated from the current terminal list.
 
-The model owns current design facts. Private `_name` lookup caches and reference
-indexes are implementation details, do not appear as editable fields and are
-not serialized. Imports modernize; detached exports adapt. The
-[model contract](../references/MODEL_CONTRACT.txt) and
-[capability register](../references/FORMAT_CAPABILITIES.txt) retain the detailed architectural
-and format-specific rules.
+## Import, export and missing data
+
+Import modernizes supported older representations into current facts, including
+established compatibility and geometry upgrades. Import takes one supplied file;
+unresolved library or picture references remain data instead of triggering
+companion discovery. Source syntax inspection is an explicit separate API view.
+
+Absent optional data remains absent. A nullable property can explicitly contain
+`None`; neither state needs a duplicate availability flag. Authored choices and
+calculated results are distinct facts: for example, a requested filled pour and
+its unavailable calculated geometry need not be conflated. A destination that
+requires geometry for a filled state must adapt on export. This principle also
+applies to future document families; it does not imply current PCB support.
+
+Export prepares a detached view. It generates bookkeeping, positional indices,
+compatibility occurrences and required defaults, and adapts unsupported facts
+only for the chosen destination. Information notices cover equivalent
+normalization/reconstructable omissions; warnings cover meaningful loss or
+uncertainty; errors reject invalid/unimplemented conversions. These decisions
+never strip the authoring model to match the weakest destination.
+
+Same-format round trips preserve meaning naturally through complete fields and
+correct adapters. They do not promise every original byte: modernization,
+bookkeeping and bounded text-layout calculations can differ. Stored identities,
+connectivity and authored geometry remain strict. Conversions must not accumulate
+incidental rounding shifts into authoring coordinates.
+
+Private `_name` indexes and caches speed up queries and edits. They are not
+public fields or additional authored facts and are not serialized. Optional
+inspection metadata does not choose output eligibility or restore old values.
+
+## Data editing boundary
+
+The model maintains relationships while data is edited, including reference
+indices and bound text. It does not provide geometric editing algorithms.
+Changing component X/Y moves that component; existing wire points stay put.
+Changing a library reference does not import a definition, replacing footprint
+data does not reload another library, and editing a pour boundary does not
+calculate its fill. Those operations require a higher-level toolkit above this
+model. The [API guide](API.md) describes the supported edits and conversion
+limits; the [schematic catalogue](SCHEMATIC.md) provides the field definitions.

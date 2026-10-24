@@ -15,10 +15,11 @@ from ...model.document import (Document)
 from ....common.model import (IncompleteDocumentError)
 from ....common.conversion import (export_diagnostics)
 from ..export_context import DchXmlExportContext, resolve_export_context
+from ..capabilities import DCHXML
 
 
 @export_diagnostics('dchxml')
-def project_document(document, *, context=None, version=46, report=None):
+def project_document(document, *, context=None, version=DCHXML.default_write_version, report=None):
     """Create detached XML data; preserve full precision rather than RTL spelling.
 
     Output styles share only complete equal public records. This is a public
@@ -26,6 +27,7 @@ def project_document(document, *, context=None, version=46, report=None):
     """
     if not document.complete or document.representation != 'schematic':
         raise IncompleteDocumentError('complete shared schematic data is required for XML conversion')
+    version = DCHXML.output_version(version)
     context = resolve_export_context(context, 'dchxml')
     override = context.marking_style
     context = context.resolved(document)

@@ -1,5 +1,8 @@
 """Public document API. Format adapters populate our own ordered editable model."""
 from pathlib import Path
+from .common.capabilities import FormatCapabilities
+from .common.refdes import RefDesFamily, split_refdes
+from .schematic.formats.capabilities import format_capabilities
 
 from .schematic.model.document import (Document)
 from .common.model import (Element, IncompleteDocumentError, SourceSpan, Value)
@@ -133,7 +136,8 @@ def serialize(document: Document, *, format: str, context=None, report=None, lab
     return getattr(document, 'to_'+key+'_bytes')(context=context, report=report, **options)
 
 
-__all__ = ["Document", "Element", "Value", "SourceSpan", "IncompleteDocumentError",
+__all__ = ["FormatCapabilities", "format_capabilities", "RefDesFamily", "split_refdes",
+           "Document", "Element", "Value", "SourceSpan", "IncompleteDocumentError",
            "References", "Reference", "ReferenceError", "UnresolvedReference", "Index", "Key", "Property", "Guard", "OrdinalGuard", "Segment",
            "Bounds", "circular_arc_bounds", "ellipse_points", "symbol_bounds", "pattern_bounds",
            "coalesce_routes", "RemovedRoutePoint",

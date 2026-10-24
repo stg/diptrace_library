@@ -46,6 +46,10 @@ class ConversionReport:
     """
     notices: list[ConversionNotice] = field(default_factory=list)
 
+    def clear(self) -> None:
+        """Discard collected notices before starting another operation or batch."""
+        self.notices.clear()
+
     @property
     def infos(self):
         return [notice for notice in self.notices if notice.severity == 'info']

@@ -1,84 +1,100 @@
-"""Build a component BOM from the common editable schematic model."""
-from __future__ import annotations
-
+"""Build a naturally ordered component BOM from DCH, ASC or DCHXML."""
 import argparse
-import csv
-import re
-import sys
 from collections import defaultdict
+from collections.abc import Iterable
+import csv
 from pathlib import Path
+import re
 
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+from lib import ConversionReport, read, split_refdes
+from apps.common.components import Component, Signature, physical_components
+from apps.common.cli import Console, PROCESSING_ERRORS, add_report_argument
+from apps.common.paths import require_distinct_paths
 
-from lib import read
+CSV_FIELDS = ("RefDes", "Name", "Value", "Pattern")
+NUMBER_RUN = re.compile(r"([0-9]+)")
 
-_NUM_SPLIT_RE = re.compile(r"(\d+)")
 
-def natural_key(ref: str):
-    return [
-        (1, int(p)) if p.isdigit() else (0, p.upper())
-        for p in _NUM_SPLIT_RE.split(str(ref))
-        if p
-    ]
+def natural_key(reference: str) -> tuple:
+    """Put R2 before R10, including numbers inside compound references."""
+    return tuple(
+        (1, int(token)) if token.isdigit() else (0, token.casefold())
+        for token in NUMBER_RUN.split(reference)
+        if token
+    )
 
-def group_bom(comps: list[dict[str, object]]) -> list[dict[str, str]]:
-    # Keep first occurrence per RefDes (stable stream order).
-    seen_refdes: set[str] = set()
-    grouped: dict[tuple[str, str, str], set[str]] = defaultdict(set)
 
-    for c in comps:
-        ref = str(c.get("refdes", "")).strip()
-        if not ref or ref in seen_refdes: continue
-        seen_refdes.add(ref)
-        grouped[c.get("name", ""), c.get("value", ""), c.get("pattern", "")].add(ref)
+def group_bom(components: Iterable[Component]) -> list[dict[str, str]]:
+    """Group identical parts, retaining the first occurrence of each RefDes."""
+    seen_references = set()
+    groups: dict[Signature, list[str]] = defaultdict(list)
+    for component in components:
+        # A multipart component can occur more than once in a schematic. Count
+        # the physical reference once, preserving the first occurrence's facts.
+        try:
+            identity = split_refdes(component.reference)
+        except ValueError:
+            identity = component.reference
+        if identity in seen_references:
+            continue
+        seen_references.add(identity)
+        groups[component.signature].append(component.reference)
 
-    grouped_items: list[tuple[tuple[str, str, str], list[str]]] = [
-        (sig, sorted(refs, key=natural_key)) for sig, refs in grouped.items()
-    ]
-
-    grouped_items.sort(key=lambda kv: natural_key(kv[1][0]))
-
-    return [
-        {
-            "RefDes": ", ".join(ref_list),
+    rows = []
+    for (name, value, pattern), references in groups.items():
+        references.sort(key=natural_key)
+        rows.append({
+            "RefDes": ", ".join(references),
             "Name": name,
             "Value": value,
             "Pattern": pattern,
-        }
-        for (name, value, pattern), ref_list in grouped_items
-    ]
-
-def build_bom(path: Path) -> tuple[list[dict[str, str]], bool]:
-    document = read(path)
-    parts = []
-    for part in document.select('/Schematic/Components/Part'):
-        if not part['Enabled'] or part['PartType'] != 0:
-            continue
-        pattern = part.child('Pattern')
-        parts.append(dict(name=part['Name'], refdes=part['RefDes'],
-                          value=part.get('Value', ''),
-                          pattern=pattern['Name'] if pattern is not None else ''))
-    return group_bom(parts), document.complete
+        })
+    rows.sort(key=lambda row: natural_key(row["RefDes"]))
+    return rows
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('input_design', help='Input DCH, ASC or DCHXML schematic')
-    parser.add_argument('output_csv', help='Output BOM CSV path')
-    args = parser.parse_args()
-    rows, _ = build_bom(Path(args.input_design))
-    target = Path(args.output_csv)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open('w', newline='', encoding='utf8') as output:
-        writer = csv.DictWriter(output, fieldnames=['RefDes', 'Name', 'Value', 'Pattern'],
-                                delimiter=';', quoting=csv.QUOTE_ALL, lineterminator='\n')
+def build_bom(path: Path, *, report=None) -> tuple[list[dict[str, str]], bool]:
+    """Return CSV rows and import completeness through the shared model."""
+    design = read(path, report=report)
+    return group_bom(physical_components(design)), design.complete
+
+
+def write_bom(path: Path, rows: list[dict[str, str]]) -> None:
+    """Keep CSV formatting independent of schematic reading and grouping."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(
+            output, fieldnames=CSV_FIELDS, delimiter=";",
+            quoting=csv.QUOTE_ALL, lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
-    print(f'wrote={target} rows={len(rows)}')
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="diptrace_bom", description=__doc__)
+    parser.add_argument("input_design", type=Path, help="DCH, ASC or DCHXML schematic")
+    parser.add_argument("output_csv", type=Path, help="semicolon-delimited BOM CSV")
+    add_report_argument(parser)
+    args = parser.parse_args(argv)
+    console = Console(args.report_level)
+    try:
+        require_distinct_paths(args.input_design, args.output_csv)
+    except ValueError as error:
+        parser.error(str(error))
+    report = ConversionReport()
+    try:
+        # Import and group before opening an existing CSV, so a bad schematic
+        # leaves the previous BOM intact.
+        rows, _ = build_bom(args.input_design, report=report)
+        write_bom(args.output_csv, rows)
+    except PROCESSING_ERRORS as error:
+        return console.failure("BOM export failed", error, report=report)
+
+    console.report(report)
+    console.info(f"Wrote {args.output_csv}: {len(rows)} rows")
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

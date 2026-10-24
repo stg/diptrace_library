@@ -1,6 +1,7 @@
 """Binary output through schema 52 by named traversal, without source replay."""
 from .encode import (Encoder, NUMBER_LIMIT)
 from .records import (COMPONENT_PLACEMENT, PIN_FONT)
+from ..capabilities import DCH
 from ....common.conversion import (export_diagnostics)
 from ...model.pad_data import (MASK_FIELDS, mask_state)
 from decimal import Decimal
@@ -14,7 +15,7 @@ def legacy_pad_orientation(angle):
 
 
 class Writer(Encoder):
-    def __init__(self,version=46,*,compatibility_changes=None):
+    def __init__(self,version=DCH.default_write_version,*,compatibility_changes=None):
         super().__init__()
         self.version=version
         self.compatibility_changes = compatibility_changes if compatibility_changes is not None else []
@@ -617,10 +618,9 @@ def encode_base(document,*,version=46,compatibility_changes=None):
 
 
 @export_diagnostics('dch')
-def encode(document,*,version=46,context=None,report=None):
+def encode(document,*,version=DCH.default_write_version,context=None,report=None):
     """Encode a fully decoded supported document from named facts only."""
-    if version not in range(46,53):
-        raise ValueError('binary output supports target schemas 46 through 52')
+    version = DCH.output_version(version)
     if not document.complete or document.representation != 'schematic':
         raise ValueError('complete shared schematic data is required for DCH output; normalize source views with as_schematic()')
     from ....common.conversion import (info, warn)

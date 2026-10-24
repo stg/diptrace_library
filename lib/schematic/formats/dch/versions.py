@@ -1,17 +1,13 @@
 """Recent schematic revisions mapped directly to editable public facts."""
 from ...model.fonts import (binary_fonts, complete_fonts, compatibility_size)
 from ...model.simulation import (OPTION_FIELDS, complete_options)
+from ..capabilities import DCHXML, XML_APPLICATION_VERSIONS
 
 
 def xml_application_version(version):
     """A verified XML dialect capable of the selected feature subset."""
-    if version not in range(46, 53):
-        raise ValueError('XML output supports target schemas 46 through 52')
-    if version == 46:
-        return '4.3.0.5'
-    if version < 49:
-        return '4.9.5.0'
-    return '5.2.0.1' if version < 52 else '5.3.5.1'
+    version = DCHXML.output_version(version)
+    return XML_APPLICATION_VERSIONS[version]
 
 
 def read_extensions(reader, schematic):

@@ -122,6 +122,25 @@ class ImportReportTests(unittest.TestCase):
         parse(data,format='dch',report=report)
         self.assertEqual(report.infos,initial+initial)
 
+    def test_clear_resets_a_report_for_reuse_after_failure(self):
+        report = ConversionReport()
+        notices = report.notices
+        data = encode(source(), 'dch')
+        parse(data, format='dch', report=report, label='before reset')
+        with self.assertRaises(Exception):
+            parse(b'invalid', format='dch', report=report, label='failed')
+        self.assertTrue(report.infos)
+        self.assertTrue(report.errors)
+
+        self.assertIsNone(report.clear())
+        self.assertIs(report.notices, notices)
+        self.assertEqual(report.notices, [])
+        self.assertEqual((report.infos, report.warnings, report.errors), ([], [], []))
+        parse(data, format='dch', report=report, label='after reset')
+        self.assertTrue(report.infos)
+        self.assertTrue(all(n.label == 'after reset' for n in report.notices))
+        self.assertEqual(report.errors, [])
+
     def test_export_io_failures_share_the_report_contract_and_keep_exception_types(self):
         original=source()
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as temporary:

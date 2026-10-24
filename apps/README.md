@@ -1,7 +1,8 @@
-# DipTrace schematic applications
+# DipTrace library applications
 
-These applications use the shared [design library](../README.md) to convert
-schematics, find prior component usage and build bills of materials.
+These are small tools built with the [design library](../README.md): keep text
+companions in Git, convert formats, find prior component usage and build bills
+of materials. They show a few uses of the library rather than its full API.
 
 ## Why these exist
 
@@ -9,53 +10,71 @@ The original need was to quickly answer:
 "Where have I already used this component so I can source compatible spare parts
 for new designs?"
 
-Because DipTrace `.dch` files are binary, normal text search does not work well.
-The component database makes prior usage searchable across projects. The same
-library also supports BOM extraction and schematic conversion.
+Binary designs are difficult to search with ordinary text tools. The component
+database makes prior usage searchable across projects. The same library now also
+supports format conversion, BOM extraction and readable Git companions.
 
-Run the following commands from the repository root.
+Run these commands from the repository root.
+
+## Designs in Git
+
+`diptrace_git` keeps tracked text companions and rebuilds working binaries when
+those companions change. Unchanged text leaves the original binary untouched.
+
+```sh
+python -m apps.diptrace_git --repo /path/to/project init
+```
+
+The [Git companion guide](diptrace_git/README.md) covers setup, selection rules,
+hooks and day-to-day use.
+
+## Format and version conversion
+
+`diptrace_convert` chooses formats from file extensions and can select an output
+version. See [conversion options](diptrace_convert/README.md).
+
+```sh
+python -m apps.diptrace_convert input.dch output.dchxml
+python -m apps.diptrace_convert input.dchxml output.dch --version 52
+```
 
 ## Component usage database
 
-`diptrace_db` recursively scans DCH files and groups component usage by name,
-value and pattern. It supports incremental rebuilds and produces JSON for
-component lookup and BOM reuse.
+`diptrace_db` links components to the designs that use them. The first run needs
+a scan directory; subsequent runs reuse it and skip unchanged files.
 
 ```sh
-python -m apps.diptrace_db.build_db --root inputs --out component_db.json
+python -m apps.diptrace_db.build_db --root inputs
+python -m apps.diptrace_db.build_db
 ```
 
-A typical entry includes the component signature and its design locations:
-
-```json
-{
-  "name": "Resistor",
-  "value": "150",
-  "pattern": "RES_0603_N",
-  "files": ["ProjectA/PowerSupply.dch", "ProjectB/ControlBoard.dch"]
-}
-```
-
-See [database options](diptrace_db/README.md).
+The default output is in your Documents folder. See [database options and saved
+data](diptrace_db/README.md).
 
 ## Schematic BOM
 
-`diptrace_bom` groups enabled physical components by name, value and pattern,
-with naturally sorted reference designators. It accepts DCH, ASC and DCHXML.
+`diptrace_bom` groups physical components and their reference designators into a
+CSV, accepting the library's supported schematic inputs. See [BOM details](diptrace_bom/README.md).
 
 ```sh
 python -m apps.diptrace_bom.build_bom input.dch output.csv
 ```
 
-See [BOM options](diptrace_bom/README.md).
+## Command output
 
-## DCH to ASC
+Every command accepts `--help`. Progress and completion use `Info:` on stdout;
+diagnostics use `Info:`, `Warning:` or `Error:`, with warnings and errors on
+stderr. `--report-level info|warning|error` selects the minimum diagnostic level
+(default: warning). Progress stays visible at every level. Normalization details
+are available at `info`; warnings alone do not make a command fail.
 
-`dch_to_asc` converts a supported binary schematic to ASC, with optional context
-for export choices and font measurement.
+| Exit code | Meaning |
+| --- | --- |
+| 0 | Completed successfully |
+| 1 | Processing failed, or a batch skipped files |
+| 2 | Invalid arguments or configuration |
 
-```sh
-python -m apps.dch_to_asc.convert input.dch output.asc
-```
-
-See [conversion options](dch_to_asc/README.md). Each command also accepts `--help`.
+Git's own command output and exit status pass through when `git diptrace commit`
+runs Git. `rules list` prints the selection rules without message prefixes.
+Application helpers live in `apps/common`; the library itself does not print
+terminal progress or choose an application's output policy.

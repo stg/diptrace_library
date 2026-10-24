@@ -1,7 +1,8 @@
 Editable schematic document library
 
-Supporting technical/API notes. Start with ../doc/GETTING_STARTED.md for ordinary use and
-../doc/MODEL.md for the named access and editing rules.
+Supporting implementation/API notes. Start with ../doc/GETTING_STARTED.md for
+ordinary use, ../doc/API.md for supported operations and ../doc/MODEL.md for
+design meaning. The single generated field catalogue is ../doc/SCHEMATIC.md.
 
 DCH, ASC and DCHXML import into the same ordered Element/Value model. Field names
 follow the public ASC and DCHXML vocabulary. The library is independent of an
@@ -171,6 +172,45 @@ access, which also maintains relationships and derived values.
 The selector / identifies the tree root. Each element's current path resolves
 back to that element, including after a move or reorder.
 
+Document and Element select(path, where=predicate) and one(path, where=predicate)
+apply an optional callable to final path matches, preserving their order.
+one() checks cardinality after filtering. find_all() uses the same where contract.
+Predicates can combine ordinary Python numeric, string and boolean comparisons.
+They use the supplied data fields; no geometric containment is inferred.
+
+Document.refdes(prefix) returns a live RefDesFamily of enabled physical components
+(PartType=0) across all sheets. Matching excludes cache definitions and logical
+symbols. matches(reference=None) returns all records in counter/spelling order,
+including multipart occurrences; designators() returns distinct literal names.
+Family membership and matches(reference) compare the exact prefix and final
+ASCII numeric counter. R003 and R3 are equivalent; R1-X2 has prefix R1-X, not R1-.
+A missing suffix is zero: a bare prefix and its explicit zero suffix are equal.
+R-1 has prefix R- and counter 1. Underscores, dashes and % are literal prefix
+characters. Ordinary spaces are rejected for authoring/helper inputs; the editor
+removes them during renaming. This is not a format-load rejection or rewrite.
+Prefixes retain case and cannot end in ASCII digits. Existing names retain
+spelling, while generated names use unpadded decimal digits.
+
+first()/last() return the numeric endpoints or None. first_free(start=1) suggests
+an unused name at or above start and reserves nothing. next(reference, mode=...)
+and previous(reference, mode=...) require number, existing or free. They search
+strictly beyond the supplied number. The lower counter bound is zero; unavailable
+backward/occupied results return None. Numeric and free modes generate names;
+existing mode returns the stored spelling. Matching is distinct from exact-text
+selector equality. split_refdes(name) exposes the shared (prefix, integer) key.
+Empty/unassigned names raise ValueError there and are omitted from families.
+Other incompatible stored names make family operations raise rather than silently
+assuming that their counters are available. Source data remains unchanged.
+
+RefDesFamily(prefix, references, get_refdes=None) also accepts standalone string
+iterables (captured once) or a callable supplying current items. get_refdes
+selects the text when those items are records. A document view supplies current
+components, so append/remove/rename/enable edits need no explicit refresh.
+Named physical-component RefDes edits reject occupied targets atomically.
+Attachments preserve existing literal multipart names but reject competing
+spellings of the same counter. Independently stored multipart names require
+coordinated edits; these helpers do not introduce group renaming or reservations.
+
 References bind identities and keep affected indices/keys current while editing.
 They cover component and pin membership, wire segments, buses, pages, groups,
 cache links, local pad links, dimensions, hierarchy and simulator identities.
@@ -252,7 +292,10 @@ destination remains a compatible spelling of format. Routine modernization and
 reconstruction are quiet by default. Unresolved identities, deferred repairs and
 meaningful irreversible omissions emit ConversionWarning unless a report is
 supplied. Errors are collected before their original exception is raised; a
-report never allows invalid input or output to continue. Import reports are
+report never allows invalid input or output to continue. Reuse appends notices;
+clear() resets the same report in place for another operation or batch. Filtered
+infos/warnings/errors lists already retrieved by a caller remain snapshots.
+Import reports are
 sidecar diagnostics, without modernization history in design properties.
 Legacy document.diagnostics and references.issues remain available. Exact byte
 differences alone do not imply a warning. See FORMAT_CAPABILITIES.txt.
@@ -277,3 +320,29 @@ See FORMAT_CAPABILITIES.txt for the representation and export rules.
 
 Data editing is the current scope. Coordinated wiring operations, trace following,
 routing and copper-pour recalculation belong to later layers.
+
+Format/version support
+----------------------
+from lib import format_capabilities
+capabilities = format_capabilities('dch')  # Leading dots and case are normalized.
+
+FormatCapabilities is immutable. It exposes format, family, read_versions,
+write_versions and default_write_version. supports_read(version) and
+supports_write(version) test exact adapter support. DCH and ASC versions are
+integer schemas/dialects; DCHXML read_versions lists recognized major.minor XML
+dialects, while its write_versions uses target schematic schema numbers.
+
+output_version() returns the default. output_version(requested) requires an
+exact writable version. With fallback=True, an unsupported integer target may
+select the greatest supported earlier version; it never selects a newer one.
+Callers must report a fallback when the returned version differs from the
+request. If no earlier version exists, it still raises ValueError. A capability
+query does not project a design or predict its design-specific conversion loss;
+ConversionReport remains responsible for that information.
+
+Schematic revision declarations in lib/schematic/formats/capabilities.py are the
+source of truth for the query, binary header acceptance, DCH writer gates,
+DCH/XML defaults and XML application-version selection. Feature
+mappings remain with the adapters. Extend the declarations after implementing
+and verifying the corresponding mappings; portable tests exercise every declared
+output version through writing and re-import.

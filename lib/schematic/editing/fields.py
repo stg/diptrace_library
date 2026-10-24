@@ -44,6 +44,9 @@ def prepare_field_edit(document, record, name, field, values, *, created, base):
         named = {(record, name)} | {found for (node, argument) in base.projections.values
                                    if (found := named_field(node, argument)) is not None}
         for owner, field_name in named:
+            if owner.kind == 'Part' and field_name in ('RefDes', 'Enabled', 'PartType'):
+                from ..model.refdes import validate_edit
+                validate_edit(document, owner, field_name)
             if owner.kind == 'Pad' and field_name == 'Id' and owner.parent is not None:
                 from ..model.pad_keys import public_pad_keys
                 public_pad_keys(owner.parent.parent)

@@ -42,7 +42,7 @@ A supplied report suppresses automatic Python warnings, but errors still raise.
 Import failures, including file I/O, use import-failed; export failures, including
 file I/O, use export-failed. The original exception type/message remains available.
 Caller report-type errors remain ordinary TypeError. Reusing a report preserves
-notices from each operation. Reports do not add source snapshots or duplicate facts
+notices from each operation; clear() empties the collector in place. Reports do not add source snapshots or duplicate facts
 to the authoring model. Existing diagnostics/reference issues remain inspectable.
 Notices also expose file (a supplied input/output path, otherwise None) and an
 optional caller label. Labels attribute buffer operations without treating their
@@ -96,7 +96,7 @@ adapters generate them from current properties. GridSnap and MarkingFontName
 are optional settings. XML library additions such as cached-symbol Datasheet,
 cached-pin SignalDelay and footprint Datasheet/RefDes/Sided also have optional
 named definitions; existing destination omission diagnostics still apply.
-MODEL_REFERENCE.md is generated from the same immutable definitions returned by
+../doc/SCHEMATIC.md is generated from the same immutable definitions returned by
 schematic_schema(). It covers the supported record types, fields, tuple members
 and owned collections. Unknown enum meanings and units are left unspecified.
 Declared child records and collections have immutable ownership/cardinality

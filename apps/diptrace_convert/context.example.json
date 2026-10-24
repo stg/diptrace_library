@@ -1,0 +1,7 @@
+{
+  "units": "mm",
+  "marking_style": {
+    "font_size": 2,
+    "vector": true
+  }
+}

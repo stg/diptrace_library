@@ -88,14 +88,21 @@ def _predicate(nodes, text):
     return out
 
 
-def select(root, path):
+def filter_matches(nodes, where):
+    """Apply a caller's predicate to final matches, preserving their order."""
+    if where is not None and not callable(where):
+        raise TypeError('where must be callable or None')
+    return [node for node in nodes if where is None or where(node)]
+
+
+def select(root, path, *, where=None):
     if not path:
         raise ValueError("selector cannot be empty")
     if path.startswith("/"):
         while root.parent is not None:
             root = root.parent
     if path == "/":
-        return [root]
+        return filter_matches([root], where)
     current = [root]
     for recursive, kind, predicate in _steps(path):
         next_nodes, seen = [], set()
@@ -106,4 +113,4 @@ def select(root, path):
                     next_nodes.append(node)
                     seen.add(node.uid)
         current = next_nodes
-    return current
+    return filter_matches(current, where)

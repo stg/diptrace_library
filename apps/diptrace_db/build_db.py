@@ -1,368 +1,171 @@
-from __future__ import annotations
-
+"""Find which schematics use each component, reusing unchanged designs."""
 import argparse
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+from dataclasses import dataclass, field
 import json
 import os
-import sys
-import time
-from datetime import datetime
-from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
-from typing import Any
 
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+from lib import ConversionReport, read
+from apps.common.components import physical_components
+from apps.common.cli import Console, PROCESSING_ERRORS, add_report_argument
+from .database import (
+    FileComponents, FileStamp, assemble_database, cached_files, read_database,
+)
+from .paths import default_database_path
 
-from lib import read
-
-EXTRACTION_FORMAT = 1
-
-
-SKIP_DIRS = {".git", "node_modules", "__pycache__", ".vs", ".idea"}
+SKIP_DIRECTORIES = {".git", "node_modules", "__pycache__", ".vs", ".idea"}
 
 
-def _extract_file_rows(dch_path: Path) -> list[tuple[str, str, str]]:
-    document = read(dch_path)
-    out = []
-    for part in document.select('/Schematic/Components/Part'):
-        if not part['Enabled'] or part['PartType'] != 0:
-            continue
-        if not part['RefDes'].strip():
-            continue
-        name = part['Name'].strip(' \t')
-        value = part.get('Value', '').strip(' \t')
-        footprint = part.child('Pattern')
-        pattern = footprint['Name'].strip(' \t') if footprint is not None else ''
-        # Database presentation: suppress a redundant generic name token.
-        if name and pattern.startswith(name):
-            tail = pattern[len(name):]
-            if not tail or not tail[0].isalnum():
-                name = ''
-        out.append((name, value, pattern))
-    return out
+@dataclass
+class BuildResult:
+    """Run diagnostics stay in memory, outside the saved usage database."""
+    files: list[FileComponents] = field(default_factory=list)
+    failures: list[tuple[Path, str]] = field(default_factory=list)
+    read_count: int = 0
+    reused_count: int = 0
 
 
-def _worker(dch_str: str) -> dict[str, Any]:
-    dch = Path(dch_str)
-    st = dch.stat()
-    rows = _extract_file_rows(dch)
-    unique_rows = sorted(set(rows))
-    missing_value = sum(1 for _, value, _ in rows if value == "")
-    missing_pattern = sum(1 for _, _, pat in rows if pat == "")
-    return {
-        "file": str(dch),
-        "rows": unique_rows,
-        "component_count": len(rows),
-        "unique_combo_count": len(unique_rows),
-        "missing_value_count": missing_value,
-        "missing_pattern_count": missing_pattern,
-        "file_size_bytes": int(st.st_size),
-        "mtime_ns": int(st.st_mtime_ns),
-    }
-
-
-def _load_previous_index(out_path: Path) -> dict[str, dict[str, Any]]:
-    if not out_path.exists():
-        return {}
-    try:
-        prev = json.loads(out_path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        return {}
-
-    if prev.get("extraction_format") != EXTRACTION_FORMAT:
-        return {}
-    prev_files = prev.get("files", [])
-    prev_stats = prev.get("file_stats", [])
-    prev_unique = prev.get("file_unique", [])
-
-    stats_by_file: dict[str, dict[str, Any]] = {}
-    for r in prev_stats:
-        f = str(r.get("file", ""))
-        if f:
-            stats_by_file[f] = r
-
-    unique_by_file: dict[str, list[tuple[str, str, str]]] = {}
-    for r in prev_unique:
-        f = str(r.get("file", ""))
-        rows = r.get("unique", [])
-        if not f or not isinstance(rows, list):
-            continue
-        parsed: list[tuple[str, str, str]] = []
-        for x in rows:
-            if isinstance(x, list) and len(x) == 3:
-                parsed.append((str(x[0]), str(x[1]), str(x[2])))
-            elif isinstance(x, dict):
-                parsed.append((str(x.get("name", "")), str(x.get("value", "")), str(x.get("pattern", ""))))
-        unique_by_file[f] = parsed
-
-    out: dict[str, dict[str, Any]] = {}
-    for r in prev_files:
-        f = str(r.get("file", ""))
-        if not f:
-            continue
+def schematic_paths(root: Path, failures: list[tuple[Path, str]]):
+    """Walk once without following directory links or entering tool metadata."""
+    directories = [root]
+    while directories:
+        directory = directories.pop()
         try:
-            mtime_ns = int(r.get("mtime_ns", -1))
-            size_bytes = int(r.get("size_bytes", -1))
-        except (TypeError, ValueError):
-            continue
-        out[f] = {
-            "mtime_ns": mtime_ns,
-            "size_bytes": size_bytes,
-            "stats": stats_by_file.get(f),
-            "unique_rows": unique_by_file.get(f),
-        }
-    return out
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        if entry.name.lower() not in SKIP_DIRECTORIES:
+                            directories.append(Path(entry.path))
+                    elif entry.is_file(follow_symlinks=False):
+                        if Path(entry.name).suffix.lower() == ".dch":
+                            yield Path(entry.path)
+        except OSError as error:
+            failures.append((directory, str(error)))
 
 
-def _print_progress(
-    *,
-    dirs_scanned: int,
-    dirs_found: int,
-    discovered_dch: int,
-    unique_done: int,
-    unique_total_estimate: int,
-    extracted: int,
-    reused: int,
-    components_processed: int,
-    components_extracted: int,
-    failures: int,
-    started: float,
-) -> None:
-    elapsed = time.time() - started
-    rate = int(round(components_extracted / elapsed)) if elapsed > 0 else 0
-    files_processed = reused + extracted
-    print(
-        f"dirs={dirs_scanned}/{dirs_found} files={files_processed}/{discovered_dch} "
-        f"failed={failures} unique={unique_done}/{max(unique_done, unique_total_estimate)} "
-        f"rate={rate}/s"
-    )
+def read_components(path: Path) -> FileComponents:
+    """Extract identity without changing authored names, values or patterns."""
+    stamp = FileStamp.read(path)
+    report = ConversionReport()
+    design = read(path, report=report)
+    components = {component.signature for component in physical_components(design)}
+    if FileStamp.read(path) != stamp:
+        raise OSError("design changed during the scan; run again to index it")
+    return FileComponents(path, stamp, components, tuple(report.notices))
 
 
-def build_db(
-    root: Path, workers: int, prev_index: dict[str, dict[str, Any]] | None = None
-) -> dict[str, Any]:
-    if prev_index is None:
-        prev_index = {}
-    failures: list[dict[str, str]] = []
-
-    started = time.time()
-    last_progress = 0.0
-    discovered_dch = 0
-    dirs_scanned = 0
-    dirs_found = 1
-    extracted = 0
-    reused = 0
-    components_processed = 0
-    components_extracted = 0
+def build_db(root: Path, workers: int = 1, previous: dict | None = None) -> BuildResult:
+    """Scan a supplied root; failed designs are reported and retried next time."""
     root = root.resolve()
-    per_file_stats_map: dict[str, dict[str, Any]] = {}
-    per_file_rows_map: dict[str, list[tuple[str, str, str]]] = {}
-    file_manifest_map: dict[str, dict[str, Any]] = {}
-    unique_done: set[tuple[str, str, str]] = set()
-    unique_total_estimate: set[tuple[str, str, str]] = set()
+    if not root.is_dir():
+        raise ValueError(f"scan root is not a directory: {root}")
+    if workers < 1:
+        raise ValueError("worker count must be positive")
+    cache = cached_files(previous, root)
+    result = BuildResult()
 
-    def maybe_print_progress(force: bool = False) -> None:
-        nonlocal last_progress
-        now = time.time()
-        if force or (now - last_progress >= 1.0):
-            _print_progress(
-                dirs_scanned=dirs_scanned,
-                dirs_found=dirs_found,
-                discovered_dch=discovered_dch,
-                unique_done=len(unique_done),
-                unique_total_estimate=len(unique_total_estimate),
-                extracted=extracted,
-                reused=reused,
-                components_processed=components_processed,
-                components_extracted=components_extracted,
-                failures=len(failures),
-                started=started,
-            )
-            last_progress = now
-
-    # Streaming traversal + processing:
-    # target_discovered increases as new folders are scanned.
-    stack: list[Path] = [root]
-    max_pending = max(16, workers * 8)
-    fut_to_path: dict[Any, Path] = {}
-    pending: set[Any] = set()
-    with ProcessPoolExecutor(max_workers=workers) as ex:
-        while stack or pending:
-            while stack and len(pending) < max_pending:
-                cur = stack.pop()
-                dirs_scanned += 1
-                try:
-                    with os.scandir(cur) as it:
-                        for ent in it:
-                            try:
-                                if ent.is_dir(follow_symlinks=False):
-                                    if ent.name.lower() in SKIP_DIRS:
-                                        continue
-                                    stack.append(Path(ent.path))
-                                    dirs_found += 1
-                                elif ent.is_file(follow_symlinks=False) and ent.name.lower().endswith(".dch"):
-                                    discovered_dch += 1
-                                    fp = str(Path(ent.path))
-                                    try:
-                                        st = ent.stat(follow_symlinks=False)
-                                    except OSError as e:
-                                        failures.append({"file": fp, "error": repr(e)})
-                                        continue
-                                    cur_mtime_ns = int(st.st_mtime_ns)
-                                    cur_size = int(st.st_size)
-                                    file_manifest_map[fp] = {"file": fp, "mtime_ns": cur_mtime_ns, "size_bytes": cur_size}
-
-                                    prev = prev_index.get(fp)
-                                    can_reuse = (
-                                        prev is not None
-                                        and int(prev.get("mtime_ns", -1)) == cur_mtime_ns
-                                        and int(prev.get("size_bytes", -1)) == cur_size
-                                        and isinstance(prev.get("stats"), dict)
-                                        and isinstance(prev.get("unique_rows"), list)
-                                    )
-                                    if can_reuse:
-                                        reused += 1
-                                        s = dict(prev["stats"])
-                                        s["file"] = fp
-                                        per_file_stats_map[fp] = {
-                                            "file": fp,
-                                            "component_count": int(s.get("component_count", 0)),
-                                            "unique_combo_count": int(s.get("unique_combo_count", 0)),
-                                            "missing_value_count": int(s.get("missing_value_count", 0)),
-                                            "missing_pattern_count": int(s.get("missing_pattern_count", 0)),
-                                        }
-                                        components_processed += int(s.get("component_count", 0))
-                                        per_file_rows_map[fp] = [(str(a), str(b), str(c)) for a, b, c in prev["unique_rows"]]
-                                        for t in per_file_rows_map[fp]:
-                                            unique_done.add(t)
-                                            unique_total_estimate.add(t)
-                                    else:
-                                        if prev is not None and isinstance(prev.get("unique_rows"), list):
-                                            for a, b, c in prev["unique_rows"]:
-                                                unique_total_estimate.add((str(a), str(b), str(c)))
-                                        fut = ex.submit(_worker, ent.path)
-                                        pending.add(fut)
-                                        fut_to_path[fut] = Path(ent.path)
-                            except OSError:
-                                continue
-                except OSError as e:
-                    failures.append({"file": str(cur), "error": repr(e)})
-
-                maybe_print_progress()
-
-            if not pending:
+    def changed_paths():
+        for path in schematic_paths(root, result.failures):
+            try:
+                stamp = FileStamp.read(path)
+            except OSError as error:
+                result.failures.append((path, str(error)))
                 continue
+            cached = cache.get(path)
+            # Metadata is cheap to check. Only new or modified designs require
+            # import; deleted files naturally disappear from the next output.
+            if cached is not None and cached.stamp == stamp:
+                result.files.append(cached)
+                result.reused_count += 1
+            else:
+                yield path
 
-            done, still = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
-            pending = set(still)
-            for fut in done:
-                src = fut_to_path.pop(fut)
+    def collect(path, load):
+        try:
+            result.files.append(load())
+            result.read_count += 1
+        except Exception as error:
+            # Isolate a bad file without hiding it. The CLI reports the failure,
+            # and its absence from the cache ensures a retry on the next run.
+            result.failures.append((path, str(error)))
+
+    if workers == 1:
+        # Avoid process startup and additional model copies for ordinary scans.
+        for path in changed_paths():
+            collect(path, lambda: read_components(path))
+        return result
+
+    paths = iter(changed_paths())
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        pending = {}
+        while True:
+            # Bound queued work even when a directory contains many designs.
+            # Completion, rather than a timer, drives the next submission.
+            while len(pending) < workers * 2:
                 try:
-                    row = fut.result()
-                except Exception as e:  # noqa: BLE001
-                    failures.append({"file": str(src), "error": repr(e)})
-                    extracted += 1
-                    continue
-
-                fp = str(row["file"])
-                per_file_stats_map[fp] = {
-                    "file": fp,
-                    "component_count": int(row["component_count"]),
-                    "unique_combo_count": int(row["unique_combo_count"]),
-                    "missing_value_count": int(row["missing_value_count"]),
-                    "missing_pattern_count": int(row["missing_pattern_count"]),
-                }
-                per_file_rows_map[fp] = [(str(a), str(b), str(c)) for a, b, c in row["rows"]]
-                for t in per_file_rows_map[fp]:
-                    unique_done.add(t)
-                    unique_total_estimate.add(t)
-                file_manifest_map[fp] = {
-                    "file": fp,
-                    "mtime_ns": int(row["mtime_ns"]),
-                    "size_bytes": int(row["file_size_bytes"]),
-                }
-                components_processed += int(row["component_count"])
-                components_extracted += int(row["component_count"])
-                extracted += 1
-
-            maybe_print_progress()
-
-    # Final progress snapshot at completion, before aggregation/output.
-    maybe_print_progress(force=True)
-
-    combo_to_files: dict[tuple[str, str, str], set[str]] = {}
-    for fp, rows in per_file_rows_map.items():
-        for combo in rows:
-            combo_to_files.setdefault(combo, set()).add(fp)
-
-    combos = []
-    for (name, value, pattern), files in sorted(combo_to_files.items()):
-        flist = sorted(files)
-        combos.append(
-            {
-                "name": name,
-                "value": value,
-                "pattern": pattern,
-                "files": flist,
-            }
-        )
-
-    per_file = sorted(per_file_stats_map.values(), key=lambda x: x["file"])
-    scanned_files = [file_manifest_map[k] for k in sorted(file_manifest_map.keys())]
-    total_components_processed = sum(int(r.get("component_count", 0)) for r in per_file)
-    file_unique = [
-        {"file": fp, "unique": [list(t) for t in per_file_rows_map.get(fp, [])]}
-        for fp in sorted(per_file_rows_map.keys())
-    ]
-    result = {
-        "extraction_format": EXTRACTION_FORMAT,
-        "root": str(root),
-        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "files_read": extracted,
-        "files_failed": len(failures),
-        "total_components_processed": int(total_components_processed),
-        "unique_components": len(combos),
-        "unique": combos,
-        "file_stats": per_file,
-        "failures": sorted(failures, key=lambda r: r["file"]),
-        "files": scanned_files,
-        "file_unique": file_unique,
-    }
+                    path = next(paths)
+                except StopIteration:
+                    break
+                pending[executor.submit(read_components, path)] = path
+            if not pending:
+                break
+            completed, _ = wait(pending, return_when=FIRST_COMPLETED)
+            for future in completed:
+                collect(pending.pop(future), future.result)
     return result
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Build central database of (name,value,pattern) -> files from all .dch files.")
-    ap.add_argument("--root", required=True, help="Root directory to scan recursively for .dch files.")
-    ap.add_argument("--out", required=True, help="Output JSON file.")
-    ap.add_argument("--workers", type=int, default=1, help="Worker process count (default: 1; each owns a full schematic model).")
-    ap.add_argument("--clean", action="store_true", help="Ignore existing output DB cache and do a full rebuild.")
-    args = ap.parse_args()
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="diptrace_db", description=__doc__)
+    parser.add_argument("--root", type=Path, help="scan directory; required for a new database")
+    parser.add_argument("--out", type=Path, help="database path; default: Documents/DipTraceLibrary/component_db.json")
+    parser.add_argument("--workers", type=int, default=1, help="parallel readers (default: 1)")
+    parser.add_argument("--clean", action="store_true", help="reread every file, keeping the saved root")
+    add_report_argument(parser)
+    args = parser.parse_args(argv)
+    console = Console(args.report_level)
+    if args.workers < 1:
+        parser.error("--workers must be positive")
 
-    root = Path(args.root)
-    out = Path(args.out)
+    try:
+        output = args.out if args.out is not None else default_database_path()
+    except OSError as error:
+        return console.failure("cannot resolve the default database location; supply --out instead", error)
+    if args.out is None:
+        console.info(f"Using default output at {output}")
+    previous = read_database(output)
+    root = args.root
+    if root is None and previous and isinstance(previous.get("root"), str):
+        if previous["root"].strip():
+            root = Path(previous["root"])
+    if root is None:
+        parser.error(f"no scan directory is saved in {output}; supply --root DIRECTORY")
+    root = root.resolve()
     if not root.exists():
-        raise SystemExit(f"root not found: {root}")
+        parser.error(f"directory {root} does not exist; check it or supply another with --root")
+    if not root.is_dir():
+        parser.error(f"{root} is not a directory; supply another with --root")
 
-    print(f"scan_root={root}")
-    print(f"workers={args.workers}")
-    prev_index: dict[str, dict[str, Any]] = {}
-    if not args.clean:
-        prev_index = _load_previous_index(out)
-        if prev_index:
-            print(f"cache_index_files={len(prev_index)}")
-    else:
-        print("cache=disabled (--clean)")
-    db = build_db(root, workers=max(1, args.workers), prev_index=prev_index)
+    try:
+        console.info(f"Scanning {root}")
+        result = build_db(root, args.workers, None if args.clean else previous)
+        database = assemble_database(root, result.files)
+        # Complete scanning and serialization before opening the destination.
+        data = json.dumps(database, indent=2, ensure_ascii=False) + "\n"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(data, encoding="utf-8")
+    except PROCESSING_ERRORS as error:
+        return console.failure("database build failed", error)
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(db, indent=2), encoding="utf-8")
-    print(
-        f"wrote={out} files_read={db['files_read']} files_failed={db['files_failed']} "
-        f"unique_components={db['unique_components']}"
-    )
-    return 0
+    for entry in sorted(result.files, key=lambda entry: entry.path):
+        console.report(ConversionReport(list(entry.notices)))
+    for path, message in sorted(result.failures):
+        console.diagnostic("error", f"Skipped {path}: {message}")
+    console.info(f"Wrote {output}: {len(database['components'])} components, "
+                 f"{result.read_count} files read, {result.reused_count} reused, "
+                 f"{len(result.failures)} skipped")
+    return 1 if result.failures else 0
 
 
 if __name__ == "__main__":

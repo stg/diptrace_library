@@ -1,9 +1,23 @@
 """Schematic document operations over the shared editable tree."""
 from ...common.model import (Document as BaseDocument, Element, Value, SourceSpan, IncompleteDocumentError)
 from ...common.conversion import (export_diagnostics, import_diagnostics)
+from ..formats.capabilities import ASC, DCH, DCHXML
 
 
 class Document(BaseDocument):
+    def refdes(self, prefix):
+        """Return a live numbered-family view of enabled physical components.
+
+        All sheets participate. Cached definitions and disabled records do not
+        occupy names. Matching returns records; numbering methods return names.
+        """
+        from ...common.refdes import RefDesFamily
+        from .refdes import components
+        if self.representation != 'schematic':
+            raise TypeError('RefDes helpers require the shared schematic model; use read() or as_schematic()')
+        return RefDesFamily(prefix, lambda: components(self),
+            get_refdes=lambda part: part['RefDes'])
+
     def _copy_specifications(self, root, specifications, issues):
         if self.representation != 'schematic' or self._reference_validator is None:
             return specifications, issues
@@ -34,6 +48,8 @@ class Document(BaseDocument):
 
     def _prepare_copied_content(self, root):
         if self.representation == 'schematic':
+            from .refdes import validate_name
+            validate_name(self, root)
             from .activation import refresh_new_text
             refresh_new_text(self, root)
             if root.kind == 'Pad' and root.parent is not None and root.parent.kind == 'Pads':
@@ -110,6 +126,10 @@ class Document(BaseDocument):
     def _validate_move(self, node, parent):
         from .membership import validate_move
         validate_move(self, node, parent)
+        destination = parent._owner()
+        if destination is not None and destination is not self and destination.representation == 'schematic':
+            from .refdes import validate_name
+            validate_name(destination, node, parent=parent)
 
     def _validate_reference_removal(self, reference):
         from .membership import validate_removal
@@ -177,8 +197,9 @@ class Document(BaseDocument):
                 yield shape.one('ShowPart'), (Value.of(show_part),)
 
     @export_diagnostics('asc')
-    def as_asc(self, *, context=None, report=None, label=None) -> "Document":
+    def as_asc(self, *, context=None, version=ASC.default_write_version, report=None, label=None) -> "Document":
         """Create an owned ASC-format document from the current shared design."""
+        ASC.output_version(version)
         from ..formats.asc.write import (project_document)
         return project_document(self,context=context,report=report)
 
@@ -198,11 +219,13 @@ class Document(BaseDocument):
         return import_schematic(self)
 
     @export_diagnostics('asc')
-    def to_asc(self, *, preserve=True, allow_partial=False, context=None, report=None, label=None) -> str:
+    def to_asc(self, *, preserve=True, allow_partial=False, context=None,
+               version=ASC.default_write_version, report=None, label=None) -> str:
+        version = ASC.output_version(version)
         if self.representation == 'dchxml':
             raise ValueError('normalize XML with as_schematic() before ASC semantic projection')
         if context is not None or not allow_partial and self.representation == 'schematic':
-            return self.as_asc(context=context,report=report).to_asc(preserve=preserve)
+            return self.as_asc(context=context,version=version,report=report).to_asc(preserve=preserve,version=version)
         if not allow_partial and (self.representation == 'schematic' or
                 any(node.annotations.get('requires_asc_projection') for node in self.root.walk(include_self=True))):
             raise IncompleteDocumentError('shared schematic data requires an ASC export context')
@@ -215,14 +238,16 @@ class Document(BaseDocument):
         return dumps(self, preserve=preserve)
 
     @export_diagnostics('asc')
-    def to_asc_bytes(self, *, preserve=True, allow_partial=False, encoding: str | None = None, context=None, report=None, label=None) -> bytes:
+    def to_asc_bytes(self, *, preserve=True, allow_partial=False, encoding: str | None = None,
+                     context=None, version=ASC.default_write_version, report=None, label=None) -> bytes:
+        version = ASC.output_version(version)
         if context is not None or not allow_partial and self.representation == 'schematic':
             if encoding is not None:
                 from dataclasses import replace
                 from ..formats.export_context import resolve_export_context
                 context = replace(resolve_export_context(context, 'asc'), encoding=encoding)
-            return self.as_asc(context=context,report=report).to_asc_bytes(preserve=preserve,encoding=encoding)
-        text = self.to_asc(preserve=preserve, allow_partial=allow_partial)
+            return self.as_asc(context=context,version=version,report=report).to_asc_bytes(preserve=preserve,encoding=encoding,version=version)
+        text = self.to_asc(preserve=preserve, allow_partial=allow_partial,version=version)
         if preserve and not self.root._dirty and self._source_bytes is not None and encoding is None:
             return self._source_bytes
         selected=encoding or self._source_encoding
@@ -239,36 +264,36 @@ class Document(BaseDocument):
         Path(path).write_bytes(data)
 
     @export_diagnostics('dch')
-    def to_dch_bytes(self, *, version=46, context=None, report=None, label=None) -> bytes:
+    def to_dch_bytes(self, *, version=DCH.default_write_version, context=None, report=None, label=None) -> bytes:
         """Serialize current data to the supported binary output schema."""
         from ..formats.dch.write import (encode)
         return encode(self,version=version,context=context,report=report)
 
     @export_diagnostics('dch')
-    def save_dch(self,path,*,version=46,context=None,report=None,label=None):
+    def save_dch(self,path,*,version=DCH.default_write_version,context=None,report=None,label=None):
         from pathlib import Path
         data=self.to_dch_bytes(version=version,context=context,report=report)
         Path(path).write_bytes(data)
 
     @export_diagnostics('dchxml')
-    def as_dchxml(self, *, context=None, version=46, report=None, label=None) -> "Document":
+    def as_dchxml(self, *, context=None, version=DCHXML.default_write_version, report=None, label=None) -> "Document":
         """Project shared schematic data to an independent public XML document."""
         from ..formats.dchxml.write import (project_document)
         return project_document(self, context=context, version=version, report=report)
 
     @export_diagnostics('dchxml')
-    def to_dchxml(self, *, newline='\n', context=None, version=46, report=None, label=None) -> str:
+    def to_dchxml(self, *, newline='\n', context=None, version=DCHXML.default_write_version, report=None, label=None) -> str:
         if context is not None or self.representation == 'schematic':
             return self.as_dchxml(context=context, version=version, report=report).to_dchxml(newline=newline)
         from ..formats.dchxml.syntax import (dumps)
         return dumps(self, newline=newline)
 
     @export_diagnostics('dchxml')
-    def to_dchxml_bytes(self, *, newline='\n', context=None, version=46, report=None, label=None) -> bytes:
+    def to_dchxml_bytes(self, *, newline='\n', context=None, version=DCHXML.default_write_version, report=None, label=None) -> bytes:
         return self.to_dchxml(newline=newline, context=context, version=version, report=report).encode('utf-8')
 
     @export_diagnostics('dchxml')
-    def save_dchxml(self, path, *, newline='\n', context=None, version=46, report=None, label=None):
+    def save_dchxml(self, path, *, newline='\n', context=None, version=DCHXML.default_write_version, report=None, label=None):
         from pathlib import Path
         data = self.to_dchxml_bytes(newline=newline, context=context, version=version, report=report)
         Path(path).write_bytes(data)
