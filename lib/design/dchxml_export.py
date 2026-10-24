@@ -74,8 +74,8 @@ def project_document(document, *, context=None, version=46, report=None):
         raise TypeError('XML conversion requires a DchXmlExportContext')
     override = context.marking_style
     context = context.resolved(document)
-    if version not in (46, 47, 48):
-        raise ValueError('XML output supports target schemas 46, 47 and 48')
+    from .dch_versions import xml_application_version
+    application_version = xml_application_version(version)
     if document.metadata.get('source_version', version) > version:
         from .conversion import info
         info(report, 'schema-version', 'dchxml', f'output uses schema {version}; newer fields follow their individual conversion rules')
@@ -91,6 +91,8 @@ def project_document(document, *, context=None, version=46, report=None):
                           retain_inactive=('Nets', 'Buses', 'PageConnectors', 'Groups'), materialize_markings=False,
                           refresh_user_fields=context.refresh_user_fields, destination='dchxml', report=report)
     schematic = view.one('/Schematic')
+    from .revision_adaptation import prepare_revisions
+    prepare_revisions(schematic, destination='dchxml', version=version, report=report)
     from .conversion import report_text_omissions, report_generated_marking_attributes
     report_text_omissions(view, destination='dchxml', report=report)
     report_generated_marking_attributes(schematic,
@@ -106,28 +108,28 @@ def project_document(document, *, context=None, version=46, report=None):
     library = project_library(schematic, units=units, version=version, report=report)
     output = Document(representation='dchxml')
     source = output.root.add('Source')
-    for name, value in (('Type', 'DipTrace-Schematic'), ('Version', '4.3.0.5' if version == 46 else '4.9.5.0'),
+    for name, value in (('Type', 'DipTrace-Schematic'), ('Version', application_version),
                          ('Units', context.units)):
         set_attribute(source, name, value)
     source.append(library.element)
     target = source.add('Schematic')
-    target.append(project_sheet_settings(schematic, units=units, active_sheet=context.active_sheet))
+    target.append(project_sheet_settings(schematic, units=units, active_sheet=context.active_sheet, version=version))
     target.append(project_settings(schematic, units=units, grid_snap=context.grid_snap, style=context.marking_style,
-                  use_part_font_color=context.use_part_font_color, project_dir=context.project_dir))
+                  use_part_font_color=context.use_part_font_color, project_dir=context.project_dir, version=version))
     target.append(project_libraries(schematic))
     set_attribute(target.add('DesignCache'), 'Count', library.cache_count)
     target.append(project_net_classes(schematic, units=units))
     target.append(project_erc(schematic))
     components = target.add('Components')
     for part, (style, variant) in library.component_styles.items():
-        components.append(project_component(part, units=units, component_style=style, component_part=variant))
+        components.append(project_component(part, units=units, component_style=style, component_part=variant, version=version))
     for collection in (project_nets(schematic, units=units, hidden_ids=version >= 47),
                        project_differential_pairs(schematic, include_ids=version >= 47),
                        project_buses(schematic, units=units), project_bus_connectors(schematic, units=units),
-                       project_drawings(schematic, units=units), project_tables(schematic, units=units)):
+                       project_drawings(schematic, units=units, version=version), project_tables(schematic, units=units, version=version)):
         if collection.children():
             target.append(collection)
-    simulator = project_simulator(schematic)
+    simulator = project_simulator(schematic, version=version)
     if simulator is not None:
         target.append(simulator)
     groups = project_groups(schematic)

@@ -21,6 +21,8 @@ _NUMBER_ATTRIBUTES = set("""
 Angle ArrowSize AutoColor AutoHeight BlockId Bus1 Bus2 BusId Clearance Color ComponentPart Group HiddenId
 Corner Count CustomShrink CustomSwell Diam DifClearance Dir ExternalRadius
 Float1 Float2 Float3 Font FontColor FontScale FontSize FontWidth Height Hole
+FontSizeFloat MarkingFontSizeFloat TextWidth TextHeight ConductanceSteps Iteration TransferCurveIteration
+LowIteration PointIteration TotalIteration SourceStepping MethodMaxOrder Method
 HoleDiam HoleH IPC_XOff IPC_YOff Id Index Int1 Int2 Length LineSpacing LineWidth
 MarkingFontSize MaxUncoupledLength NameOrientation NameXShift NameYShift NegNet
 NetClass NetId NumOrientation NumXShift NumYShift Number Object1 Object2
@@ -36,10 +38,13 @@ CheckShort CheckSinglePin Circle Cross FontVector Generator HiddenPower HorzFlip
 KeepPins LockTypeChange Locked Mirror Model NoSearch PictureProportions ShowName
 Selected Enabled UniteByName ConnectPinByName Global CustomColor
 ShowOrigin CustomMarkingFont MarkingFontAll NotConnected
+FontMono PictureFlipped NoPrintStat NoPrintModelParams SkipConductanceStepping StartFromConductanceStepping NoOPAnalysis
+DefStyle
 ShowUnits Sorted VertFlip Visible Connected HideBorder TopLine BottomLine LeftLine RightLine Plotted
 """.split())
 _BOOLEAN_TEXT = set("""
 Border DisplaySheet DisplayTitles FontVector HidePower Snap UsePartFontColor Visible
+FontMono
 """.split())
 _NUMBER_TEXT = {
     **{('Sheet', name): True for name in """
@@ -54,6 +59,7 @@ _NUMBER_TEXT = {
     ('Grid', 'Size'): True,
     ('BusConnections', 'FontSize'): True,
     ('SheetSettings', 'ActiveSheet'): True,
+    **{(parent, 'FontSizeFloat'): True for parent in ('BorderZones', 'Markings', 'BusConnections')},
     **{(parent, 'Item'): True for parent in ('ColWidths', 'ColumnWidths', 'RowHeights')},
 }
 

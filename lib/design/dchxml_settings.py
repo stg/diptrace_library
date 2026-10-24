@@ -61,7 +61,7 @@ def _boolean(value):
     raise ValueError(f'XML boolean projection requires a boolean: {value!r}')
 
 
-def project_sheet_settings(schematic, *, units: DchXmlUnits, active_sheet):
+def project_sheet_settings(schematic, *, units: DchXmlUnits, active_sheet, version=46):
     result = Element('SheetSettings')
     settings = schematic.one('Settings')
     field(result, 'DisplayTitles', _boolean(settings.scalar('DisplayTitles')))
@@ -95,8 +95,10 @@ def project_sheet_settings(schematic, *, units: DchXmlUnits, active_sheet):
         field(zones, 'Border', _boolean(page.scalar('ZoneBorder')))
         length(zones, 'HorzBorderSize', page.one('HorzZoneBorder').arguments[0], units)
         length(zones, 'VertBorderSize', page.one('VertZoneBorder').arguments[0], units)
+        from .dchxml_fonts import project_size
+        project_size(page, zones, size='ZoneFontSize', mono=None, version=version, attribute=False)
         from .dchxml_tables import append_title_blocks
-        append_title_blocks(page, sheet, units=units)
+        append_title_blocks(page, sheet, units=units, version=version)
     return result
 
 
@@ -108,7 +110,7 @@ def _choice(settings, first, second, labels):
 
 
 def project_settings(schematic, *, units: DchXmlUnits, grid_snap, style: MarkingStyle,
-                     use_part_font_color=None, project_dir=None):
+                     use_part_font_color=None, project_dir=None, version=46):
     result = Element('Settings')
     settings = schematic.one('Settings')
     markings = result.add('Markings')
@@ -117,7 +119,8 @@ def project_settings(schematic, *, units: DchXmlUnits, grid_snap, style: Marking
     family = style.font_name or settings.scalar('MarkingFontName', '')
     if family or not vector:
         field(markings, 'FontName', family)
-    field(markings, 'FontSize', settings.scalar('PartFontSize', style.font_size))
+    from .dchxml_fonts import project_size
+    project_size(settings, markings, size='PartFontSize', mono='PartFontMono', version=version, attribute=False)
     field(markings, 'FontWidth', stroke_width(schematic.one('PartFontWidth').arguments[0], units))
     number(markings, 'FontScale', schematic.one('PartFontScale').arguments[0])
     color_mode = settings.scalar('UsePartFontColor') if use_part_font_color is None else use_part_font_color
@@ -159,10 +162,12 @@ def project_settings(schematic, *, units: DchXmlUnits, grid_snap, style: Marking
     buses = result.add('BusConnections')
     field(buses, 'Show', _choice(settings, 'BusConNetName', 'BusConNetNumber', ('NetName', 'Number')))
     field(buses, 'Position', _choice(settings, 'BusConAbove', 'BusConBelow', ('Above', 'Below')))
-    field(buses, 'FontSize', settings.scalar('BusConnectionFont'))
+    project_size(settings, buses, size='BusConnectionFont', mono=None, version=version, attribute=False)
     pins = result.add('PinNumbers')
     set_attribute(pins, 'Visible', _choice(settings, 'ShowPinNumbers', 'HidePinNumbers', (True, False)))
-    set_attribute(pins, 'Font', settings.scalar('PinNumberFont'))
+    project_size(settings, pins, size='PinNumberFont', legacy='Font', mono=None, version=version)
+    if version >= 49:
+        project_size(settings, result.add('NetName'), size='NetNameFontSize', mono=None, version=version)
     field(result, 'HidePower', _boolean(schematic.scalar('HidePower')))
     directory = schematic.scalar('ProjectDir') if project_dir is None else project_dir
     if not isinstance(directory, str):

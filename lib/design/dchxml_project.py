@@ -5,7 +5,7 @@ from .model import Element
 
 
 SIMULATION_TYPES = ('None', 'Small-Signal AC', 'DC Transfer Function', 'None', 'Noise',
-                    'None', 'None', 'None', 'None', 'Transient')
+                    'None', 'None', 'None', 'None', 'Transient', 'Digital')
 SIMULATION_FIELDS = (
     ('sim_ac', 'SmallSignalAC', ('Variation', 'NumberOfPoints', 'StartFrequency', 'StopFrequency')),
     ('sim_dc', 'DCTransferFunc', ('SourceType', 'SourceRefDes', 'StartValue', 'Step', 'StopValue',
@@ -14,16 +14,17 @@ SIMULATION_FIELDS = (
     ('sim_tran', 'Transient', ('StartTime', 'Step', 'StopTime')),
     ('sim_noise', 'Noise', ('OutputNet', 'ReferenceNet', 'Source', 'Variation', 'NumberOfPoints',
                           'StartFrequency', 'StopFrequency', 'PointsPerSummary')),
+    ('sim_digital', 'Digital', ('StartTime', 'Step', 'StopTime', 'GroupBuses')),
 )
 
 
-def project_simulator(schematic):
+def project_simulator(schematic, *, version=46):
     source = schematic.one('ssimulator')
     mode = source.scalar('tp')
-    if mode <= 0:
+    if mode <= 0 and version < 50:
         return None
     result = Element('Simulator')
-    set_attribute(result, 'Type', enum_text(mode, SIMULATION_TYPES))
+    set_attribute(result, 'Type', str(mode) if mode == 10 and version < 52 else enum_text(mode, SIMULATION_TYPES))
     signals = source.select('signals/signal')
     if signals:
         target = result.add('Signals')
@@ -35,11 +36,24 @@ def project_simulator(schematic):
             for public, own in (('Plotted', 'signal_plotted'), ('Visible', 'signal_visible'), ('Color', 'signal_color')):
                 set_attribute(item, public, signal.scalar(own))
     for own, public, names in SIMULATION_FIELDS:
+        if own == 'sim_digital' and version < 50:
+            continue
+        if own == 'sim_digital' and version < 52:
+            names = names[:3]
         rows = source.select(own+'/pt')
         if rows:
             target = result.add(public)
             for index, row in enumerate(rows):
                 field(target, names[index] if index < len(names) else 'Item', row.arguments[0])
+    if version >= 50:
+        from .simulation import OPTION_FIELDS
+        groups = {}
+        for group, name, kind, default in OPTION_FIELDS:
+            if group not in groups:
+                groups[group] = result.add(group)
+            target = groups[group]
+            value = source.one(group).scalar(name, default)
+            (field if kind == 'text' else set_attribute)(target, name, value)
     set_attribute(result, 'GndNetId', source.scalar('gndnum'))
     field(result, 'GndNetName', source.scalar('gndname'))
     return result

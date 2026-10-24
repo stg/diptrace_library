@@ -46,7 +46,7 @@ def project_model3d(model, *, units):
     return result
 
 
-def project_pattern_drawing(shape, *, index, units, pad_ids=True, pad_keys=None, group_keys=None):
+def project_pattern_drawing(shape, *, index, units, pad_ids=True, pad_keys=None, group_keys=None, version=46):
     result = Element('Shape')
     kind = shape.scalar('Type')
     set_attribute(result, 'Id', index)
@@ -58,6 +58,8 @@ def project_pattern_drawing(shape, *, index, units, pad_ids=True, pad_keys=None,
                             ('FontWidth', 'FontWidth'), ('FontScale', 'FontScale'), ('LineSpacing', 'LineSpacing')):
             set_attribute(result, public, shape.one(own).arguments[0])
         set_attribute(result, 'TextShow', enum_text(shape.scalar('TextShow'), TEXT_SHOW))
+        from .dchxml_fonts import project_size
+        project_size(shape, result, version=version)
         set_attribute(result, 'Angle', shape.one('TextAngle').arguments[0])
         for public, own, labels in (('HorzAlign', 'TextHorz', HORZ), ('VertAlign', 'TextVert', VERT),
                                     ('TextAlign', 'TextAlign', HORZ)):
@@ -84,12 +86,12 @@ def project_pattern_drawing(shape, *, index, units, pad_ids=True, pad_keys=None,
     return result
 
 
-def project_dimension(dimension, *, units, pad_keys=None, shape_keys=None, hole_keys=None, group_keys=None):
+def project_dimension(dimension, *, units, pad_keys=None, shape_keys=None, hole_keys=None, group_keys=None, version=46):
     result = Element('Dimension')
     set_attribute(result, 'Locked', dimension.scalar('Locked'))
     set_attribute(result, 'Type', enum_text(dimension.scalar('Type'), ('Horizontal', 'Vertical', 'Free', 'Radius', 'Pointer')))
     for side in ('1', '2'):
-        set_attribute(result, 'Connected'+side, enum_text(dimension.scalar('Connected'+side), ('Pad', 'Shape', 'Hole', 'Terminal')))
+        set_attribute(result, 'Connected'+side, enum_text(dimension.scalar('Connected'+side), ('Pad', 'Shape', 'Hole', 'Terminal'), negative='None' if version >= 52 else None))
         for name in ('Object', 'SubObject', 'Point'):
             value = dimension.scalar(name+side)
             if name == 'SubObject':
@@ -106,6 +108,8 @@ def project_dimension(dimension, *, units, pad_keys=None, shape_keys=None, hole_
                         ('FontWidth', 'FontWidth'), ('FontScale', 'FontScale'), ('ShowUnits', 'ShowUnits'),
                         ('Angle', 'Angle'), ('ExternalRadius', 'ExternalRadius'), ('PointerMode', 'PointerMode')):
         set_attribute(result, public, dimension.one(own).arguments[0])
+    from .dchxml_fonts import project_size
+    project_size(dimension, result, version=version)
     group = project_key(dimension, 'Group', dimension.scalar('Group'), group_keys)
     if group >= 0:
         set_attribute(result, 'Group', group)
@@ -114,7 +118,7 @@ def project_dimension(dimension, *, units, pad_keys=None, shape_keys=None, hole_
     return result
 
 
-def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad_ids=True, pad_keys=None):
+def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad_ids=True, pad_keys=None, version=46):
     """Project current footprint data with explicitly selected pad-style keys.
 
     ``pad_styles`` maps physical pad ordinals to public style names. Reserved
@@ -135,7 +139,7 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
     set_attribute(result, 'PatternStyle', style)
     if pattern.scalar('RefDes', ''):
         set_attribute(result, 'RefDes', pattern.scalar('RefDes'))
-    set_attribute(result, 'Mounting', enum_text(pattern.scalar('Mounting'), ('Through', 'SMD', 'Chassis', 'Mixed')))
+    set_attribute(result, 'Mounting', enum_text(pattern.scalar('Mounting'), ('Through', 'SMD', 'Chassis', 'Mixed'), negative='None' if version >= 52 else None))
     for name in ('Width', 'Height'):
         set_attribute(result, name, numeric(units.length(pattern.one(name).arguments[0])))
     orientation = pattern.scalar('PatternOrientation')
@@ -193,6 +197,8 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
             item = target.add('Pad')
             set_attribute(item, 'Id', pad_keys.get(index, index) if pad_keys is not None else index)
             set_attribute(item, 'Style', pad_styles[index])
+            if version >= 52:
+                set_attribute(item, 'DefStyle', pad.scalar('Standard'))
             point_attributes(item, *pad.arguments[3:5], units)
             set_attribute(item, 'Angle', pad.one('PadAngle').arguments[0])
             set_attribute(item, 'Locked', pad.scalar('Locked'))
@@ -209,7 +215,7 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
         target = result.add('Shapes')
         for index, shape in shapes:
             target.append(project_pattern_drawing(shape, index=shape_keys[index], units=units,
-                          pad_ids=pad_ids, pad_keys=pad_keys, group_keys=group_keys))
+                          pad_ids=pad_ids, pad_keys=pad_keys, group_keys=group_keys, version=version))
     holes = pattern.select('Holes/Hole')
     holes = [(index, hole) for index, hole in enumerate(holes) if index not in (0, len(holes)-1) and hole.values[0]]
     if holes:
@@ -229,6 +235,6 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
         target = result.add('Dimensions')
         for dimension in dimensions:
             target.append(project_dimension(dimension, units=units, pad_keys=pad_keys,
-                          shape_keys=shape_keys, hole_keys=hole_keys, group_keys=group_keys))
+                          shape_keys=shape_keys, hole_keys=hole_keys, group_keys=group_keys, version=version))
     result.append(project_model3d(pattern.one('Model3D'), units=units))
     return result

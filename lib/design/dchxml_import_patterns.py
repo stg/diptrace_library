@@ -58,6 +58,7 @@ def _drawing(record, *, index, units, groups, pads):
     shape.set_field('PadId', map_key(shape, 'PadId', key, pads))
     shape.set_field('Width', length(record.number('LineWidth'), units) if record.has('LineWidth') else -1)
     if shape.scalar('Type') == 7:
+        from .dchxml_fonts import read_font, read_text_extent
         shape.set_field('VectorFont', record.boolean('FontVector', True))
         shape.set_field('FontName', record.text('FontName', ''))
         for public, own, default in (('FontSize', 'FontSize', 6), ('FontWidth', 'FontWidth', -1),
@@ -70,18 +71,21 @@ def _drawing(record, *, index, units, groups, pads):
         for line in record.rows(('Lines', 'TextLines'), ('Item', 'TextLine')):
             shape.one('TextLine').add('pt', line.content())
             line.finish(allow_text=True)
+        read_font(record, shape)
+        read_text_extent(record)
     replace_rows(shape, 'Points_New', read_points(record, units=units))
     record.finish()
     return shape
 
 
 def _dimension(record, *, index, units, groups, objects):
+    record.integer('Id', index)
     result = Element('Dimension', index)
     fields(result, Enabled=True, Locked=record.boolean('Locked', False),
            Type=enum_value(record.value('Type', 'Horizontal'), ('Horizontal', 'Vertical', 'Free', 'Radius', 'Pointer')),
            Layer=enum_value(record.value('Layer', LAYERS[0]), LAYERS), Group=mapped_group(record, groups, result))
     for side in ('1', '2'):
-        mode = enum_value(record.value('Connected'+side, '-1'), ('Pad', 'Shape', 'Hole', 'Terminal'))
+        mode = enum_value(record.value('Connected'+side, '-1'), ('Pad', 'Shape', 'Hole', 'Terminal', 'None'), negative='None')
         owner, member = record.integer('Object'+side, -1), record.integer('SubObject'+side, -1)
         # Ordinary attachments use public object keys. Terminal attachments use
         # a pad ordinal and a zero-based terminal position instead.
@@ -99,19 +103,23 @@ def _dimension(record, *, index, units, groups, objects):
            FontScale=record.number('FontScale', 1), ShowUnits=record.boolean('ShowUnits', True),
            Angle=record.number('Angle', 0), ExternalRadius=record.integer('ExternalRadius', 0),
            PointerMode=record.integer('PointerMode', 0), PointerText=record.text('PointerText', ''))
+    from .dchxml_fonts import read_font
+    read_font(record, result)
     record.finish()
     return result
 
 
 def read_pattern(record, *, units, styles):
     style = record.text('PatternStyle')
+    if record.has('Id'):
+        record.integer('Id')  # PatternStyle is the reference key in schematic libraries.
     pattern = new_pattern(record.text('Name', ''))
     if record.has('RefDes'):
         reference = pattern.add('RefDes', record.text('RefDes'))
         reference.annotations['xml_only'] = 'public library reference prefix; absent from DCH embedded footprints'
         if not reference.values[0]:
             reference.annotations['asc_omit'] = 'empty XML-only footprint reference prefix'
-    pattern.set_field('Mounting', enum_value(record.value('Mounting', '-1'), ('Through', 'SMD', 'Chassis', 'Mixed')))
+    pattern.set_field('Mounting', enum_value(record.value('Mounting', '-1'), ('Through', 'SMD', 'Chassis', 'Mixed', 'None'), negative='None'))
     pattern.set_field('Type', enum_value(record.value('Type', 'Free'), PATTERN_TYPES))
     pattern.set_field('PatternOrientation', enum_value(record.number('Orientation', 0), ('0', '90', '180', '270')))
     pattern.set_field('LockProperties', record.boolean('LockTypeChange', False))
@@ -170,7 +178,7 @@ def read_pattern(record, *, units, styles):
         pad = empty_pad(index)
         pad.annotations.clear()
         selected_style = apply_style(source, pad)
-        pad.set_field('Standard', bool(selected_style) and selected_style == default_style)
+        pad.set_field('Standard', source.boolean('DefStyle', bool(selected_style) and selected_style == default_style))
         pad.set_values(index, source.text('Number', ''), source.text('Note', ''), *point(source, units, default=0))
         pad.set_field('Number_New', index)
         pad.set_field('Id', key)

@@ -123,7 +123,11 @@ def read_component(record, definition, pattern, *, units, sheets):
     part.set_field('Value', record.text('Value', definition.scalar('Value')))
     part.set_field('ShowNumbers', enum_value(record.value('ShowNumbers', SHOW[definition.scalar('ShowNumbers')]
                    if 0 <= definition.scalar('ShowNumbers') < len(SHOW) else str(definition.scalar('ShowNumbers'))), SHOW))
-    part.set_field('MarkingFontSize', record.integer('MarkingFontSize', 6))
+    from .dchxml_fonts import read_size
+    part.set_field('MarkingFontSize', read_size(record, 'MarkingFontSize', floating='MarkingFontSizeFloat'))
+    for name in ('BaseName', 'Manufacturer', 'Datasheet', 'PartString'):
+        if record.has(name):
+            part.set_field(name, record.text(name))
     part.set_field('Group', record.integer('Group', -1))
     path = record.take('LibPath')
     if path is not None:
@@ -143,7 +147,8 @@ def read_component(record, definition, pattern, *, units, sheets):
     overrides = record.rows('Pins', 'Pin')
     if len(overrides) != len(pins):
         raise ValueError(f'{record.node.path}: instance pin count differs from its symbol definition')
-    for source, pin in zip(overrides, pins):
+    for index, (source, pin) in enumerate(zip(overrides, pins)):
+        source.integer('Id', index)
         pin.set_field('NetNumber', source.integer('NetId', -1))
         pin.set_field('NoConnect', source.boolean('NotConnected', False))
         source.finish()

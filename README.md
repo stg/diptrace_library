@@ -5,12 +5,14 @@ schematic model. It supports data inspection, scalar and tuple edits, record
 insertion, cloning, moving, reordering and reference rebuilding.
 
 - [Library API](lib/design/README.txt)
+- [Library development list](lib/TODO.md)
 - [Format capabilities and conversion rules](lib/design/FORMAT_CAPABILITIES.txt)
 - [DCH to ASC command](dch_to_asc/README.md)
 
-DCH input supports schemas 29 through 48. DCH output supports 46, 47 and 48;
+DCH input supports schemas 29 through 52. DCH output supports 46 through 52;
 ASC output uses schematic dialect 46. XML adapters cover recognized public
 fields, with explicit limits documented in the capability register.
+Select output version 52 for fractional fonts, monospacing and current XML fields.
 
 Routine reconstruction produces quiet informational notices; meaningful losses
 and unresolved input constraints produce warnings. ConversionReport collects

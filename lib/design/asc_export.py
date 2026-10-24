@@ -252,6 +252,8 @@ def project_document(document, *, context=None, report=None):
     apply_capacity(view, destination='asc', report=report)
     view.rebuild(force=False)
     source=view.one('/Schematic')
+    from .revision_adaptation import prepare_revisions
+    prepare_revisions(source, destination='asc', report=report)
     from .pictures import prepare_pictures
     prepare_pictures(source,destination='asc',filenames=context.legacy_picture_files,report=report)
     if context.path_variables is not None:

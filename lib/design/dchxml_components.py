@@ -58,7 +58,7 @@ def _category(part):
     return result
 
 
-def project_component(part, *, units, component_style, component_part=0):
+def project_component(part, *, units, component_style, component_part=0, version=46):
     result = Element('Part')
     for public, value in (('Id', part.scalar('Number')), ('UpdateId', part.scalar('HiddenId'))):
         set_attribute(result, public, value)
@@ -82,7 +82,8 @@ def project_component(part, *, units, component_style, component_part=0):
     for name in ('ShowOrigin', 'CustomMarkingFont'):
         if part.scalar(name):
             set_attribute(result, name, True)
-    set_attribute(result, 'MarkingFontSize', part.scalar('MarkingFontSize'))
+    from .dchxml_fonts import project_size
+    project_size(part, result, size='MarkingFontSize', legacy='MarkingFontSize', floating='MarkingFontSizeFloat', mono=None, version=version)
     if part.scalar('MarkingFontAll'):
         set_attribute(result, 'MarkingFontAll', True)
     if part.scalar('Group') >= 0:
@@ -94,6 +95,9 @@ def project_component(part, *, units, component_style, component_part=0):
     for public, own in (('PartRefDes', 'PartDescriptor'), ('PartName', 'PartName'), ('Value', 'Value')):
         field(result, public, part.one(own).arguments[0])
     field(result, 'Name', part.arguments[0])
+    if version >= 52:
+        for name in ('BaseName', 'Manufacturer', 'Datasheet', 'PartString'):
+            field(result, name, part.scalar(name))
     path = result.add('LibPath')
     field(path, 'Path', part.scalar('LibPath'))
     field(path, 'Var', part.scalar('LibPath_Variable', part.scalar('LibPath')))

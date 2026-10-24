@@ -6,9 +6,11 @@ from .dchxml_settings import SHOW
 from .dchxml_symbols import PART_TYPES, SYMBOL_TYPES, PIN_TYPES, ELECTRIC_TYPES, DRAWING_TYPES, TEXT_SHOW, SPICE_TYPES
 from .model import Element
 from .schematic_objects import new_symbol, new_symbol_shape, new_pin
+from .dchxml_fonts import read_font, read_text_extent
 
 
 def read_symbol_pin(record, *, index, units, groups):
+    record.integer('Id', index)
     pin = new_pin(index, placed=False)
     pin.set_values(index, *point(record, units))
     for public, own, labels in (('Type', 'Type', PIN_TYPES), ('ElectricType', 'ElectricType', ELECTRIC_TYPES)):
@@ -31,7 +33,7 @@ def read_symbol_pin(record, *, index, units, groups):
         pin.set_field(own, record.text(public, ''))
     font = record.take('NameFont')
     if font is not None:
-        pin.set_field('NameFontSize', font.integer('Size', 6))
+        read_font(font, pin, size='NameFontSize', legacy='Size', prefix='Name')
         for public, own, default in (('Width', 'NameFontWidth', -1), ('Scale', 'NameFontScale', 1)):
             pin.set_field(own, font.number(public, default))
         font.finish()
@@ -40,6 +42,7 @@ def read_symbol_pin(record, *, index, units, groups):
 
 
 def read_symbol_drawing(record, *, index, units, groups):
+    record.integer('Id', index)
     shape = new_symbol_shape(index)
     kind = enum_value(record.value('Type', 'Undefined'), DRAWING_TYPES)
     shape.set_field('Type', kind)
@@ -62,12 +65,16 @@ def read_symbol_drawing(record, *, index, units, groups):
             lines.add('pt', item.content())
             item.finish(allow_text=True)
         shape.set_field('Name', lines.children()[0].arguments[0] if lines.children() else '')
+        read_font(record, shape)
+        read_text_extent(record)
     replace_rows(shape, 'Points_New', read_points(record, units=units))
     record.finish()
     return shape
 
 
 def read_symbol(record, *, units):
+    if record.has('Id'):
+        record.integer('Id')
     part = new_symbol(record.text('Name', ''), record.text('RefDes', ''), placed=False)
     for public, own, labels in (('PartType', 'PartType', PART_TYPES), ('Type', 'Type', SYMBOL_TYPES),
                                 ('ShowNumbers', 'ShowNumbers', SHOW)):

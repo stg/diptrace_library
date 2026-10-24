@@ -7,7 +7,9 @@ from .schematic_new import fields
 
 def read_font(record, target, *, prefix='', units=None):
     target.set_field(prefix+'VectorFont', record.boolean('FontVector', True))
-    target.set_field(prefix+'FontSize', record.integer('FontSize', 6))
+    from .dchxml_fonts import read_font as read_size_and_mono, read_text_extent
+    read_size_and_mono(record, target, size=prefix+'FontSize', prefix=prefix)
+    read_text_extent(record)
     width = record.number('FontWidth', -1)
     target.set_field(prefix+'FontWidth', length(width, units) if units is not None and width.value >= 0 else width)
     target.set_field(prefix+'FontScale', record.number('FontScale', 1))

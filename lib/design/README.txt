@@ -10,12 +10,21 @@ architecture. Remaining adapter limits are recorded in FORMAT_CAPABILITIES.txt.
 
 Supported boundaries
 
-DCH input: schemas 29 through 48. Unknown versions are rejected.
-DCH output: schemas 46, 47 and 48. System-font measurement services can require
+DCH input: schemas 29 through 52. Unknown versions are rejected.
+DCH output: schemas 46 through 52. System-font measurement services can require
 explicit environment inputs.
 ASC: schematic dialect 46. AscExportContext supplies optional overrides.
-DCHXML: recognized public schematic fields, with 4.3 and 4.9 output vocabulary.
+DCHXML: recognized public schematic fields, with 4.3, 4.9, 5.2 and 5.3 output vocabulary.
 DchXmlExportContext supplies optional overrides.
+
+Select version=52 for fractional sizes, monospaced vector fonts and the current
+XML vocabulary. The default output target remains 46. FontSize, NameFontSize,
+MarkingFontSize and the global font settings each own one numeric size; the
+adapters generate integral compatibility fields when necessary. FontMono,
+NameFontMono, DefFontMono and Settings.PartFontMono select monospacing.
+Settings.NetNameFontSize owns the global net-label size. Advanced simulator
+settings use the public OptionsGeneral/OptionsDC/OptionsAC/OptionsTransient
+groups under ssimulator, with sim_digital for the four digital arguments.
 
 Import consumes one supplied design file; it does not discover companion designs
 or picture files. Old picture references may remain unresolved BitmapIndex values.

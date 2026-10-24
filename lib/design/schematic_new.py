@@ -69,6 +69,8 @@ def new_schematic(*, sheet_name='Sheet 1'):
     cache = schematic.add('CacheLib')
     for name in ('Categories', 'Subfolders', 'Slots'):
         cache.add(name)
+    from .schematic_fonts import complete_fonts
+    complete_fonts(schematic)
     document.metadata.update(source_format='schematic', source_version=46,
                              binary_consumed=False, missing_data_policy='declared authoring defaults')
     from .schematic_refs import bind_schematic_references

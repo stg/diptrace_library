@@ -99,9 +99,18 @@ def _head(node, name=None):
     return Element(name or node.kind, *map(_value, node.arguments), source=node.source)
 
 
-def _visible(node):
+_OMITTED_EXTENSIONS = {
+    'Pin': {'NameFontMono'}, 'Shape': {'FontMono', 'PictureFlipped'},
+    'Dimension': {'FontMono'}, 'Cell': {'FontMono'}, 'Content': {'FontMono'},
+    'Table': {'DefFontMono'}, 'Settings': {'PartFontMono', 'NetNameFontSize'},
+    'ssimulator': {'sim_digital', 'OptionsGeneral', 'OptionsDC', 'OptionsAC', 'OptionsTransient'},
+}
+
+
+def _visible(node, *, include_extensions=False):
+    omitted = () if include_extensions else _OMITTED_EXTENSIONS.get(node.kind, ())
     return [child for child in node.children()
-            if child.kind != 'UnresolvedKeys' and not child.annotations.get('asc_omit')]
+            if child.kind != 'UnresolvedKeys' and child.kind not in omitted and not child.annotations.get('asc_omit')]
 
 
 _COUNTED_ARRAYS = {

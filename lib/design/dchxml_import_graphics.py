@@ -6,6 +6,7 @@ from .dchxml_import_library_values import read_path
 from .dchxml_import_values import enum_value, length, point, replace_rows
 from .model import Element
 from .schematic_new import fields
+from .dchxml_fonts import read_font, read_text_extent
 
 
 def read_drawings(record, schematic, *, units, sheets):
@@ -35,6 +36,9 @@ def read_drawings(record, schematic, *, units, sheets):
             drawing.add(own, length(source.number(public, 0), units))
         fields(drawing, Picture_Transparent=source.number('PictureTransparent', 0),
                Picture_Proportions=source.boolean('PictureProportions', False), Picture_File='', Picture_File_Variable='')
+        drawing.add('PictureFlipped', source.boolean('PictureFlipped', False))
+        read_font(source, drawing)
+        read_text_extent(source)
         filename = source.take('PictureFile')
         if filename is not None:
             actual, variable = read_path(filename)

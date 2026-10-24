@@ -16,7 +16,7 @@ from .dch_records import placed_components, cached_definitions, footprints
 
 def _known(node, names, *, repeated=()):
     seen = set()
-    for child in _visible(node):
+    for child in _visible(node, include_extensions=True):
         if child.kind not in names:
             raise ValueError(f'{child.path}: unsupported schematic field')
         if child.kind in seen and child.kind not in repeated:
@@ -36,6 +36,14 @@ def validate_public_content(document, *, allow_xml_fields=False):
     _known(document.root, ('Source', 'Scale', 'Xpos', 'Ypos', 'Schematic'))
     schematic = document.one('/Schematic')
     _known(schematic, SCHEMATIC_FIELDS)
+    from .simulation import OPTION_FIELDS
+    simulation = schematic.one('ssimulator')
+    _known(simulation, ('tp', 'signals', 'sim_ac', 'sim_dc', 'sim_tran', 'sim_noise',
+                        'gndnum', 'gndname', 'sim_digital', *(group for group, *_ in OPTION_FIELDS)))
+    for group in dict.fromkeys(item[0] for item in OPTION_FIELDS):
+        options = simulation.child(group)
+        if options is not None:
+            _known(options, [name for owner, name, *_ in OPTION_FIELDS if owner == group])
     cache = schematic.one('CacheLib')
     _known(cache, ('Categories', 'Subfolders', 'Slots', *(('PatternCategories', 'Patterns', 'PadStyles') if allow_xml_fields else ())))
     for slot in _rows(cache.one('Slots'), 'Slot'):
@@ -48,7 +56,7 @@ def validate_public_content(document, *, allow_xml_fields=False):
     from .dchxml_pads import PAD_STYLE_FIELDS
     for style in cache.select('PadStyles/PadStyle'):
         _known(style, PAD_STYLE_FIELDS, repeated=('PadTerminal',))
-    _known(schematic.one('Settings'), (*SETTINGS_FIELDS, *(('MarkingFontName',) if allow_xml_fields else ())))
+    _known(schematic.one('Settings'), (*SETTINGS_FIELDS, 'NetNameFontSize', 'PartFontMono', *(('MarkingFontName',) if allow_xml_fields else ())))
     for page in _rows(schematic.one('Pages'), 'Page'):
         _known(page, (*PAGE_FIELDS, 'TitleBlocks'))
     symbols = [(part, True) for part in placed_components(schematic)]
@@ -56,14 +64,15 @@ def validate_public_content(document, *, allow_xml_fields=False):
     for part, placed in symbols:
         _known(part, COMPONENT_FIELDS if placed else (*CACHED_SYMBOL_FIELDS, 'ModelNote', *(('Datasheet',) if allow_xml_fields else ())))
         for pin in _rows(part.one('Pins'), 'Pin'):
-            _known(pin, PIN_FIELDS if placed else (*CACHED_PIN_FIELDS, *(('SignalDelay',) if allow_xml_fields else ())))
+            pin_fields = PIN_FIELDS if placed else (*CACHED_PIN_FIELDS, *(('SignalDelay',) if allow_xml_fields else ()))
+            _known(pin, (*pin_fields, 'NameFontMono'))
         for shape in _rows(part.one('Shapes'), 'Shape'):
-            _known(shape, SYMBOL_DRAWING_FIELDS if placed else CACHED_DRAWING_FIELDS)
+            _known(shape, (*(SYMBOL_DRAWING_FIELDS if placed else CACHED_DRAWING_FIELDS), 'FontMono'))
         _rows(part.one('UserFields'), 'UserField')
         _rows(part.one('ModelBody'), 'Line')
         _known(part.one('Suppliers'), ('PartNumber', 'Manufacturer', 'Pattern', 'Supplier', 'SourceLocator', 'Currency', 'MainSupplier', 'Prices'))
     drawing = '''Type Locked Layer TextLine FontName VectorFont FontSize FontScale
-FontWidth TextShow Width Points_New TextAngle TextHorz TextVert TextAlign
+FontWidth FontMono TextShow Width Points_New TextAngle TextHorz TextVert TextAlign
 LineSpacing AllLayers Group'''.split()
     model = '''Model3DFile Model3DFile_Variable Offset Rotate Zoom Mirror NoSearch
 Units IPC_XOff IPC_YOff AutoHeight AutoColor Type KeepPins'''.split()
@@ -86,17 +95,18 @@ Units IPC_XOff IPC_YOff AutoHeight AutoColor Type KeepPins'''.split()
         for shape in _rows(pattern.one('Shapes'), 'Shape'):
             _known(shape, drawing)
         for dimension in _rows(pattern.one('Dimensions'), 'Dimension'):
-            _known(dimension, DIMENSION_FIELDS)
+            _known(dimension, (*DIMENSION_FIELDS, 'FontMono'))
     for collection, kind, fields in (
             ('Nets', 'Net', NET_FIELDS), ('Buses', 'Bus', BUS_FIELDS),
             ('Shapes', 'Shape', SCHEMATIC_DRAWING_FIELDS), ('Groups', 'Group', ('Enabled', 'Selected')),
             ('PageConnectors', 'PageConnector', PAGE_CONNECTOR_FIELDS), ('Tables', 'Table', TABLE_FIELDS)):
         for record in _rows(schematic.one(collection), kind):
-            _known(record, fields)
+            extra = {'Shape': ('FontMono', 'PictureFlipped'), 'Table': ('DefFontMono',)}.get(kind, ())
+            _known(record, (*fields, *extra))
             if kind in ('Net', 'Bus'):
                 for line in _rows(record.one('Lines'), 'Line'):
                     _known(line, LINE_FIELDS if kind == 'Net' else BUS_LINE_FIELDS)
             if kind == 'Table':
                 for cell in _rows(record.one('Cells'), 'Cell'):
-                    _known(cell, CELL_FIELDS)
+                    _known(cell, (*CELL_FIELDS, 'FontMono'))
 

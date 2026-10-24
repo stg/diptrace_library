@@ -27,16 +27,18 @@ def _text(source, target):
             field(text, 'TextLine', value)
 
 
-def _font(source, target, *, prefix='', units=None):
+def _font(source, target, *, prefix='', units=None, version=46):
     for public, own in (('FontVector', 'VectorFont'), ('FontSize', 'FontSize'), ('FontWidth', 'FontWidth'),
                         ('FontScale', 'FontScale'), ('FontColor', 'FontColor'), ('LineSpacing', 'LineSpacing')):
         value = source.one(prefix+own).arguments[0]
         if public == 'FontWidth' and units is not None:
             value = stroke_width(value, units)
         set_attribute(target, public, value)
+    from .dchxml_fonts import project_size
+    project_size(source, target, size=prefix+'FontSize', mono=prefix+'FontMono', version=version)
 
 
-def project_table(table, *, index, units):
+def project_table(table, *, index, units, version=46):
     result = Element('Table')
     set_attribute(result, 'Id', index)
     if table.scalar('HideBorder'):
@@ -47,7 +49,7 @@ def project_table(table, *, index, units):
     for public, own in (('CellWidth', 'DefCellWidth'), ('CellHeight', 'DefCellHeight')):
         set_attribute(result, public, numeric(units.length(table.one(own).arguments[0])))
     set_attribute(result, 'TextAlign', enum_text(table.scalar('DefAlign'), TEXT_ALIGN))
-    _font(table, result, prefix='Def')
+    _font(table, result, prefix='Def', version=version)
     if table.scalar('Group') >= 0:
         set_attribute(result, 'Group', table.scalar('Group'))
     field(result, 'FontName', table.scalar('DefFontName'))
@@ -71,22 +73,22 @@ def project_table(table, *, index, units):
                 set_attribute(item, 'TextAlign', enum_text(source.scalar('Align'), TEXT_ALIGN))
                 field(item, 'FontName', source.scalar('FontName'))
                 _text(source, item)
-                _font(source, item)
+                _font(source, item, version=version)
     for name in ('Selected', 'Locked'):
         if table.scalar(name):
             set_attribute(result, name, True)
     return result
 
 
-def project_tables(schematic, *, units):
+def project_tables(schematic, *, units, version=46):
     result = Element('Tables')
     for index, table in enumerate(schematic.select('Tables/Table')):
         if table.scalar('Enabled'):
-            result.append(project_table(table, index=index, units=units))
+            result.append(project_table(table, index=index, units=units, version=version))
     return result
 
 
-def project_title_block(grid, *, name, units):
+def project_title_block(grid, *, name, units, version=46):
     result = Element(name)
     field(result, 'Name', grid.arguments[1])
     for key in ('Width', 'Height'):
@@ -120,17 +122,17 @@ def project_title_block(grid, *, name, units):
             set_attribute(item, 'Id', index)
             _text(source, item)
             field(item, 'FontName', source.scalar('FontName'))
-            _font(source, item, units=units)
+            _font(source, item, units=units, version=version)
             set_attribute(item, 'TextShow', enum_text(source.scalar('FontType'), ('Text', 'Sheet', 'File')))
             set_attribute(item, 'TextAlign', enum_text(source.scalar('Align'), TEXT_ALIGN))
             _bounds(item, source.one('Placement').arguments, units)
     return result
 
 
-def append_title_blocks(page, sheet, *, units):
+def append_title_blocks(page, sheet, *, units, version=46):
     for grid in page.select('TitleBlocks/TitleBlock'):
         index = grid.values[0]
         if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(TITLE_BLOCKS):
             raise ValueError(f'{grid.path}: title block requires a known placement')
         if has_title_data(grid):
-            sheet.append(project_title_block(grid, name=TITLE_BLOCKS[index], units=units))
+            sheet.append(project_title_block(grid, name=TITLE_BLOCKS[index], units=units, version=version))

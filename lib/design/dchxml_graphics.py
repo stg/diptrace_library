@@ -10,7 +10,7 @@ DRAWING_TYPES = ('None', 'Line', 'Arc', 'Arrow', 'Rectangle', 'FillRect', 'Obrou
                  'Polyline', 'Polygon', 'Text', 'Picture')
 
 
-def project_drawing(shape, *, index, units):
+def project_drawing(shape, *, index, units, version=46):
     result = Element('Shape')
     kind = shape.scalar('Type')
     set_attribute(result, 'Id', index)
@@ -31,6 +31,8 @@ def project_drawing(shape, *, index, units):
             for public, own in (('PictureWidth', 'Picture_Width'), ('PictureHeight', 'Picture_Height')):
                 set_attribute(result, public, numeric(units.length(shape.one(own).arguments[0])))
             set_attribute(result, 'PictureProportions', shape.scalar('Picture_Proportions'))
+            if version >= 52:
+                set_attribute(result, 'PictureFlipped', shape.scalar('PictureFlipped', False))
         for public, own, labels in (('HorzAlign', 'TextHorz', HORZ), ('VertAlign', 'TextVert', VERT)):
             set_attribute(result, public, enum_text(shape.scalar(own), labels, negative=labels[-1]))
         if kind == 11:
@@ -40,6 +42,8 @@ def project_drawing(shape, *, index, units):
             for public, own in (('FontVector', 'VectorFont'), ('FontSize', 'FontSize'), ('FontWidth', 'FontWidth'),
                                 ('FontScale', 'FontScale'), ('FontColor', 'FontColor'), ('LineSpacing', 'LineSpacing')):
                 set_attribute(result, public, shape.one(own).arguments[0])
+            from .dchxml_fonts import project_size
+            project_size(shape, result, version=version)
     if shape.scalar('Group') >= 0:
         set_attribute(result, 'Group', shape.scalar('Group'))
     for name in ('Selected', 'Locked'):
@@ -68,9 +72,9 @@ def project_drawing(shape, *, index, units):
     return result
 
 
-def project_drawings(schematic, *, units):
+def project_drawings(schematic, *, units, version=46):
     result = Element('Shapes')
     for index, drawing in enumerate(schematic.select('Shapes/Shape')):
         if drawing.scalar('Enabled'):
-            result.append(project_drawing(drawing, index=index, units=units))
+            result.append(project_drawing(drawing, index=index, units=units, version=version))
     return result

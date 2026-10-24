@@ -22,10 +22,9 @@ class XmlLibrary:
 
 class _Builder:
     def __init__(self, *, units, version):
-        if version not in (46, 47, 48):
-            raise ValueError('XML library projection supports target schemas 46, 47 and 48')
+        from .dch_versions import xml_application_version
         self.units, self.version = units, version
-        self.header_version = '4.3.0.5' if version == 46 else '4.9.5.0'
+        self.header_version = xml_application_version(version)
         self.components = Element('Components')
         self.component_categories = CategoryCatalog()
         self.pattern_categories = CategoryCatalog(key='Number')
@@ -63,12 +62,12 @@ class _Builder:
             else:
                 # Equal attributes do not make these relationships equivalent:
                 # selecting the default style reconstructs Standard=True.
-                pads[index] = self.pad_styles.include(record, exclude=(default,))
-            if (pads[index] == default) != standard:
+                pads[index] = self.pad_styles.include(record, exclude=() if self.version >= 52 else (default,))
+            if self.version < 52 and (pads[index] == default) != standard:
                 self.standard_changes.add(pad)
         result = project_pattern(pattern, style='', default_pad_style=default, pad_styles=pads,
                                  units=self.units, pad_ids=self.version >= 48,
-                                 pad_keys=public_pad_keys(pattern) if pad_keys is None else pad_keys)
+                                 pad_keys=public_pad_keys(pattern) if pad_keys is None else pad_keys, version=self.version)
         category = result.child('Category')
         if category is not None:
             self.pattern_categories.include(category)
@@ -77,7 +76,7 @@ class _Builder:
     def symbol(self, part, pattern):
         keys = public_pad_keys(pattern, part) if pattern is not None and part.scalar('PartType') == 0 else None
         style = self.footprint(pattern, pad_keys=keys)
-        result = project_symbol(part, units=self.units, pattern=pattern, pattern_style=style, pad_keys=keys)
+        result = project_symbol(part, units=self.units, pattern=pattern, pattern_style=style, pad_keys=keys, version=self.version)
         category = result.child('Category')
         if category is not None:
             self.component_categories.include(category)
@@ -142,13 +141,14 @@ class _Builder:
         result = self.header('Component')
         if self.component_categories.element.children():
             result.append(self.component_categories.element)
-        result.append(self.components)
         patterns = self.header('Pattern')
         if self.pattern_categories.element.children():
             patterns.append(self.pattern_categories.element)
         patterns.append(self.pad_styles.element)
         patterns.append(self.patterns.element)
         result.append(patterns)
+        # Definitions precede their users, including in single-pass readers.
+        result.append(self.components)
         if self.version >= 47:
             # The 4.9 library vocabulary uses the same geometry names as the
             # schematic section: Point and TextLines/TextLine.

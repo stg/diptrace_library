@@ -29,7 +29,7 @@ def point_attributes(target, x, y, units, names=('X', 'Y')):
         set_attribute(target, name, numeric(value))
 
 
-def project_symbol_pin(pin, *, units, pad_keys=None, group_keys=None):
+def project_symbol_pin(pin, *, units, pad_keys=None, group_keys=None, version=46):
     result = Element('Pin')
     point_attributes(result, *pin.arguments[1:3], units)
     set_attribute(result, 'Locked', pin.scalar('Locked'))
@@ -55,10 +55,12 @@ def project_symbol_pin(pin, *, units, pad_keys=None, group_keys=None):
     font = result.add('NameFont')
     for public, own in (('Size', 'NameFontSize'), ('Width', 'NameFontWidth'), ('Scale', 'NameFontScale')):
         set_attribute(font, public, pin.one(own).arguments[0])
+    from .dchxml_fonts import project_size
+    project_size(pin, font, size='NameFontSize', legacy='Size', mono='NameFontMono', version=version)
     return result
 
 
-def project_symbol_drawing(shape, *, units, group_keys=None):
+def project_symbol_drawing(shape, *, units, group_keys=None, version=46):
     result = Element('Shape')
     kind = shape.scalar('Type')
     set_attribute(result, 'Type', enum_text(kind, DRAWING_TYPES))
@@ -70,6 +72,8 @@ def project_symbol_drawing(shape, *, units, group_keys=None):
                             ('FontScale', 'FontScale'), ('FontColor', 'FontColor'), ('LineSpacing', 'LineSpacing')):
             set_attribute(result, public, shape.one(own).arguments[0])
         set_attribute(result, 'TextShow', enum_text(shape.scalar('FontType'), TEXT_SHOW))
+        from .dchxml_fonts import project_size
+        project_size(shape, result, version=version)
         if shape.scalar('FontName'):
             set_attribute(result, 'FontName', shape.scalar('FontName'))
         set_attribute(result, 'Angle', shape.one('TextAngle').arguments[0])
@@ -91,7 +95,7 @@ def project_symbol_drawing(shape, *, units, group_keys=None):
     return result
 
 
-def project_symbol(part, *, units, pattern=None, pattern_style=None, datasheet='', pad_keys=None):
+def project_symbol(part, *, units, pattern=None, pattern_style=None, datasheet='', pad_keys=None, version=46):
     """Project an unplaced definition; no instance geometry is inferred here."""
     result = Element('Part')
     group_keys = public_keys(part.select('Groups/pt'), reserved_keys(
@@ -139,11 +143,11 @@ def project_symbol(part, *, units, pattern=None, pattern_style=None, datasheet='
     pins = result.add('Pins')
     for pin in part.select('Pins/Pin'):
         if pin.scalar('Enabled'):
-            pins.append(project_symbol_pin(pin, units=units, pad_keys=pad_keys, group_keys=group_keys))
+            pins.append(project_symbol_pin(pin, units=units, pad_keys=pad_keys, group_keys=group_keys, version=version))
     shapes = result.add('Shapes')
     for shape in part.select('Shapes/Shape'):
         if shape.scalar('Enabled') and not shape.scalar('MarkingGenerated', False):
-            shapes.append(project_symbol_drawing(shape, units=units, group_keys=group_keys))
+            shapes.append(project_symbol_drawing(shape, units=units, group_keys=group_keys, version=version))
     groups = part.select('Groups/pt')
     if groups:
         target = result.add('Groups')

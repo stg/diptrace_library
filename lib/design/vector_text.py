@@ -28,8 +28,10 @@ class VectorFontMetrics:
     line_height: float = 1.492
     unit_scale: float = 1.095
     unknown_advance: float = .6
+    mono_advance: float = .606
+    mono_line_height: float = 1.618
 
-    def measure(self, text, *, size=1., spacing=0.):
+    def measure(self, text, *, size=1., spacing=0., monospaced=False):
         """Measure format vector text, including doubled/markup '~' markers.
 
         Spacing is in physical units. UTF-16 code units supply character lookup,
@@ -54,13 +56,15 @@ class VectorFontMetrics:
                 if i == len(codes) or codes[i] != code:
                     continue
                 i += 1
-            if code in self.advances:
+            if monospaced:
+                position += self.mono_advance + gap
+            elif code in self.advances:
                 position += self.advances[code]
                 position += gap
             else:
                 position += gap
                 position += self.unknown_advance
-        return TextMetrics((position-gap)*unit, self.line_height*unit)
+        return TextMetrics((position-gap)*unit, (self.mono_line_height if monospaced else self.line_height)*unit)
 
 
 @lru_cache(maxsize=1)
@@ -106,7 +110,8 @@ def pattern_vector_text_bounds(shape, *, font=None):
     anchor, texts, size, pen, scale = _text_inputs(shape, 7)
     if not texts:
         return anchor, anchor
-    metrics = (font or builtin_vector_metrics()).measure(texts[0], size=size/1.3, spacing=pen*2)
+    metrics = (font or builtin_vector_metrics()).measure(texts[0], size=size/1.3, spacing=pen*2,
+                                                       monospaced=shape.scalar('FontMono', False))
     width, height = max(0., _scaled_width(metrics.width, scale)+pen), metrics.height+pen
     angle = round(float(shape.scalar('TextAngle'))/(math.pi/2))*(math.pi/2)
     return aligned_text_box(anchor, width, height, shape.scalar('TextHorz'), shape.scalar('TextVert'), angle)
@@ -122,7 +127,8 @@ def symbol_vector_text_bounds(shape, *, font=None):
     if not texts:
         return anchor, anchor
     font = font or builtin_vector_metrics()
-    rows = [font.measure(text, size=size/1.3, spacing=pen*2) for text in texts]
+    rows = [font.measure(text, size=size/1.3, spacing=pen*2,
+                         monospaced=shape.scalar('FontMono', False)) for text in texts]
     width = max(0., *(_scaled_width(row.width, scale)+pen for row in rows))
     height = rows[0].height+pen
     spacing = calculation_number(shape.one('LineSpacing'))

@@ -4,6 +4,7 @@ from .dchxml_settings import SHOW, ALIGN
 from .markings import MarkingStyle
 from .model import Element
 from .schematic_new import new_page
+from .dchxml_fonts import read_size
 
 
 def read_sheets(record, schematic, *, units):
@@ -32,9 +33,10 @@ def read_sheets(record, schematic, *, units):
             for public, own in (('Visible', 'Zones'), ('Border', 'ZoneBorder')):
                 page.set_field(own, zones.boolean(public, False))
             for public, own in (('HorzZones', 'HorzZones'), ('VertZones', 'VertZones'),
-                                ('Standard', 'ZoneStandard'), ('FontSize', 'ZoneFontSize')):
+                                ('Standard', 'ZoneStandard')):
                 page.set_field(own, zones.integer(public, 0))
             page.set_field('ZoneFontName', zones.text('FontName', ''))
+            page.set_field('ZoneFontSize', read_size(zones, default=0))
             for public, own in (('HorzBorderSize', 'HorzZoneBorder'), ('VertBorderSize', 'VertZoneBorder')):
                 page.set_field(own, length(zones.number(public, 0), units))
             width = zones.number('FontLineWidth', -1)
@@ -57,7 +59,8 @@ def read_settings(record, schematic, *, units):
     vector = markings.boolean('FontVector', True)
     font = markings.text('FontName', '')
     schematic.set_field('PartFontVector', vector)
-    settings.set_field('PartFontSize', markings.integer('FontSize', 6))
+    settings.set_field('PartFontSize', read_size(markings))
+    settings.set_field('PartFontMono', markings.boolean('FontMono', False))
     width = markings.number('FontWidth', -1)
     schematic.set_field('PartFontWidth', width if width.value < 0 else length(width, units))
     schematic.set_field('PartFontScale', markings.number('FontScale', 1))
@@ -103,14 +106,18 @@ def read_settings(record, schematic, *, units):
     settings.set_field('BusConNetNumber', show == 1)
     settings.set_field('BusConAbove', position == 0)
     settings.set_field('BusConBelow', position == 1)
-    settings.set_field('BusConnectionFont', buses.integer('FontSize', 6))
+    settings.set_field('BusConnectionFont', read_size(buses))
     buses.finish()
     pins = record.take('PinNumbers', required=True)
     visible = pins.boolean('Visible', True)
     settings.set_field('ShowPinNumbers', visible)
     settings.set_field('HidePinNumbers', not visible)
-    settings.set_field('PinNumberFont', pins.integer('Font', 6))
+    settings.set_field('PinNumberFont', read_size(pins, 'Font'))
     pins.finish()
+    net_name = record.take('NetName')
+    if net_name is not None:
+        settings.set_field('NetNameFontSize', read_size(net_name, default=4))
+        net_name.finish()
     schematic.set_field('HidePower', record.boolean('HidePower', False))
     schematic.set_field('ProjectDir', record.text('ProjectDir', ''))
     record.finish()

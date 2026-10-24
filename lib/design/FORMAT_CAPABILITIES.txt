@@ -121,9 +121,9 @@ repeated-conversion stability; retain authored coordinates rather than introduci
 an incidental tiny shift solely for exact comparison.
 
 Format       Shared input                 Output
-DCH          schemas 29 through 48        schemas 46,47,48
+DCH          schemas 29 through 52        schemas 46 through 52
 ASC          schematic dialect 46        schematic dialect 46
-DCHXML       recognized public fields    4.3/4.9 vocabulary
+DCHXML       recognized public fields    4.3/4.9/5.2/5.3 vocabulary
 PCB/ELI/LIB  future adapters              future adapters
 
 VERSION
@@ -163,12 +163,80 @@ The main DCH input layout milestones are:
 46  Simulator records.
 47  Persistent Net.HiddenId values.
 48  Footprint drawing PadId links.
+49  Global net-name font size.
+50  Digital simulation arguments and advanced simulator options.
+51  Sheet drawing PictureFlipped.
+52  Fractional font sizes and monospaced vector-font selection.
 
 These describe input gates, not selectable legacy output schemas. Later field
 occurrences replace obsolete earlier values during decoding. Missing old settings
 use declared defaults or optional context, rather than reading application
 preferences. Remaining legacy migration inputs are documented below and are
 subject to the required cleanup.
+
+RECENT_SCHEMATIC_REVISIONS
+Font sizes remain single numeric model properties, including FontSize,
+NameFontSize, MarkingFontSize, DefFontSize, ZoneFontSize and the global settings.
+Import replaces an older integral compatibility occurrence with its later
+fractional value. XML FontSizeFloat/MarkingFontSizeFloat are syntax for those
+same properties, not additional authoring facts. Writers derive compatibility
+integers using nearest-even rounding; there is no historical integer backup.
+DCH below 52 and earlier XML vocabulary round fractional sizes with warning
+fractional-font-size. ASC dialect 46 can carry fractional values directly.
+
+Monospacing uses FontMono on drawings, dimensions, cells and title contents;
+NameFontMono on pins; DefFontMono on tables; Settings.PartFontMono globally.
+Older inputs use false. DCH/XML schema 52 carry these choices. ASC and earlier
+destinations omit them with warning monospaced-font when selected. The built-in
+layout service supports monospaced vector advances; system-font measurement
+retains fractional sizes until the backend's point-size quantization.
+
+Settings.NetNameFontSize defaults to 4 for older input. DCH/XML targets >=49
+carry it. Earlier targets and ASC omit a nondefault value with warning
+net-name-font. Fractional net-name sizes require DCH/XML >=52.
+
+Simulator options use the public OptionsGeneral, OptionsDC, OptionsAC and
+OptionsTransient groups under ssimulator. Engineering values/expressions remain
+strings; switches and iteration choices are booleans/integers. sim_digital holds
+StartTime, Step, StopTime and GroupBuses arguments; tp=10 selects digital mode.
+DCH/XML targets >=50 carry these settings. Older targets and ASC omit nondefault
+options with warning simulator-options. DCH/XML targets below 50 disable digital
+mode with warning digital-simulation. ASC retains the numeric mode but omits its
+digital argument array. XML 5.2 uses the numeric mode label; 5.3 names it Digital.
+The 5.2 XML reader resets digital arguments even on its own exported files.
+Targets 50/51 retain these arguments in the XML (the fourth uses Item) and warn
+dchxml-reader-digital-arguments for nondefault values. Our reader preserves
+them; use the 5.3 dialect for application readback that also preserves them.
+This is a receiving-reader limitation, not a restriction of XML data storage.
+
+PictureFlipped defaults to false and applies to sheet pictures. DCH >=51 stores
+the drawing flag; XML >=52 exports it on Picture drawings. The 5.2 XML dialect
+omits it despite supporting binary schema 51. ASC and earlier XML/DCH targets
+omit a selected flag with warning picture-flipped. The source
+model is unaffected by all these export adaptations.
+
+XML targets 49..51 use the verified 5.2 dialect with the selected feature subset;
+this does not claim those schemas first appeared in that application release.
+Target 52 uses 5.3 vocabulary. Embedded footprint definitions precede component
+definitions so readers can resolve references in one pass. Definition-local
+enumeration Id attributes are optional bookkeeping, without additional model
+identities; style keys and ordered records establish schematic associations.
+XML 5.3 Pad.DefStyle maps to the existing pad Standard property. Earlier XML
+infers it from default-style selection. The newer vocabulary can therefore share
+equal pad geometry while retaining independent default-style choices.
+Mounting=None and dimension Connected=None map to the existing unassigned -1.
+Optional XML TextWidth/TextHeight are calculated extents; imports use editable
+font, text and anchor facts and do not retain redundant historical measurements.
+Newer placed BaseName, Manufacturer, Datasheet and PartString fields map directly
+to existing component properties.
+
+Measured monospaced vector boxes agree within 0.0001 shared length unit for the
+tested ordinary text, markup and single-code-unit characters at sizes 2..10.
+Unsupported supplementary glyph fallback can differ by up to 0.102 shared unit
+(0.034 mm) over that range. This concerns calculated bounds, not stored text,
+font sizes or anchors, and does not accumulate into authoring coordinates.
+The proportional-font layout profile retains its established metrics; exact
+matching of every application/font engine's calculated text bounds is not claimed.
 
 DOCUMENT_AND_PAGE_SETTINGS
 Source signature/version remain diagnostic document metadata, not an editable

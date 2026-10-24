@@ -156,6 +156,10 @@ def import_schematic(document):
     discard_legacy_label_slots(schematic)
     from .drawing_data import normalize_drawings
     normalize_drawings(schematic)
+    from .schematic_fonts import complete_fonts
+    from .simulation import complete_options
+    complete_fonts(schematic)
+    complete_options(schematic.one('ssimulator'))
     from .schematic_schema import validate_public_content
     validate_public_content(view)
     view.metadata.update(source_format='schematic', imported_from='asc',

@@ -65,6 +65,8 @@ def import_schematic(document):
     read_groups(public, schematic)
     public.finish()
     source.finish()
+    from .schematic_fonts import complete_fonts
+    complete_fonts(schematic)
     for flag, label in (('UnitsMM', 'mm'), ('UnitsMIL', 'mil'), ('UnitsINCH', 'inch')):
         schematic.one('Settings').set_field(flag, units.units == label)
     page = schematic.select('Pages/Page')[active]

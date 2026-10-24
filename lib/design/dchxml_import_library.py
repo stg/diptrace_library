@@ -129,6 +129,7 @@ def read_library(record, schematic, *, units, cache_count):
     slots = cache.one('Slots')
     definitions, used_patterns = {}, set()
     for index, source in enumerate(record.rows('Components', 'Component')):
+        source.integer('Id', index)
         key = source.text('ComponentStyle')
         if key in definitions:
             raise ValueError(f'{source.node.path}: duplicate component style')

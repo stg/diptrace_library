@@ -1,4 +1,4 @@
-"""Binary output through schema 48 by named traversal, without source replay."""
+"""Binary output through schema 52 by named traversal, without source replay."""
 from .dch_encode import Encoder, NUMBER_LIMIT
 from .dch_records import COMPONENT_PLACEMENT,PIN_FONT
 from .conversion import export_diagnostics
@@ -40,7 +40,12 @@ class Writer(Encoder):
         if len(field.arguments) != 1:
             raise ValueError(f'{field.path}: expected one scalar binary value')
         try:
-            self.value(codec,field.values[0])
+            value = field.values[0]
+            if codec == 'integer' and name in ('FontSize', 'NameFontSize', 'MarkingFontSize',
+                    'DefFontSize', 'PartFontSize', 'PinNumberFont', 'BusConnectionFont', 'ZoneFontSize'):
+                from .schematic_fonts import compatibility_size
+                value = compatibility_size(value)
+            self.value(codec,value)
         except ValueError as error:
             raise ValueError(f'{field.path}: {error}') from error
 
@@ -612,8 +617,8 @@ def encode_base(document,*,version=46,compatibility_changes=None):
 @export_diagnostics('dch')
 def encode(document,*,version=46,context=None,report=None):
     """Encode a fully decoded supported document from named facts only."""
-    if version not in (46,47,48):
-        raise ValueError('binary output supports target schemas 46, 47 and 48')
+    if version not in range(46,53):
+        raise ValueError('binary output supports target schemas 46 through 52')
     if not document.complete or document.representation != 'schematic':
         raise ValueError('complete shared schematic data is required for DCH output; normalize source views with as_schematic()')
     from .conversion import info, warn, apply_capacity, nondefault_net_ids
@@ -642,6 +647,8 @@ def encode(document,*,version=46,context=None,report=None):
             warn(report, 'shape-pad-id', 'dch', 'footprint Shape.PadId is omitted by output schema below 48', shapes)
     from .dch_prepare import prepare
     document=prepare(document,context=context,report=report)
+    from .revision_adaptation import prepare_revisions
+    prepare_revisions(document.one('/Schematic'), destination='dch', version=version, report=report)
     apply_capacity(document, destination='dch', report=report)
     choices=getattr(context,'path_variables',None)
     if choices is not None:
@@ -667,6 +674,8 @@ def encode(document,*,version=46,context=None,report=None):
         for pattern in footprints(schematic):
             for shape in pattern.select('Shapes/Shape'):
                 writer.field(shape,'PadId','integer')
+    from .dch_versions import write_extensions
+    write_extensions(writer, schematic)
     if compatibility_changes:
         info(report, 'dch-compatibility-range', 'dch',
              'earlier normalized drawing coordinates are bounded to the DCH writer range',

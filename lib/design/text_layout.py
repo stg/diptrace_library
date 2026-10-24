@@ -70,7 +70,7 @@ class TextLayout:
         lines = [line.values[0] for line in shape.one('TextLine').children('pt')]
         if not lines:
             return anchor, anchor
-        size = max(1, int(shape.scalar('FontSize')))
+        size = max(1., float(shape.scalar('FontSize')))
         point_size = max(1, round(size*self.resolution/1.2*self.font_scale))
         face = shape.scalar('FontName')
         rows = [self.measure_system(visible_text(line), face, point_size) for line in lines]

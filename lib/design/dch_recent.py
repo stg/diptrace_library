@@ -1,4 +1,4 @@
-"""Append-only schema-47/48 fields, using their public XML names."""
+"""Append-only current schematic fields, using public format vocabulary."""
 from .dch_records import footprints
 
 
@@ -21,3 +21,5 @@ def read_recent_extensions(r, schematic):
                 node = shape.add('PadId', -1)
                 node.annotations['default_for_version'] = r.header.version
             node.annotations['asc_omit'] = 'drawing PadId is emitted by XML, not the inspected ASC exporters'
+    from .dch_versions import read_extensions
+    read_extensions(r, schematic)

@@ -37,7 +37,8 @@ def read_project(record, schematic):
     for own, public, names in SIMULATION_FIELDS:
         source = simulator.take(public)
         if source is None:
-            replace_rows(target, own, [])
+            if own != 'sim_digital':
+                replace_rows(target, own, [])
             continue
         present = [index for index, name in enumerate(names) if source.has(name)]
         if present and present != list(range(max(present)+1)):
@@ -48,6 +49,16 @@ def read_project(record, schematic):
             item.finish(allow_text=True)
         source.finish()
         replace_rows(target, own, values)
+    from .simulation import OPTION_FIELDS
+    for group in dict.fromkeys(item[0] for item in OPTION_FIELDS):
+        source = simulator.take(group)
+        if source is None:
+            continue
+        for owner, name, kind, default in OPTION_FIELDS:
+            if owner == group:
+                method = {'text': source.text, 'integer': source.integer, 'boolean': source.boolean}[kind]
+                target.one(group).set_field(name, method(name, default))
+        source.finish()
     target.set_field('gndnum', simulator.integer('GndNetId', -1))
     target.set_field('gndname', simulator.text('GndNetName', ''))
     simulator.finish()
