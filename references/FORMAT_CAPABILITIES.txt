@@ -1,0 +1,915 @@
+Format capabilities and conversion diagnostics
+==============================================
+
+Contract
+--------
+
+DCH, ASC and DCHXML import into one searchable, editable model. Every supported
+meaningful design fact has one authoritative representation. Modernization is
+part of import; adaptation/projection is part of export. See MODEL_CONTRACT.txt
+for the agreed architecture and required model cleanup.
+
+Document.representation identifies the current schematic or syntax API view;
+it is not import history. All normal inputs use schematic. Provenance metadata
+may be cleared without changing reference binding or export eligibility. Source
+inspection views normalize through as_schematic() before semantic conversion;
+incomplete documents remain ineligible for complete output.
+
+Import modernizes supported older representations into the current design.
+Verified DipTrace-style modernization is the preferred default import behavior.
+Unavailable optional/calculated data uses absent values without extra availability
+flags. Destination compatibility changes occur on detached export views. Diagnostics
+distinguish routine normalization, reconstructible data and meaningful loss.
+A destination omission does not remove facts from the authoring model.
+
+Implementation status: entries below record current adapter behavior. Complete
+imports contain current properties and references, without historical snapshots
+or preservation-only StoredData. Older drawing codecs use temporary inputs during
+modernization. The agreed model contract takes precedence. Same-version preservation follows from a complete model
+and correct adapters, without source replay or historical backups.
+
+Severity   Meaning                                      Default behavior
+info       Equivalent normalization or reconstruction   Quiet; collect if wanted
+warning    Meaningful loss, unresolved or deferred data ConversionWarning
+error      Unsupported mapping or invalid input/output  Raise original exception
+
+ConversionReport.notices preserves order across severities and operations.
+ImportReport and ExportReport alias the same type. Its infos, warnings and errors
+views filter those notices. operation identifies import/export; format identifies
+the input/output dialect (destination is a compatible spelling). read(), parse(),
+parse_dch(), read_source(), parse_source() and as_schematic() accept report=.
+A supplied report suppresses automatic Python warnings, but errors still raise.
+Import failures, including file I/O, use import-failed; export failures, including
+file I/O, use export-failed. The original exception type/message remains available.
+Caller report-type errors remain ordinary TypeError. Reusing a report preserves
+notices from each operation. Reports do not add source snapshots or duplicate facts
+to the authoring model. Existing diagnostics/reference issues remain inspectable.
+Notices also expose file (a supplied input/output path, otherwise None) and an
+optional caller label. Labels attribute buffer operations without treating their
+contents as filenames. Reports collect diagnostics, not clean-success history.
+
+Named editing and relationship views
+------------------------------------
+Schema-bound records support named bracket/get/set access, presence checks and
+optional deletion; see ../doc/MODEL.md for the concise access rules.
+Label tuples expose public Show/ShowPart/Align/Horz/Vert/X/Y/Angle members.
+User fields expose Name/Value/Type and component label members. Table/title
+bounds, borders, size rows, drawing points and text rows have named storage;
+their file tuples are generated views. Grid Column/Row, title-block Position,
+and pin/pad/title-field occurrence indices are calculated from current order.
+Self-index bindings are unnecessary when that index is already calculated.
+Authored table-cell bounds remain independent geometric data.
+Footprint holes expose Enabled/Locked/X/Y/Diam/HoleDiam/Group. Library slot and
+variant Index values derive from current order; LibPath is an authored slot field.
+Simulator argument groups use public named fields, with expressions retained as
+text. DCH and XML readers populate them directly; ASC rows normalize on import.
+Writers generate positional arguments/counts, preserving additional ordered Item
+arguments. Cached Verification is a typed seven-boolean compatibility tuple;
+individual check meanings are not claimed.
+Named edits propagate through dependent property/key copies and bound text.
+Prospective validation checks the final values, types, unique keys and guards
+before mutation. Guards also protect unresolved identities against mode changes.
+Attaching records and assigning unused relationship fields activate recognized
+links through targeted prospective plans. Controller changes include affected
+nested sources and target-type constraints. Bound text also follows property
+copy chains, binding and retargeting; conflicting copies and calculation cycles
+fail before mutation. Label text is calculated while its FontType selects a
+component field; switch to literal mode before authoring independent text.
+Document.copy copies owned resolved/unresolved relationships, remapping internal
+targets and retaining external targets. Incoming users stay on the original.
+Root field overrides cannot disagree with managed values. Document.remove
+discards owned links atomically; external dependencies and unresolved scopes
+remain protected. Relationships whose projection fields cross the chosen subtree
+boundary require explicit editing. Field assignment/deletion uses named access.
+Wire/bus rows and point X/Y/Dir, classification rows and declared catalog keys,
+project paths, model text lines, global user-label choices, differential pairs,
+internal pad links, paste segments and pad terminals have named definitions.
+Classification input spellings normalize to CategoryType in the common model.
+Adapters generate their destination names. PadTerminalCount and terminal Index
+derive from the current list, including after insertion/removal/reordering;
+constructors and direct readers do not retain an independent count.
+Page HorzZoneBorder/VertZoneBorder are fractional lengths in shared units.
+Drawing definitions distinguish SymbolDrawing, SheetDrawing and PatternDrawing.
+Their fields follow their current ownership context. Obsolete label, component
+orientation and pad compatibility slots are excluded from editable definitions;
+adapters generate them from current properties. GridSnap and MarkingFontName
+are optional settings. XML library additions such as cached-symbol Datasheet,
+cached-pin SignalDelay and footprint Datasheet/RefDes/Sided also have optional
+named definitions; existing destination omission diagnostics still apply.
+MODEL_REFERENCE.md is generated from the same immutable definitions returned by
+schematic_schema(). It covers the supported record types, fields, tuple members
+and owned collections. Unknown enum meanings and units are left unspecified.
+Declared child records and collections have immutable ownership/cardinality
+metadata, checked by validate(). Empty collections require child() navigation.
+Classification arrays, possible-name lists, paste segments, project path lists
+and cache-link arrays no longer store their serialized row counts in the normal
+model. ASC/DCH output generates those counts. DesignCache_Count retains its
+different meaning as the last active cache-link position. Active cache links
+expose named, reference-managed SlotIndex values; inactive capacity entries
+remain typed literal values.
+Expanding the active prefix registers additional recognized links. Guards use
+current entry positions, not a historical count snapshot. Shrinking or moving an
+active entry beyond the limit requires explicit relationship disposal first;
+otherwise the edit fails atomically. Unresolved entries retain their scopes.
+For agreeing resolved pin/net occurrences, ordered Net.Parts members own the
+pin identity. Pin.Net is the derived/editable reverse view; NetNumber and member
+indices are calculated compatibility values. No duplicate numeric membership
+is stored. Ambiguous, contradictory or missing imported identities are not
+consolidated or guessed. Wire attachments constrain membership edits; coordinated
+connection editing is deferred. All three adapters consume the same relationship.
+
+ExportContext provides shared overrides; DchExportContext, AscExportContext and
+DchXmlExportContext define destination additions. Explicit unsupported options
+raise rather than being ignored. Context.resolved(document) returns independent
+effective choices; a common context accepts format= to resolve for a destination
+before customization. DCH no longer requires an ASC-named configuration and honors
+explicit unit-display and part-font-color overrides on its detached view.
+DCH does not serialize GridSnap; an explicit grid_snap output override is rejected.
+ASC unit overrides affect both its header and settings; the header alone does not
+override stored unit settings or rescale coordinates on import.
+serialize() is the bytes-output counterpart to parse(), sharing write() options.
+validate() audits declared stored values, required fields, ownership and references
+without rewriting values; advanced rebuild() also projects
+compatibility indices. Neither operation invents missing identities.
+
+Preserving the source model is not the same as recovering facts from a converted
+file. Recoverability descriptions must distinguish these two. Successful reimport
+alone does not establish semantic or binary equivalence. An adapter limitation
+does not establish an inherent format limitation.
+
+Current classifications
+-----------------------
+route-modernization       info     Established route geometry/direction repair.
+bound-symbol-text         info     Materialized text follows its current field.
+unresolved-reference      warning  Identity remains unresolved and editable.
+route-normalization-deferred warning Unknown/inconsistent routing constraints;
+                                   retained source geometry needs investigation.
+import-diagnostic         warning  Other retained input uncertainty.
+import-failed             error    Import aborts with the original exception.
+schema-version            info     Selecting a supported earlier output schema;
+                                   affected fields report their own consequences.
+pad-public-ids            info     Resolved targets survive positional rekeying.
+schematic-angle-normalization info Angles normalize and round to quarter turns;
+                                   current authoring angles remain unchanged.
+empty-pad-shape           info     Empty unspecified shape becomes numeric -1.
+dch-compatibility-range   info     Earlier normalized drawing coordinates use
+                                   the binary writer's bounded numeric range;
+                                   current physical geometry is retained.
+global-user-field-choices info     Explicitly requested registry refresh; saved
+                                   choices for used keys retain state/position.
+asc-text-sanitization     warning  Quotes/line breaks become ! without an
+                                   equivalent retained text representation.
+asc-text-encoding         warning  Selected encoding changes text; Windows-1252
+                                   applies its established character substitutions.
+asc-reader-text-normalization warning Receiving application changes literal ! to
+                                   spaces in verified text fields; file retains !.
+asc-cell-text-compatibility info   A redundant old cell string is normalized;
+                                   Cell.Text supplies the current value.
+unresolved-pad-assignment warning  Missing target exports as unassigned.
+unresolved-local-reference warning Missing public group/object keys export as
+                                   unassigned in positional destinations.
+unresolved-picture-reference warning ASC retains an unresolved companion index;
+                                   current application readers cannot resolve it.
+                                   DCH/XML export an unassigned picture source.
+net-hidden-id             warning  Nondefault persistent identity is omitted;
+                                   not assumed disposable or reconstructible.
+shape-pad-id              warning  A stored drawing-to-pad link is omitted.
+inactive-records and
+inactive-library-*        warning  Current projections omit inactive content or
+                                   state; not classified as a calculated cache.
+inactive-empty-drawings   info     Unused undefined slots have no drawing,
+                                   text or identity association to preserve.
+metadata/resource rules   warning  Definition fields or unused resources omitted;
+                                   existing placed instances are not sufficient
+                                   proof that every definition fact regenerates.
+supplier-source-locator   warning  Stored supplier source locator is omitted.
+supplier-quotes           warning  Saved quantity/price rows are omitted.
+supplier-preference       info     XML omits a cached preferred-supplier match.
+supplier-preference-default info   A missing old match flag uses an export default.
+pad-standard-orientation  info     ASC derives its Standard value from angle
+                                   and retains explicit pad geometry.
+pad-standard-style        info     XML reconstructs a differing standard-pad
+                                   selection from explicit style geometry.
+page-title-blocks         warning  ASC omits saved title-grid definitions.
+generated-marking-attributes warning XML currently omits individual generated
+                                   label attributes differing from reconstruction.
+global-marking-font       warning  DCH/ASC cannot carry a named global family
+                                   unambiguously through generated drawings.
+
+Calculated markings can be generated from definitions and context. Their
+reconstruction is routine, not meaningful loss. Numeric quantization and bounded
+text-layout differences are likewise diagnostic unless they change meaning or
+accumulate drift. No notice is needed for every regenerated point or rounded
+number. Arbitrary original compatibility values may be unrecoverable without
+affecting meaning; byte identity alone does not set severity.
+An apparent application rounding bug must not be imitated when our calculation
+is more accurate or stable. Record measured deviations and check meaning and
+repeated-conversion stability; retain authored coordinates rather than introducing
+an incidental tiny shift solely for exact comparison.
+
+Format       Shared input                 Output
+DCH          schemas 29 through 52        schemas 46 through 52
+ASC          schematic dialect 46        schematic dialect 46
+DCHXML       recognized public fields    4.3/4.9/5.2/5.3 vocabulary
+PCB/ELI/LIB  future adapters              future adapters
+
+VERSION
+Net.HiddenId requires output schema >=47; footprint Shape.PadId requires 48.
+Schema selection is info; nondefault omitted gated fields currently warn.
+Unknown versions fail.
+Readers discard redundant earlier occurrences after applying their verified
+modernization. The obsolete cached group member-list slots are consumed and
+discarded, including nonempty lists; writers generate zero counts. Current
+Groups/Pattern_Groups and each object's Group assignment remain editable facts.
+
+The old DCH net/bus selection and compatibility-integer slots have no current
+design meaning. Import consumes them without model properties; DCH output emits
+false and -1. Selection on individual wires and other selectable objects remains
+ordinary editable data. No historical net/bus slot values are retained.
+
+The main DCH input layout milestones are:
+29  Minimum supported layout; older text uses an explicit ANSI encoding.
+30  ERC_PinSuperimpose.
+31  Placed Model3D.Units and pin NetName.
+32  UTF-16 strings, category data, possible pattern names and Manufacturer.
+33  PageHiddenId for sheets and placed components.
+34  Cached component and pattern definitions.
+35  Additional NetClass values and DifferentialPairs.
+36  Fractional document and sheet viewport offsets.
+37  Pin SignalDelay.
+38  Full mask and paste states.
+39  GridSize numerator and divisor.
+40  Expanded drawing geometry, text, labels, groups and pad properties;
+    component Angle changes from serialized degrees to radians.
+41  Stored part-font settings and pin-name/number rotation.
+42  File-backed picture properties and Model3D.KeepPins; obsolete companion
+    picture lookup is no longer used.
+43  Supplier records and placed supplier price rows.
+44  Placed MainSupplier match flags.
+45  Variable paths and ProjectDir.
+46  Simulator records.
+47  Persistent Net.HiddenId values.
+48  Footprint drawing PadId links.
+49  Global net-name font size.
+50  Digital simulation arguments and advanced simulator options.
+51  Sheet drawing PictureFlipped.
+52  Fractional font sizes and monospaced vector-font selection.
+
+These describe input gates, not selectable legacy output schemas. Later field
+occurrences replace obsolete earlier values during decoding. Missing old settings
+use declared defaults or optional context, rather than reading application
+preferences. Remaining legacy migration inputs are documented below and are
+subject to the required cleanup.
+
+RECENT_SCHEMATIC_REVISIONS
+Font sizes remain single numeric model properties, including FontSize,
+NameFontSize, MarkingFontSize, DefFontSize, ZoneFontSize and the global settings.
+Import replaces an older integral compatibility occurrence with its later
+fractional value. XML FontSizeFloat/MarkingFontSizeFloat are syntax for those
+same properties, not additional authoring facts. Writers derive compatibility
+integers using nearest-even rounding; there is no historical integer backup.
+DCH below 52 and earlier XML vocabulary round fractional sizes with warning
+fractional-font-size. ASC dialect 46 can carry fractional values directly.
+
+Monospacing uses FontMono on drawings, dimensions, cells and title contents;
+NameFontMono on pins; DefFontMono on tables; Settings.PartFontMono globally.
+Older inputs use false. DCH/XML schema 52 carry these choices. ASC and earlier
+destinations omit them with warning monospaced-font when selected. The built-in
+layout service supports monospaced vector advances; system-font measurement
+retains fractional sizes until the backend's point-size quantization.
+
+Settings.NetNameFontSize defaults to 4 for older input. DCH/XML targets >=49
+carry it. Earlier targets and ASC omit a nondefault value with warning
+net-name-font. Fractional net-name sizes require DCH/XML >=52.
+
+Simulator options use the public OptionsGeneral, OptionsDC, OptionsAC and
+OptionsTransient groups under ssimulator. Engineering values/expressions remain
+strings; switches and iteration choices are booleans/integers. sim_digital holds
+StartTime, Step, StopTime and GroupBuses arguments; tp=10 selects digital mode.
+DCH/XML targets >=50 carry these settings. Older targets and ASC omit nondefault
+options with warning simulator-options. DCH/XML targets below 50 disable digital
+mode with warning digital-simulation. ASC retains the numeric mode but omits its
+digital argument array. XML 5.2 uses the numeric mode label; 5.3 names it Digital.
+The 5.2 XML reader resets digital arguments even on its own exported files.
+Targets 50/51 retain these arguments in the XML (the fourth uses Item) and warn
+dchxml-reader-digital-arguments for nondefault values. Our reader preserves
+them; use the 5.3 dialect for application readback that also preserves them.
+This is a receiving-reader limitation, not a restriction of XML data storage.
+
+PictureFlipped defaults to false and applies to sheet pictures. DCH >=51 stores
+the drawing flag; XML >=52 exports it on Picture drawings. The 5.2 XML dialect
+omits it despite supporting binary schema 51. ASC and earlier XML/DCH targets
+omit a selected flag with warning picture-flipped. The source
+model is unaffected by all these export adaptations.
+
+XML targets 49..51 use the verified 5.2 dialect with the selected feature subset;
+this does not claim those schemas first appeared in that application release.
+Target 52 uses 5.3 vocabulary. Embedded footprint definitions precede component
+definitions so readers can resolve references in one pass. Definition-local
+enumeration Id attributes are optional bookkeeping, without additional model
+identities; style keys and ordered records establish schematic associations.
+XML 5.3 Pad.DefStyle maps to the existing pad Standard property. Earlier XML
+infers it from default-style selection. The newer vocabulary can therefore share
+equal pad geometry while retaining independent default-style choices.
+Mounting=None and dimension Connected=None map to the existing unassigned -1.
+Optional XML TextWidth/TextHeight are calculated extents; imports use editable
+font, text and anchor facts and do not retain redundant historical measurements.
+Newer placed BaseName, Manufacturer, Datasheet and PartString fields map directly
+to existing component properties.
+
+Measured monospaced vector boxes agree within 0.0001 shared length unit for the
+tested ordinary text, markup and single-code-unit characters at sizes 2..10.
+Unsupported supplementary glyph fallback can differ by up to 0.102 shared unit
+(0.034 mm) over that range. This concerns calculated bounds, not stored text,
+font sizes or anchors, and does not accumulate into authoring coordinates.
+The proportional-font layout profile retains its established metrics; exact
+matching of every application/font engine's calculated text bounds is not claimed.
+
+DOCUMENT_AND_PAGE_SETTINGS
+The actual input signature/version remain diagnostic document metadata. The
+nominal Source identification record does not select the output format/version.
+Root Scale (percent), Xpos and Ypos have named fields; Scale and page scale keep the loaded, bounded values;
+earlier scale values and integer viewport occurrences are discarded. Writers
+derive compatibility integers and repeated layout counts from current values.
+Document and per-page viewports are independent settings. XML stores per-page
+views; import initializes the root viewport from its selected page. XML export
+uses the current per-page views. It does not preserve a separate root viewport.
+Optional Schematic.ActiveSheet stores XML's selected page as a maintained index
+link; reordering pages preserves the selected identity. XML output uses that
+selection, then first-page fallback when absent, with an optional context override.
+Current DCH/ASC adapters omit selection and report a nondefault selection as info;
+page content and per-page view settings remain in the authoring design and output.
+Settings.UnitsMM, UnitsMIL and UnitsINCH own the current display-unit choices.
+ASC's earlier Units header does not override them or rescale physical geometry
+during import. XML physical units are converted into shared lengths and these
+current settings, without a shadow unit selection in metadata. Later edits to
+the settings control default exports from every input format. Optional context
+can select another output view; XML converts lengths while ASC keeps shared
+physical coordinates and writes the selected header.
+Page.FontLineWidth is an ordinary editable zone-font property, mapped directly
+to DCH and DCHXML. ASC has no corresponding field and supplies its default on import.
+Page.PageType owns the current page kind. DCH consumes and discards its earlier
+compatibility occurrence, then writes the current property in both required
+positions. No previous PageType value is retained in the model.
+Settings.GridSize is the sole current grid spacing. DCH import resolves the
+serialized numerator/divisor and discards that redundant pair. The writer derives
+a bounded denominator to retain small-grid precision, then quantizes its numerator.
+Unedited and edited grids follow the same output calculation.
+Older inputs also receive current supplier fields, variable-path properties and
+ProjectDir during import, using declared defaults where no value was stored.
+These properties are searchable and editable before any export. An absent
+MainSupplier preference remains optional; DCH/ASC output supplies the configured
+default only when that current property is absent. Source-version annotations
+do not select supplier defaults.
+The earlier DCH companion-picture count never introduces inline strings. It is
+consumed and discarded; current output writes zero. For pre-42 input with a
+nonzero count, a diagnostic identifies unavailable picture filenames. Import
+consumes one supplied design file. Companion discovery is outside this boundary;
+an unresolved picture key remains ordinary editable reference data. ProjectLibs
+properties describe separate library preferences and are unrelated to this count.
+
+ASC_LABEL_SLOTS
+Modern imports discard obsolete global and instance label slots once modern
+choices are available. Writers generate compatibility slots from those choices;
+ASC's optional legacy_text_slots context can supply an explicit initial output
+state. Import origin does not select a preservation policy. Independent historical
+slots are not design facts in the current
+model. Pre-40 inputs modernize font-dependent label anchors during import, before
+selection-size and origin migration. ImportContext supplies optional environment
+inputs; vector placement is self-contained, and system-font placement uses a
+provided TextLayout or the lazy Windows measurement backend. Stored font settings
+take precedence over defaults. No previous dimensions, origins or pin positions
+are retained after modernization.
+
+SCHEMATIC_DRAWING_DUPLICATES
+TextLine is the current drawing text and TextAngle is its current orientation.
+Modernized imports discard redundant Name/Orientation fields and earlier first
+lines. Writers regenerate them. Generated-marking type tags are derived from
+current Type and MarkingGenerated, without an older competing Type occurrence.
+Default ASC compaction is the same for every import format; an explicit
+compact_inactive=False context retains representable inactive content.
+
+ROUTE_MODERNIZATION
+Route normalization runs during every supported DCH, ASC and DCHXML import.
+Its conditions depend on current geometry and attachments, not source version.
+Verified short-route direction and redundant-handle rules apply to enabled nets;
+an established overlapping-junction loading rule also applies to other nets.
+Unknown or inconsistent attachment identities defer normalization with a diagnostic.
+Normalization reconstructs established short-branch attachments. It is not a
+general routing engine; longer or cyclic attachment constraints can remain
+literal with a deferred-repair warning.
+Loaded routes can include redundant coincident handles. The shared view
+keeps endpoint direction hints and referenced points. Removed handles and previous
+geometry are not retained in the model. Removed-point and junction snapshots
+have no independent design meaning.
+When a redundant coincident handle carries a segment attachment, its adjacent
+direction hint can move onto that retained anchor. Identity links then project
+the updated indices. No earlier geometry snapshot is retained.
+The current geometry and references suffice.
+Ordinary collinear vertices and unverified attachment cases remain unchanged.
+Short free branches on straight host segments can be orthogonalized while
+retaining endpoint identities. The host can contain other bends and coherent
+pin anchors; its points, pin positions and segment identities remain fixed.
+Pin-connected branches retain a coherent fixed pin endpoint. The stored incoming
+direction selects the bend or projection before direction cleanup, rather than
+reclassifying the source diagonal first. A perpendicular pin projection outside
+the host uses a dogleg (a short right-angle detour). Nearby pins stay fixed.
+An overlapping lead follows contiguous host segments to its departure point;
+its identity reference retargets to the corresponding existing host segment.
+Selected endpoint identities survive. Hosts settle before dependent two-point
+branches, whose joins project onto the nearest settled host segment. This makes
+repair independent of line-array order while retaining both pin and connection
+identities. Ties use host segment order. Unresolved, cyclic, longer dependent or
+unknown compatibility-direction constraints defer with a structured warning.
+Repairs keep physical endpoints, authored free leads and valid attachment
+identities, without introducing redundant zero-length handles. Reconstructing an
+inconsistent input can change geometry beyond ordinary numeric rounding; the
+settled result is stable under record reordering and repeated import. Already
+consistent routes do not need such reconstruction. Ordinary authored bends remain
+editable.
+Two-point routes with pin or disconnected endpoints normalize their incoming axis
+flag without keeping an earlier geometry snapshot. Wire/bus
+attachments retain their direction hints until a verified attachment rule applies.
+Independent net cleanup can proceed alongside unresolved bus-only data. Related
+or unknown reference domains defer cleanup; structural edits are checked before
+any point is detached. The import result is authoritative. Remaining
+unsupported attachment transformations require implementation, not source backups.
+
+NUMERIC_PRECISION
+Each quantity has one authoritative numeric value. The separate calculation
+value and source-biased binary arithmetic have been removed. Integers and
+decimal values remain supported; ordinary floating calculations use the current
+value. A uniform real-number type remains a separate simplification choice.
+DCH numbers have four decimal places; XML has
+explicit units and placement radians. Required quantization happens at output.
+Range/type errors fail. Decimal XML unit conversion preserves decimal precision,
+including half-grid coordinates. Component angles have one current degree value.
+Exact byte identity and numerical or text-layout agreement are separate checks;
+minor layout differences must not change identities, connections or accumulate
+through repeated conversions.
+
+Footprint Points_New and current text angles are authoritative. Readers consume
+and discard redundant normalized coordinates and old text orientations after any
+required legacy modernization. Writers regenerate these earlier representations.
+Normalized coordinates can exceed the DCH writer's -100000..100000 range for a
+small selection frame. DCH export bounds only these redundant coordinates and
+reports dch-compatibility-range. Current Points_New remain unchanged. Physical
+coordinates and other numeric fields outside their output domain still fail;
+this is not a general permission to clamp design data.
+
+DISPLAY_COLORS
+Stored FontColor, Color and BrushColor are design facts. The model and writers
+preserve them. An application's display environment can adjust colors that
+match its canvas background while loading a document; such an adjustment is
+not a format requirement or a reason to rewrite the stored colors. Compare
+saved color values separately from environment-dependent exported appearance.
+
+PAD_ORIENTATION_AND_MASK_MODES
+PadAngle is the current footprint rotation in radians. Inverted is a generated
+legacy output flag, absent from the shared model. Binary and ASC compatibility
+flags have different rules: binary tests proximity to the positive upright
+quarter turns; ASC indicates the legacy contour transposition. Their established
+0.001-radian comparisons do not normalize or restrict the current pad angle.
+The primitive binary writer always reads current properties, without selecting
+saved occurrences or a source-version preservation mode.
+Standard is one current choice independent of PadAngle. DCH import and output
+keep it at any pad angle. ASC derives Standard=True only when that choice is true
+and the angle is near zero; other rotations use explicit geometry and report
+pad-standard-orientation as information. The source model remains unchanged.
+XML import sets Standard from selection of the nonempty default pad style key,
+using key identity even when another style has equal attributes. XML output keeps
+an explicit style distinct from an equal default to preserve Standard=False.
+A placed Side override remains independent of that selection. When Standard=True
+accompanies explicit geometry different from the default, XML exports that
+geometry with an individual style and reports pad-standard-style as information.
+The source choice remains in the model; explicit geometry and angles are retained.
+There is no shadow binary flag or earlier default-geometry snapshot.
+ASC imports discard obsolete pad-number, size, shape, contour and swell/shrink
+copies after resolving the current geometry. Writers regenerate those views.
+
+DisableTopMask, DisableBottomMask, DisableTopPaste and DisableBottomPaste each
+contain one current integer mode. Values 0/1/2/3 correspond to Common/Open/Tented/
+By Paste for mask, and Common/Solder/No Solder/Segments for paste. DCH imports
+resolve old booleans and later full modes into that one value. ASC imports discard
+superseded boolean/state prefixes. Writers regenerate them from the current mode;
+only mode 2 sets the old disabled boolean. No older boolean or mode occurrence is
+retained. Current CustomSwell_New and CustomShrink_New remain independent values;
+their older compatibility views follow the active mask/paste modes.
+
+XML_ENUM_ALIASES
+Named XML labels can merge several numeric source states. The Model3D unit
+label Wings imports as -1. Drawing and component-marking alignment labels Left
+and Top likewise import as -1 in their respective horizontal/vertical domains.
+Equivalent numeric XML aliases modernize to the same -1 value during import.
+Other numeric states remain literal; the rule applies only to these established
+unit/alignment domains. DCH and ASC imports keep their own stored values.
+XML export uses public labels on a detached view; spelling and the originating
+numeric alias are available through optional source inspection, not model history.
+This is equivalent normalization, without a notice for each aliased field.
+Table alignment uses its separate Left/Center/Right domain and is unaffected.
+
+INHERITED_DRAWING_WIDTH
+ASC footprint drawings carry both Width (which can request an inherited pen)
+and an earlier width in their compatibility header. The named Width replaces
+that occurrence during import; if absent, the header becomes the current Width.
+There is one editable pen setting, without an earlier display-width backup.
+All exports use the current setting independently of edit history. ASC resolves
+an inherited width through line_width(layer), defaulting to 0.1 shared units;
+an explicit nonnegative Width controls both output occurrences. DCH and XML
+retain the inheritance setting and use the receiving environment for display.
+Changing application pen settings can therefore change inherited appearance;
+the previous environment's calculated header width is not a design override.
+
+XML_GEOMETRY_VOCABULARY
+Library points use Points/Item in 4.3 and Points/Point in 4.9. Drawing text uses
+Lines/Item in 4.3 and TextLines/TextLine in 4.9. Both import into Points_New/pt and
+TextLine/pt. Export selects vocabulary by version. Duplicate alternative
+containers and unknown row kinds fail instead of silently dropping content.
+
+SPICE_MODEL_TEXT
+ModelBody/Line stores ordered model strings, including blank entries. ASC uses
+flat strings inside ModelBody and cl_ModelBody; the adapters map that spelling
+to shared Line records. DCH and XML use their own string-list syntax over the
+same values. Text restrictions still apply at the selected output boundary.
+
+ABSENT_BINARY_FACTS
+Public formats omit some binary revisions, compatibility values and settings.
+Import supplies declared typed defaults where their absence has an established
+meaning. A cross-format cycle cannot recover information absent from an
+intermediate representation. A missing compatibility occurrence need not imply
+meaningful loss when an equivalent state regenerates. No companion-file lookup
+supplies missing facts.
+
+ASC_TEXT_ENCODING
+Encoding is an export context, separate from stored Unicode text and layout.
+Default shared imports and exports use Windows-1252. A UTF-8 BOM identifies that
+input encoding; other byte encodings require an explicit read/parse encoding.
+Valid ANSI bytes are not guessed as UTF-8 merely because both decoders accept them.
+The supported ASC dialect has no per-file codepage selector. UTF-8 output does
+not establish that a receiving application will interpret those bytes as UTF-8.
+Explicit byte encoding overrides the export context before projection. UTF-8
+preserves representable Unicode through library cycles when selected explicitly.
+Syntax inspection can retain its source codec; the shared model does not inherit
+an output encoding from import history. Choose the receiving reader's encoding.
+Windows-1252 best-fit substitutions warn and leave authoring text unchanged. Other
+explicit encodings are strict; unrepresentable text is an invalid output request.
+Quoted-text delimiter restrictions are independent of byte encoding and can still
+produce asc-text-sanitization warnings. A redundant legacy cell Text field uses
+asc-cell-text-compatibility info when TextLine provides the equivalent value;
+restrictions on the actual line strings are reported separately. These are
+current output policies, not a claim that every possible ASC encoding has the
+Windows-1252 character repertoire.
+
+ASC_RECEIVER_TEXT_NORMALIZATION
+The receiving application's ASC reader replaces literal ! with spaces in placed
+component names, RefDes, Value, Manufacturer, PartName, ModelString/ModelBody,
+user-field names/values and sheet drawing text. The adapter reports
+asc-reader-text-normalization as a compatibility warning for those fields while
+retaining the literal punctuation. The library's own ASC reader preserves it;
+DCH/XML avoid this receiver transformation. This is a receiver behavior, not an
+inherent inability of an ASC string to contain !. Other strings have separate
+reader rules; Datasheet does not receive this warning. The notice does not repeat
+asc-text-sanitization when a quote or line break has just become ! on that export.
+
+TABLE_TEXT_VIEWS
+Cell.Text is the single authoritative editable string, including LF separators.
+ASC's modern line list takes precedence during import and becomes that string;
+the redundant older scalar and line-list view are discarded. DCHXML line lists
+also import directly into Text. Writers generate their scalar/line-list forms
+from the current string, without consulting source variants or edit history.
+Import removes trailing blank rows containing only ASCII spaces, including the
+last LF. Interior blank rows, spaces on nonblank rows, tabs and other whitespace
+remain meaningful. This loading rule also applies to title-block cell contents.
+It does not modify ordinary drawing text or retain an earlier cell string.
+DCH and XML export the semantic text. This makes redundant legacy normalization
+informational, while character substitutions in the current lines remain warnings.
+ASC table ColWidths and RowHeights have bare headers; Cells carries its column
+count. The grid and cell coordinates remain editable independently.
+
+USER_FIELD_NAME_IMPORT
+Enabled placed components modernize empty or ASCII-space-only user-field names
+to Untitled during every supported import. Tabs, other whitespace and nonempty
+names retain their spelling. Disabled components and cached definitions retain
+their stored names. This is a current-name loading rule, without an earlier-name
+backup. Authoring may still create an empty name; a subsequent import applies
+the same rule. Global display preferences remain independent editable settings.
+
+XML_EDIT_VALIDITY
+Strings retain their source code units in the shared model. XML output rejects
+characters outside XML 1.0 instead of replacing them silently. Invalid edited
+output produces an error notice and raises; it does not alter the source model.
+Optional XML syntax inspection separately validates comments, processing
+instructions and the single Source element. Normal design editing and conversion
+do not require a syntax view or retain that source structure.
+
+INACTIVE_RECORDS
+Enabled state and record data remain independently owned. ASC/XML projection
+filters selected inactive record kinds; XML retains enabled flags where its
+records support them. Removing a referenced record fails. Filtering occurs only
+on an export view and reports inactive-records with the omitted record paths.
+Empty inactive Undefined drawings with no text, geometry or identity association
+produce inactive-empty-drawings info instead. Their unused appearance attributes
+and slot positions are not meaningful design loss. Other inactive content and
+unestablished retained variants remain warnings; no blanket cache classification
+is inferred from an inactive flag.
+ASC can carry these inactive states. AscExportContext.compact_inactive explicitly
+selects retention or compaction; the default compacts independently of input format.
+Placed footprint compaction removes disabled dimensions and inactive interior
+pad, drawing and hole records. Pads are active when Number_New identifies their
+current array position; drawings use a positive Type; holes use their enabled
+flag. The first and last pad, drawing and hole boundary records remain.
+Attachments follow their target identities through index changes. Cached
+definition records are independent of this placed-record compaction. Retained
+unresolved links still guard their target arrays; compaction does not invent
+a replacement link.
+XML keeps inactive nets, buses, page connectors and groups. Other inactive placed
+records are omitted with a warning. Inactive cached symbol pins/drawings and
+footprint dimensions produce inactive-library-records. The cached symbol's own
+Enabled flag has no XML slot: its definition content remains exported, and
+inactive-library-state reports the omitted activation state.
+An omitted inactive source may own unresolved links: those issues are discarded
+only from the export view along with the source, and the omission warns. An
+incoming link from retained data still prevents removing its target.
+
+GLOBAL_USER_FIELD_REGISTRY
+Stored global user-field choices remain editable and are preserved by default.
+An export context can request refresh_user_fields=True to rebuild choices from
+enabled components in first-use key order. New keys use state 2 and position 7;
+matching saved choices supply state and position. Omitted or replaced choices
+produce global-user-field-choices information. Only the detached export changes.
+This refresh is an explicit normalization request, not automatic import loss.
+
+CACHED_SYMBOL_METADATA
+Verification contains seven current boolean checks. Earlier shorter lists gain
+false entries; longer lists consume and ignore obsolete extra entries during
+import. Writers emit the current seven checks. No earlier list is retained.
+ModelNote is an ordinary editable cached-symbol property. DCH writes it directly.
+Current ASC/XML adapters omit nonempty notes with cached-model-note warnings;
+this is a mapping limit, not an established inherent XML format limitation.
+Cached Datasheet, pin SignalDelay and label-only choices are ordinary editable
+fields. Current DCH/ASC mappings do not emit every cached XML field. Omissions warn;
+XML data stays available for later XML output, separately from instance overrides.
+
+SUPPLIER_DATA
+Suppliers keeps SourceLocator, Prices/Quote and MainSupplier as independent typed
+facts alongside PartNumber, Manufacturer, Pattern, Supplier and Currency. Current
+ASC and XML projections omit the source locator and quantity/price rows. These
+saved values are not recoverable from the converted file alone. Omission rules
+warn once per kind, with affected paths, without changing the source. An external
+supplier service might provide newer quotes, but that is not reconstruction of
+the saved values. These are documented
+projection limits, not a claim that every possible text dialect lacks such data.
+MainSupplier is a cached match between Supplier and an environment's preferred
+supplier, rather than an independently selected supplier. XML retains the chosen
+Supplier and omits this flag with supplier-preference information. The original
+cached bit is preserved in the shared model; reproducing it would require its
+earlier environment, but it is not needed to retain the supplier assignment.
+Before schema 44, no MainSupplier flag is saved. DCH/ASC export supplies
+False, or AscExportContext.default_main_supplier, for those absent flags and
+reports supplier-preference-default information. Existing explicit flags win.
+This is a declared fallback, not an inference from the supplier name,
+locator or a local application's preferences. The imported model keeps absence.
+
+PAGE_TITLE_GRIDS
+Pages/Page/TitleBlocks/TitleBlock owns the selected name, dimensions, row heights,
+column widths, cells and contents. DCH and XML preserve populated grids, including
+an unnamed grid; XML omits empty default slots. ASC currently omits the definitions
+and reports page-title-blocks. Rendered lines or text do not establish that the
+editable grid definition can be recovered. Import does not replace the definition
+with a drawing or discard an unnamed grid to match another exporter's policy.
+
+FOOTPRINT_METADATA
+Footprint Datasheet, RefDes prefix and default pad side remain separate fields.
+Known DCH/ASC omissions warn and continue without changing source data.
+Cached ASC footprints carry Datasheet directly; that field is retained through
+ASC import/export. Embedded DCH footprints do not carry it.
+An owned Pattern may have an empty name; this does not remove its geometry,
+settings or pin-to-pad relationships. XML emits the complete definition under a
+generated style key, including an empty Name. Complete projected content controls
+sharing. Clearing a name does not detach pad identities or discard the record.
+When no real local pads exist, an ordinary Pin.Number remains a literal value;
+it does not create a missing link into an absent pad domain. Explicit unresolved
+public pad keys remain guarded references. A newly populated target domain needs
+ordinary explicit binding before subsequent reference-driven output.
+
+EMPTY_PAD_SHAPE
+XML can contain an explicitly empty pad-shape label. The shared PadShape,
+PadShape_New or terminal Type retains that empty string. XML output preserves
+it. DCH and ASC require a number; export uses the established -1 fallback on a
+detached view and reports empty-pad-shape. An empty label does not identify an
+original numeric shape, so import does not invent that missing number.
+
+PUBLIC_PAD_KEYS
+XML pad keys and positional pad numbers are distinct facts. Imported pad keys
+remain editable in Pad.Id. Within a real local pad domain, a missing assignment uses
+Pin/UnresolvedKeys/Key("PadId", key), with Number=-1 and a scoped unresolved
+reference. XML output preserves those keys without creating a false
+link. Reordering the unresolved target collection requires resolving or clearing
+the assignment first. DCH/ASC use positional IDs: resolved rekeying is info;
+an unresolved assignment exported as unassigned is a warning. These rules leave
+the shared source facts intact.
+
+CATEGORY_REFERENCES
+Component_CategoryName/Index and Pattern_CategoryName/Index retain classification
+labels and local keys. CategoryTypes rows retain type/subtype names and keys.
+XML import resolves available catalog labels; an unnamed reference can retain
+its unresolved integer key without inventing a catalog entry. XML output keeps
+that reference and allocates named category, type and subtype keys around the
+missing keys in their respective scopes. Labels with an unassigned source index
+still export as named classifications. These changes affect only the output view.
+Declared catalog resources retain their keys, order and nested classifications,
+including unnamed resources and equal labels with distinct keys. An unnamed
+declared resource is distinct from an unnamed reference to an absent resource.
+Component and pattern catalogs use separate scopes; nested keys belong to their
+parent category or type. Redundant ASC catalog counts are consumed on import
+and regenerated by that writer, rather than becoming shared model arguments.
+
+STANDALONE_LIBRARY_RESOURCES
+CacheLib/Patterns, CacheLib/PadStyles and PatternCategories retain unused resources
+and labels. XML exports them. DCH/ASC warn when omitting standalone resources
+that their embedded schematic representation cannot carry. An unresolved external
+reference requiring an unimplemented resource mapping still fails.
+
+ENVIRONMENT_AND_CALCULATED_MARKINGS
+Font metrics, display choices, path aliases and picture resources are explicit
+context overrides. Context is optional: stored settings are used first, then
+standard mm/vector/font-size-2 defaults. Explicit marking styles affect only the
+output view. DCH and ASC always rebuild generated label text and anchors from
+current component text and label choices, independently of input format or
+version. Points_New and TextLine may be absent on a generated label. Its drawing
+record owns appearance settings; its calculated text and position never override
+the label definition. Authored drawings retain their own placement and appearance.
+FontType/TextShow selects literal text (zero), a component property (Name, RefDes,
+Value, Part Name, Manufacturer, Datasheet), or a user field. Field-bound text is
+refreshed on import and in every detached export view, including authored drawings.
+Editing a component property therefore updates its bound text in every writer.
+Inactive drawings and unknown binding kinds retain their current text. Name and
+RefDes suffix choices use instance settings or the global choice. Global Common
+suffix choices modernize to RefDes Show and Name Hide; component Common remains
+an inheritance choice. Generated labels keep the suffix decision from layout.
+Regeneration retains
+existing drawing identities and never reuses inactive authored content or a
+referenced empty slot. XML emits definitions without materializing these caches.
+XML automatic marking definitions carry visibility and placement, with global
+appearance settings. They do not carry individual generated-label FontColor,
+PenWidth, LineSpacing, TextAlign, Locked, Group or unresolved local-key overrides. Differences from
+fresh-label defaults and exported global color settings warn with
+generated-marking-attributes; the source properties stay intact. Default or
+equivalent settings need no loss notice. The supported application readers also
+discard these overrides on their own XML export/reimport. XML symbol TextShow
+drawings can retain individual appearance and bind component text, but use authored
+geometry and visibility instead of automatic marking definitions. Export does not
+silently substitute that different editing behavior. DCH and ASC retain the
+automatic label's independent appearance; the authoring model remains unchanged.
+The marking family uses an explicit context or stored Settings.MarkingFontName.
+When neither exists, a single common family on active generated labels supplies
+new labels and XML's global choice without requiring context. Empty and named
+families together are ambiguous; existing individual choices remain intact.
+A differing individual family that XML's global mapping cannot retain warns with
+generated-marking-attributes. XML writes the global family even with vector text,
+preserving the dormant system-font choice. DCH/ASC carry families on generated
+drawings; a named global choice not recoverable from those drawings warns with
+global-marking-font. An empty system family is valid and leaves font selection
+to the receiving environment; callers can override it for reproducible layout.
+None of these export choices changes the current authoring model.
+FontType values for user-field labels are positional output projections of
+marking-user-field identity references. Reordering a UserFields collection keeps
+each label's appearance attached to the same field. A missing field remains an
+unresolved local link; a later binding pass cannot silently assign another field
+to its old literal index. Deleting or moving a referenced field requires explicit
+reference editing.
+There is no source-origin availability flag or manual marking refresh option.
+System-font calculations use an injected TextLayout service or the lazy optional
+Windows backend; vector calculations require neither. Unresolved required
+resources fail rather than being fabricated.
+The Windows backend measures with GDI and normal installed-font selection,
+including bitmap/system faces; it does not force TrueType substitution. DPI is
+an explicit backend setting. Vector layout uses character advance and line metrics
+in an independent profile, without glyph contours. Those metrics are observable
+from ordinary exported text rectangles; no application is needed at library runtime.
+Pre-42 picture geometry modernizes during import into one anchor, current
+dimensions and current text properties. Earlier corners and migration flags are
+not retained.
+
+PICTURE_SOURCE_REFERENCES
+A picture source is a filename with an optional variable expression, an unresolved
+companion-table reference, or unassigned. Picture_File/Picture_File_Variable hold
+the filename form; BitmapIndex holds an unresolved companion index. An explicit
+current path resolves that index. A blank path and index -1 represent unassigned;
+there is no additional availability flag or historical source reference.
+Import reads one supplied file and never searches for picture companions. An old
+DCH index cannot recover a filename absent from that file. The picture drawing,
+geometry and unresolved key remain editable. Exports use the current path or an
+optional explicit legacy_picture_files table on a detached view and clear the
+resolved index. A variable path may remain meaningful without an expanded path;
+optional environment context controls path expansion.
+ASC has a BitmapIndex field and can retain an unresolved integer through library
+cycles. A warning identifies that current application readers do not resolve this
+obsolete reference. DCHXML has no corresponding picture index; supported DCH output
+schemas use file-backed pictures. With no resolution, these writers keep the
+drawing and geometry, export an unassigned source, and report
+unresolved-picture-reference as a warning. The authoring reference remains intact.
+An already unassigned picture needs no loss notice. Invalid typed reference values
+remain errors. Export never repeats geometry migration, discovers companions or
+uses edit history to select a filename.
+
+REFERENCES_AND_INCOMPLETE_LINKS
+The graph owns identities and retains original literal keys and scoped unresolved
+values. Rebuild projects current indices and follows names by identity. Ambiguous
+or incompatible edits fail. StringNumber and RefDes express hierarchy connector
+names; ModelSig is independent. Wires can retain Page=-1 without being attached
+to a sheet. Missing group IDs in an empty local group space remain unresolved;
+missing local group/object keys in nonempty remapped spaces retain their literal
+key in UnresolvedKeys/Key alongside an unassigned positional field.
+The two key arguments are the field name and missing integer key. XML output
+reserves those unresolved keys when allocating target IDs, preventing an absent
+key from becoming a valid association. Related structural edits remain guarded.
+DCH/ASC export unassigns the missing targets only on its detached view and emits
+unresolved-local-reference. This applies to library groups, drawing-to-pad links,
+ordinary dimension targets, internal-connection pads and symbol pin assignments.
+There is one unresolved-key representation, including when copying an owned
+definition into a placed instance; keys are reference facts, not source history.
+Wire-to-wire joins
+resolve within their containing net. The redundant
+ConnectB occurrence can disagree with that identity; import preserves its saved
+value, and index rebuilding projects the current owner.
+Bus-to-bus joins are similarly local. During DCH import, segment indices outside a resolved
+route's valid range bind to its nearest valid segment, while retaining the saved
+index until rebuild. Later reference binding does not infer clamping from import
+origin. A route with fewer than two points has no valid segment.
+Unresolved local joins watch their owner's route array and point arrays;
+cross-bus joins also watch the bus collection. Unrelated collections remain
+editable. Original unresolved fields can remain in output when those domains
+have not changed. Related array edits require resolving or clearing the link.
+Canonical renumbering also preflights the whole unresolved key: even with unchanged
+record order, assigning positional keys can give a missing key an unrelated target.
+Colliding renumbering fails before projected values change. Noncolliding numbering
+and unrelated collections remain editable. The rule prevents accidental
+reassignment without inventing repairs.
+An existing unresolved source identity is not automatically invalid output.
+Export with preserved one-point routes is not canonical topology repair or a
+promise of exact agreement with application output.
+
+DIMENSION_ATTACHMENT_SELECTORS
+Known XML Connected/Object/SubObject/Point fields are retained as typed facts.
+Ordinary pad, shape and hole attachments use SubObject; Object is unused and
+retained. XML public keys are mapped into the shared local identity graph.
+Polyline and polygon drawing anchors use zero-based point positions. Terminal
+attachments instead use a one-based real-pad ordinal in Object, a zero-based
+terminal position in SubObject, and one-based polygon points in Point; zero
+selects the terminal center. Nonpolygon and nonpositive terminal anchors retain
+their literal anchor choice. These identities follow pad, terminal and point
+reordering across all three exports. Boundary pad/shape/hole slots are excluded.
+
+Invalid or unknown selectors retain their literal values and unresolved issues;
+they do not make import fail. Known domains guard their own target collections,
+allowing unrelated structural edits. Missing XML object keys in an empty target
+collection remain unresolved; missing public keys in a nonempty local object
+space use the separate unresolved-key representation above. The syntax-level XML view
+binds ordinary targets and drawing points; terminal selectors remain unresolved
+there, scoped to their pad/style data. Unattached selectors retain their values
+without target bindings. No coordinate repair or automatic detachment is applied.
+
+SCHEMATIC_ANGLES
+The model accepts finite angles beyond a full turn. All schematic writers
+normalize modulo one turn and round to the nearest quarter, with half-way ties
+to an even quarter. Output uses either an orientation 0..3 or a clean angle.
+Placement uses degrees; drawing/label angles use radians. Projection leaves the
+authoring model unchanged and can report schematic-angle-normalization as info.
+Footprint pad/dimension and 3D angle domains are separate and are not quantized
+by this schematic policy.
+
+GEOMETRY_AND_IMPLEMENTATION_LIMITS
+XML placement uses a finite discrete-orientation calculation. Small and negative
+angles retain their literal angle with unrotated definition geometry. Positive
+angles select a quarter orientation after full-turn normalization. The component
+Angle records this interpreted placement. No original-angle or placement-angle
+backup competes with it. All writers use the current angle. Some positive angles have
+no terminating discrete orientation and produce a bounded input error.
+Unknown attachment modes retain literal selectors and unresolved-reference
+guards; their target semantics cannot be inferred. Unrecognized named XML enum
+labels and unsupported public fields still need an explicit mapping. Missing
+nonlocal styles or required resource definitions remain import errors.
+
+Future PCB candidate: POUR_FILL_PRESENCE
+--------------------------------------
+
+Proposed model: filled state plus optional fill geometry. Missing calculated
+geometry uses None, without an extra availability flag. A known empty collection
+can differ from absent geometry where the domain requires that distinction.
+Same-format output should retain 'filled, fill data absent' where permitted.
+If another destination requires geometry for filled state, export as unfilled
+on a clone and report the conversion. Otherwise keep the original combination.
+Omitting reconstructible calculated fill is informational. Losing a pour
+definition or authored clearance settings is a warning, separate from its fill
+cache. Exact PCB adapter rules remain to be established; this is not a verified
+claim about current PCB/XML capacities.
+
+Add a rule
+----------
+
+Record a stable ID, source fields/states, model paths and invariants, each target's
+capacity, same-format behavior, export precondition/action, calculated-data
+availability, required context, info/warning/error behavior, tests and open limits.
+Keep format inability distinct from an unfinished adapter. Never weaken the
+shared model because another export cannot carry a source variant.
