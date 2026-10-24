@@ -179,6 +179,12 @@ deciding whether the library is suitable for your work and verifying the designs
 you produce with it. The library is provided without warranty; see the
 [license](LICENSE) for the full terms.
 
+## Requirements
+
+Tested with **CPython 3.12.3 on Windows**. The active library and applications
+use only the Python standard library; no third-party Python packages are needed.
+The Git companion also requires Git installed and available on `PATH`.
+
 ## Things that use the library
 
 The [applications](apps/README.md) are deliberately basic. They are useful tools,
@@ -192,7 +198,7 @@ but show only a small part of what the library can do:
 The [three schematic examples](examples/schematic/README.md) cover creation,
 inspection/editing and conversion. For your own scripts, start with
 [Getting started](doc/GETTING_STARTED.md) and [the model guide](doc/MODEL.md).
-The [API guide](doc/API.md) covers the supported operations with working examples;
+The [API reference](doc/API.md) covers the supported operations with focused examples;
 the [schematic catalogue](doc/SCHEMATIC.md) lists every declared record and field.
 
 ## Bugs and contributions

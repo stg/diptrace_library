@@ -14,4 +14,5 @@ python -m examples.schematic.convert edited.dch edited.dchxml --version 52
 - `convert`: format conversion, optional context and shared diagnostics.
 
 Buffer equivalents are `parse(data, format=...)` and `serialize(design, format=...)`.
-See [getting started](../../doc/GETTING_STARTED.md) for versions and access rules.
+See [getting started](../../doc/GETTING_STARTED.md) for a first workflow, or the
+[API reference](../../doc/API.md) for operations, options and version selection.

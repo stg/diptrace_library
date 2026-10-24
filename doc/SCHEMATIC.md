@@ -1,7 +1,7 @@
 # Schematic model reference
 
 Generated from `schematic_schema()`. Use this as a lookup reference; start with the
-[getting started](GETTING_STARTED.md), [API guide](API.md) and [model guide](MODEL.md).
+[getting started](GETTING_STARTED.md), [API reference](API.md) and [model guide](MODEL.md).
 
 Normal DCH, ASC and DCHXML imports share these definitions. Record type names
 identify schemas; owned-child names are the names used in paths. Fields hold
