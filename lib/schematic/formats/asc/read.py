@@ -9,8 +9,9 @@ from ....common.model import (Element)
 from ..dch.data import (stored_data)
 from .import_graphics import (unpack_pattern, unpack_symbol_shape)
 from .import_cache import (unpack_cache)
-from .model_body import (unpack_model_body)
-from ...model.cell_text import (unpack_asc_cell_text)
+from ....common.asc_model_body import unpack_model_body
+from ....common.asc_library import unpack_project_paths
+from ....common.cell_text import (unpack_asc_cell_text)
 
 
 BOOLEAN_FIELDS = set('''Enabled Selected Connected Locked Inverted SurfacePad
@@ -86,19 +87,6 @@ def _pages(schematic):
                 grid.add(name)
 
 
-def _paths(schematic):
-    for name, kind in (('ProjectLibs_Folders', 'Folder'), ('ProjectLibs_Libs', 'Lib')):
-        container = schematic.one(name)
-        records = container.children()
-        if len(records) % 2:
-            raise ValueError(f'{container.path}: expected actual/variable path pairs')
-        for actual, variable in zip(records[::2], records[1::2]):
-            if actual.kind != kind or variable.kind != kind+'_Variable':
-                raise ValueError(f'{container.path}: expected {kind}/{kind}_Variable siblings')
-            variable.kind = 'VariablePath'
-            variable.move_to(actual)
-
-
 def _tables(schematic):
     for table in schematic.select('Tables/Table'):
         columns = len(table.select('ColWidths/pt'))
@@ -134,7 +122,7 @@ def import_schematic(document):
     units.detach()
     schematic = view.one('/Schematic')
     _pages(schematic)
-    _paths(schematic)
+    unpack_project_paths(schematic)
     _tables(schematic)
     for part in schematic.select('Components/Part'):
         unpack_model_body(part.one('ModelBody'))
@@ -171,8 +159,8 @@ def import_schematic(document):
     from ...model.refs import (bind_schematic_references)
     from ...model.user_fields import (modernize_user_field_names)
     modernize_user_field_names(schematic)
-    from ...model.cell_text import (modernize_cell_text)
-    modernize_cell_text(schematic)
+    from ....common.cell_text import (modernize_cell_text)
+    modernize_cell_text(schematic, paths=('Tables/Table/Cells/Cell', 'Pages/Page/TitleBlocks/TitleBlock/Contents/Content'))
     bind_schematic_references(view)
     from ...model.symbol_text import (refresh_symbol_text)
     refresh_symbol_text(view)

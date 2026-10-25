@@ -1,7 +1,7 @@
 """Capability declarations agree with actual adapter boundaries."""
 import unittest
 
-from lib import ConversionReport, format_capabilities, new_schematic, parse, serialize
+from lib import ConversionReport, UnsupportedFileError, format_capabilities, new_schematic, parse, serialize
 from lib.schematic.formats.dch.binary import MAX_KNOWN_VERSION, MIN_VERSION
 from lib.schematic.formats.dch.versions import xml_application_version
 
@@ -10,7 +10,7 @@ class CapabilityTests(unittest.TestCase):
     def test_every_declared_output_is_written_and_read(self):
         document = new_schematic()
         for format in ('dch', 'asc', 'dchxml'):
-            for version in format_capabilities(format).write_versions:
+            for version in format_capabilities(format, family='schematic').write_versions:
                 with self.subTest(format=format, version=version):
                     data = serialize(document, format=format, version=version, report=ConversionReport())
                     restored = parse(data, format=format)
@@ -42,3 +42,10 @@ class CapabilityTests(unittest.TestCase):
                 serialize(new_schematic(), format=format, version=latest + 1)
         with self.assertRaises(ValueError):
             format_capabilities('pcb')
+
+    def test_unsupported_output_version_has_shared_support_metadata(self):
+        with self.assertRaises(UnsupportedFileError) as stopped:
+            format_capabilities('dch').output_version(53)
+        error = stopped.exception
+        self.assertEqual((error.format, error.family, error.version, error.reason),
+                         ('dch', 'schematic', 53, 'version'))

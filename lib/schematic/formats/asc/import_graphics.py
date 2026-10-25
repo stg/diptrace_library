@@ -3,71 +3,8 @@
 Flat footprint drawing siblings become owned drawing records. Compatibility
 coordinates remain typed facts; current physical points remain authoritative.
 """
-from ....common.model import (Element)
+from ....common.asc_footprints import unpack_model, unpack_terminals, unpack_pattern_shapes
 from ...model.pad_data import (mask_state)
-
-
-def unpack_terminals(parent):
-    count = parent.one('PadTerminalCount')
-    terminals = count.children('PadTerminal')
-    if count.values != (len(terminals),):
-        raise ValueError(f'{count.path}: terminal count does not match records')
-    for index, terminal in enumerate(terminals):
-        terminal.set_values(index)
-        terminal.move_to(parent)
-
-
-def unpack_model(model):
-    values = model.one('pt').arguments
-    if len(values) != 18:
-        raise ValueError(f'{model.path}: expected 18 model placement values')
-    model.one('pt').detach()
-    for index, name in enumerate(('Rotate', 'Offset', 'Zoom')):
-        vector = model.add(name)
-        for axis, value in zip(('X', 'Y', 'Z'), values[index*3:index*3+3]):
-            vector.add(axis, value)
-    for name, value in zip(('Mirror', 'NoSearch', 'Units', 'IPC_XOff', 'IPC_YOff',
-                           'AutoHeight', 'AutoColor', 'Type', 'KeepPins'), values[9:]):
-        model.add(name, value)
-
-
-def unpack_pattern_shapes(container):
-    records, current = [], None
-    for record in list(container.children()):
-        if record.kind == 'Shape':
-            if len(record.arguments) != 18:
-                raise ValueError(f'{record.path}: expected 18 footprint drawing values')
-            current = record
-            records.append((record, []))
-        elif current is None:
-            raise ValueError(f'{record.path}: footprint field precedes its Shape')
-        else:
-            records[-1][1].append(record)
-    for index, (shape, siblings) in enumerate(records):
-        header = shape.arguments
-        shape.set_values(index)
-        shape.add('Type', header[0])
-        shape.add('Locked', header[1])
-        shape.add('FontName', header[10])
-        shape.add('VectorFont', header[11])
-        shape.add('FontSize', header[12])
-        shape.add('FontScale', header[13])
-        shape.add('FontWidth', header[14])
-        shape.add('TextShow', header[17])
-        for sibling in siblings:
-            sibling.move_to(shape)
-        # The named pen setting replaces the header's older occurrence. If
-        # absent, the header supplies the current width, not a second choice.
-        if shape.child('Width') is None:
-            shape.add('Width', header[16])
-        points = shape.child('Points')
-        if points is not None:
-            points.detach()
-        if shape.child('Points_New') is None:
-            shape.add('Points_New')
-        if shape.child('TextLine') is None:
-            shape.add('TextLine').add('pt', header[9])
-        shape.add('PadId', -1).annotations['asc_omit'] = 'not present in ASC'
 
 
 def unpack_symbol_shape(shape):

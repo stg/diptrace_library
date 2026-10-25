@@ -3,13 +3,11 @@
 Label settings and component text are the authoring inputs. A cached drawing may
 provide its own retained appearance fields; new drawings use explicit defaults.
 """
-from dataclasses import dataclass
 import math
 
 from .legacy_labels import (LabelSettings, label_side)
 from ...common.model import (Element)
-from ...common.text.vector import (builtin_vector_metrics)
-from .vector_text import (_vector_pen, _scaled_width)
+from ...common.text.markings import MarkingStyle, marking_width, marking_height
 from ..model.user_fields import (global_user_field_choice)
 
 
@@ -21,18 +19,6 @@ def _text_field(part, name):
     if value.kind != 'string' or value.unit:
         raise TypeError(f'{field.path}: marking content requires text')
     return value.value
-
-
-@dataclass(frozen=True)
-class MarkingStyle:
-    font_size: float = 2
-    font_name: str = ''
-    vector: bool = True
-    font_width: float = -2.
-    font_scale: float = 1.
-    font_color: int = 0
-    pen_width: float = 1.
-    mono: bool = False
 
 
 def common_marking_family(schematic):
@@ -84,27 +70,6 @@ def apply_marking_style(document, style):
     settings.set_field('PartFontMono', style.mono)
     settings.set_field('PartFontColor', style.font_color)
     settings.set_field('MarkingFontName', style.font_name)
-
-
-def marking_width(text, style, *, text_layout=None):
-    if style.vector:
-        pen = _vector_pen(style.font_size, style.font_width)
-        metrics = builtin_vector_metrics().measure(text, size=style.font_size/1.3, spacing=pen*2, monospaced=style.mono)
-        return _scaled_width(metrics.width, style.font_scale)+pen
-    if text_layout is None or text_layout.measure_system is None:
-        raise NotImplementedError('system font measurements are required for automatic marking placement')
-    size = max(1, round(style.font_size*text_layout.resolution/1.2*text_layout.font_scale))
-    return text_layout.measure_system(text, style.font_name, size).width/text_layout.resolution
-
-
-def marking_height(text, style, *, text_layout=None):
-    if style.vector:
-        pen = _vector_pen(style.font_size, style.font_width)
-        return builtin_vector_metrics().measure(text, size=style.font_size/1.3, spacing=pen*2, monospaced=style.mono).height+pen
-    if text_layout is None or text_layout.measure_system is None:
-        raise NotImplementedError('system font measurements are required for automatic marking rows')
-    size = max(1, round(style.font_size*text_layout.resolution/1.2*text_layout.font_scale))
-    return text_layout.measure_system(text, style.font_name, size).height/text_layout.resolution
 
 
 def build_marking(text, font_type, settings, *, dimensions, style=MarkingStyle(),

@@ -2,6 +2,7 @@
 from ...model.fonts import (binary_fonts, complete_fonts, compatibility_size)
 from ...model.simulation import (OPTION_FIELDS, complete_options)
 from ..capabilities import DCHXML, XML_APPLICATION_VERSIONS
+from ....common.font_codec import read_font_properties
 
 
 def xml_application_version(version):
@@ -29,10 +30,7 @@ def read_extensions(reader, schematic):
         for shape in schematic.select('Shapes/Shape'):
             reader.field(shape, 'PictureFlipped', 'boolean', replace=True)
     if version >= 52:
-        for node, size, mono in binary_fonts(schematic):
-            if mono:
-                reader.field(node, mono, 'boolean', replace=True)
-            reader.field(node, size, 'number', replace=True)
+        read_font_properties(reader, binary_fonts(schematic))
 
 
 def write_extensions(writer, schematic):

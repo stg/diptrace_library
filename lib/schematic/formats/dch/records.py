@@ -3,6 +3,7 @@
 Layouts describe only the wire order and public document fields. Traversals
 combine equivalent content from placed instances and cached definitions.
 """
+from ....common.symbol_codec import PIN_FONT
 
 COMPONENT_PLACEMENT = (
     ("Enabled", "boolean"), ("Selected", "boolean"),
@@ -10,5 +11,3 @@ COMPONENT_PLACEMENT = (
     ("Page", "integer"), ("Orientation", "integer"), ("Group", "integer"), ("Number", "integer"),
     ("X", "number"), ("Y", "number"), ("Width", "number"), ("Height", "number"),
 )
-
-PIN_FONT = (("NameFontSize", "integer"), ("NameFontWidth", "number"), ("NameFontScale", "number"))

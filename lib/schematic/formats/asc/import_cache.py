@@ -1,7 +1,8 @@
 """Public cl_* cache records into named symbol/footprint definitions."""
 from ....common.model import (Element)
 from .import_graphics import (unpack_pattern, unpack_symbol_shape)
-from .model_body import (unpack_model_body)
+from ....common.asc_model_body import unpack_model_body
+from ....common.asc_library import unprefix, unpack_catalogs
 
 
 def _rename(parent, names):
@@ -60,35 +61,11 @@ def _part(part):
 def unpack_cache(schematic):
     from ...model.schema import (_known, _rows)
     old = schematic.one('CacheLib')
-    for node in old.walk(include_self=True):
-        if node.kind.startswith('cl_'):
-            node.kind = node.kind[3:]
+    unprefix(old)
     _known(old, ('Categories', 'Subfolders', 'Components'))
     categories, folders, components = (old.one(name) for name in ('Categories', 'Subfolders', 'Components'))
     _known(components, ('Component', 'Design_Cache_specific'), repeated=('Component',))
-    for container, kind in ((categories, 'Category'), (folders, 'Subfolder')):
-        if (len(container.arguments) != 1 or container.arguments[0].kind != 'number'
-                or container.arguments[0].unit or container.values[0] != len(container.children(kind))):
-            raise ValueError(f'{container.path}: invalid catalog record count')
-        container.set_values()
-    for category in _rows(categories, 'Category'):
-        types = _rows(category, 'Type')
-        if len(category.arguments) != 3 or category.values[2] != len(types):
-            raise ValueError(f'{category.path}: invalid category type count')
-        category.set_values(*category.arguments[:2])
-        for kind in types:
-            subtypes = _rows(kind, 'SubType')
-            if len(kind.arguments) != 3 or kind.values[2] != len(subtypes):
-                raise ValueError(f'{kind.path}: invalid category subtype count')
-            kind.set_values(*kind.arguments[:2])
-            for subtype in subtypes:
-                if subtype.children() or len(subtype.arguments) != 2:
-                    raise ValueError(f'{subtype.path}: unsupported category subtype')
-                subtype.kind = 'Subtype'
-    for folder in _rows(folders, 'Subfolder'):
-        if folder.children() or len(folder.arguments) != 1:
-            raise ValueError(f'{folder.path}: unsupported cache subfolder')
-        folder.kind = 'Folder'
+    unpack_catalogs(old)
     paths = _rows(components.one('Design_Cache_specific'), 'pt')
     definitions = components.children('Component')
     if len(paths) != len(definitions):

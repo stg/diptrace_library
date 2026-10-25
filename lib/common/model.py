@@ -623,7 +623,7 @@ class Element:
         if destination is not None and destination._automatic_structure:
             validate_child_change(parent, next_children, self.kind)
             if destination is not owner:
-                plans.append((destination, destination.references.plan_collections(changes, parents={self: parent})))
+                plans.append((destination, destination.references.plan_collections(changes, parents={self: parent}, moved=moved)))
         previous._items.remove(self)
         previous._touch(reordered=True)
         children = parent._child_sequence()
@@ -668,9 +668,12 @@ class IncompleteDocumentError(ValueError):
 
 
 class Document:
+    _representations = ('tree', 'asc', 'xml')
+    _named_representations = ()
+
     def __init__(self, root: Element | None = None, *, representation='tree'):
-        if representation not in ('tree', 'schematic', 'asc', 'dchxml'):
-            raise ValueError('document representation must be tree, schematic, asc or dchxml')
+        if representation not in self._representations:
+            raise ValueError('document representation must be one of '+', '.join(self._representations))
         self._representation = representation
         self._automatic_structure = True
         self.root = root if root is not None else Element("")
@@ -703,6 +706,10 @@ class Document:
         return ()
 
     def _plan_calculations(self, slot):
+        return ()
+
+    def _structural_calculation_slots(self, nodes):
+        """Local calculation inputs whose meaning can change with ownership."""
         return ()
 
     def _apply_calculations(self, plans):
@@ -754,6 +761,9 @@ class Document:
     def _structural_dependents(self, nodes):
         return ()
 
+    def _reference_collection_dependencies(self, reference):
+        return ()
+
     @property
     def representation(self):
         """Current API view, independent of input provenance or export format."""
@@ -795,8 +805,8 @@ class Document:
         index = self.rebuild_index()
         for node in index.values():
             if node.schema is not None:
-                if self.representation == 'schematic' and any(isinstance(item, Value) for item in node._items):
-                    raise ValueError(f'{node.path}: unnamed values are not part of the schematic record schema')
+                if self.representation in self._named_representations and any(isinstance(item, Value) for item in node._items):
+                    raise ValueError(f'{node.path}: unnamed values are not part of the {self.representation} record schema')
                 node.schema.validate_fields(node)
                 node.schema.validate_children(node)
         if self._reference_validator:

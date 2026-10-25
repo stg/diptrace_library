@@ -9,7 +9,7 @@ from lib.schematic.model.refs import (bind_schematic_references)
 from lib.schematic.model.objects import (new_symbol)
 from lib.schematic.formats.dchxml.import_nets import (read_nets)
 from lib.schematic.formats.dchxml.import_values import (XmlRecord)
-from lib.schematic.formats.dchxml.units import (DchXmlUnits)
+from lib.common.units import XmlUnits
 from lib.schematic.layout.markings import (MarkingStyle)
 
 
@@ -44,7 +44,7 @@ class SimulationReferencesTests(unittest.TestCase):
         public = parse_dchxml('''<Source Type="DipTrace-Schematic"><Schematic><Nets>
         <Net Id="10"><Name>Ground</Name></Net><Net Id="20"><Name>Output</Name></Net>
         </Nets></Schematic></Source>''')
-        read_nets(XmlRecord(public.one('/Source/Schematic')), owner, units=DchXmlUnits('mm'), sheets={0: 0}, classes={0: 0})
+        read_nets(XmlRecord(public.one('/Source/Schematic')), owner, units=XmlUnits('mm'), sheets={0: 0}, classes={0: 0})
         for index, net in enumerate(owner.select('Nets/Net')):
             net.set_field('Number', index)
         simulator = owner.one('ssimulator')

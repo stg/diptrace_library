@@ -1,2 +1,10 @@
 __pycache__/
 *.py[cod]
+
+# Unfinished families expose only their public conversion placeholders.
+/lib/pcb/*
+!/lib/pcb/__init__.py
+/lib/component/*
+!/lib/component/__init__.py
+/lib/pattern/*
+!/lib/pattern/__init__.py

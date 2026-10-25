@@ -1,16 +1,20 @@
 """Named schematic record definitions, independent of serialized field layout."""
 from ...common.schema import Child, Field, Record, MISSING
 from ...common.model import Value
+from ...common.footprint_records import PATTERN, PAD, PAD_STYLE, PATTERN_SHAPE, DIMENSION, HOLE
+from ...common.library_records import SLOT, DEFINITION, CACHE
+from ...common.library_metadata import CATALOG_CATEGORY, CATALOG_TYPE, CATALOG_SUBTYPE
+from ...common.cell_records import CELL
+from ...common.symbol_records import SYMBOL as CACHED_PART, PIN as CACHED_PIN, DRAWING as SYMBOL_SHAPE
 from dataclasses import replace
 from . import vocabulary as names
 from .membership import get_net, set_net, net_number, net_dependencies, net_ordinal
 from .simulation import (ARGUMENT_SCHEMAS, ARGUMENT_ITEM, OPTION_SCHEMAS, SIMULATOR, SIGNAL,
                          modernize_arguments)
-from .library_records import HOLE, SLOT, DEFINITION
 from .collections import definition as collection_definition, DESIGN_LINK
 from .auxiliary_records import (LOCAL_GROUP, SCHEMATIC_GROUP, BUS_NET, BUS_NUMBER, UNRESOLVED_MEMBER,
-                               UNRESOLVED_KEY, SUPPLIERS, MODEL3D, VECTORS, CACHE)
-from .nested_records import (WIRE_POINT, CATEGORY_TYPE, CATALOG_ENTRY as _CATALOG_ENTRY, LIBRARY_PATH, SUBFOLDER,
+                               UNRESOLVED_KEY, SUPPLIERS, MODEL3D, VECTORS)
+from .nested_records import (WIRE_POINT, CATEGORY_TYPE, LIBRARY_PATH, SUBFOLDER,
                              POSSIBLE_NAME, MODEL_LINE, GLOBAL_USER_FIELD, INTERNAL_CONNECTION,
                              QUOTE, PASTE_SEGMENT, TERMINAL, TERMINAL_COUNT, DIFFERENTIAL_PAIR,
                              modernize_classifications)
@@ -133,13 +137,6 @@ DOCUMENT = Record('SchematicDocument', {
 PART = record('Part', names.COMPONENT_MODEL_FIELDS, (NAME, REFERENCE),
               optional_text=('Value', 'Manufacturer', 'Datasheet'),
               units={'Angle': 'degrees', **{name: 'shared length' for name in ('X', 'Y', 'Width', 'Height', 'Origin_X', 'Origin_Y')}})
-CACHED_PART = record('CachedPart', (*names.CACHED_SYMBOL_FIELDS, 'ModelNote', 'Datasheet'),
-                     (NAME, REFERENCE), optional_text=('Value', 'Manufacturer'), optional=('Datasheet',))
-CACHED_PART = Record(CACHED_PART.name, {**CACHED_PART.fields,
-    'Verification': Field('Verification', 'tuple', required=True, default=(False,)*7,
-                           item_kind='boolean', length=7,
-                           description='Seven compatibility verification states in their established order.'),
-}, CACHED_PART.parameters)
 PIN = record('Pin', names.PIN_FIELDS, (INDEX, X, Y), extra=('NameFontMono',))
 PIN = Record(PIN.name, {**PIN.fields,
     'Net': Field('Net', 'reference', required=True, nullable=True, getter=get_net, setter=set_net,
@@ -148,29 +145,9 @@ PIN = Record(PIN.name, {**PIN.fields,
                       reference_dependencies=net_dependencies, ordinal_dependencies=net_ordinal,
                       description='Calculated adapter index; edit Net instead.'),
 }, PIN.parameters)
-CACHED_PIN = record('CachedPin', names.CACHED_PIN_FIELDS, (INDEX, X, Y),
-                    extra=('NameFontMono', 'SignalDelay'), optional=('SignalDelay',))
-PATTERN = record('Pattern', names.PATTERN_FIELDS, (NAME,),
-                 extra=('Datasheet', 'Sided', 'RefDes'), optional=('Datasheet', 'Sided', 'RefDes'))
-PATTERN = Record(PATTERN.name, {**PATTERN.fields, 'PadTerminalCount': TERMINAL_COUNT,
-    'PadShape': replace(PATTERN.fields['PadShape'], kind='integer|text',
-                        description='Shape code or public XML shape label, including empty text.')}, PATTERN.parameters)
-PAD = record('Pad', names.PAD_MODEL_FIELDS, (INDEX, ('StringNumber', 'text', ''), NAME, X, Y))
-PAD = Record(PAD.name, {**PAD.fields, 'PadTerminalCount': TERMINAL_COUNT,
-    'Id': Field('Id', 'integer', description='Optional persistent public pad key; positional writers generate their own indices.'),
-    'PadShape_New': replace(PAD.fields['PadShape_New'], kind='integer|text',
-                            description='Current shape code or public XML label, including empty text.')}, PAD.parameters)
-PAD_STYLE = record('PadStyle', names.PAD_STYLE_FIELDS, (NAME,))
-PAD_STYLE = Record(PAD_STYLE.name, {**PAD_STYLE.fields, 'PadTerminalCount': TERMINAL_COUNT,
-    'PadShape': replace(PAD_STYLE.fields['PadShape'], kind='integer|text',
-                        description='Shape code or public XML label, including empty text.')}, PAD_STYLE.parameters)
-SYMBOL_SHAPE = record('SymbolDrawing', names.SYMBOL_DRAWING_MODEL_FIELDS, (INDEX,), extra=('FontMono',),
-                      units={'TextAngle': 'radians', 'PenWidth': 'shared length'})
 SHEET_SHAPE = record('SheetDrawing', names.SHEET_DRAWING_MODEL_FIELDS, (INDEX,), extra=('FontMono', 'PictureFlipped'),
                      units={'TextAngle': 'radians', 'PenWidth': 'shared length',
                             'Picture_Width': 'shared length', 'Picture_Height': 'shared length'})
-PATTERN_SHAPE = record('PatternDrawing', names.PATTERN_DRAWING_FIELDS, (INDEX,),
-                       units={'TextAngle': 'radians', 'Width': 'shared length'})
 PAGE = record('Page', names.PAGE_FIELDS, (NAME,), extra=('FontLineWidth',),
                units={name: 'shared length' for name in ('HorzZoneBorder', 'VertZoneBorder')})
 NET = record('Net', names.NET_FIELDS, (NAME,), extra=('HiddenId',))
@@ -187,10 +164,7 @@ SCHEMATIC = replace(SCHEMATIC, fields={**SCHEMATIC.fields,
     'ActiveSheet': Field('ActiveSheet', 'integer',
                          description='Selected page position; a resolved link follows page identity. Absent selection uses the first page on XML output.')})
 TABLE = record('Table', names.TABLE_FIELDS, extra=('DefFontMono',))
-CELL = Record('Cell', {**fields((*names.CELL_FIELDS, 'FontMono')), **BOUNDS.fields, **GRID_FIELDS},
-              BOUNDS.parameters, 'A table cell with authored bounds and derived grid position.')
 CONTENT = record('TitleField', (*names.CELL_FIELDS, 'Placement'), (INDEX,), extra=('FontMono',))
-DIMENSION = record('Dimension', names.DIMENSION_FIELDS, (INDEX,), extra=('FontMono',))
 
 
 def _owned(schema, **children):
@@ -199,11 +173,6 @@ def _owned(schema, **children):
 
 
 PART = _owned(PART, Component_CategoryTypes='Classifications')
-CACHED_PART = _owned(CACHED_PART, Component_CategoryTypes='Classifications')
-PATTERN = _owned(PATTERN, Pattern_CategoryTypes='Classifications', PossibleNames='PossibleNames',
-                 PadMask_TopSegments='PasteSegments', PadMask_BotSegments='PasteSegments')
-PAD = _owned(PAD, PadMask_TopSegments='PasteSegments', PadMask_BotSegments='PasteSegments')
-PAD_STYLE = _owned(PAD_STYLE, PadMask_TopSegments='PasteSegments', PadMask_BotSegments='PasteSegments')
 SCHEMATIC = _owned(SCHEMATIC, ProjectLibs_Folders='ProjectFolders', ProjectLibs_Libs='ProjectLibraries',
                    DesignCache_Links='DesignCacheLinks')
 
@@ -214,42 +183,20 @@ SCHEMATIC = _owned(SCHEMATIC, Pages='Pages', Components='Components', Nets='Nets
                    ShowUserfield_Global='GlobalUserFields')
 PART = _owned(PART, Pins='Pins', Shapes='SymbolDrawings', UserFields='ComponentUserFields',
               Pattern='Pattern', ModelBody='ModelBody', Suppliers='Suppliers')
-CACHED_PART = _owned(CACHED_PART, Pins='CachedPins', Shapes='SymbolDrawings', UserFields='ComponentUserFields',
-                     Groups='LocalGroups', ModelBody='ModelBody', Suppliers='Suppliers')
-PATTERN = _owned(PATTERN, Pads='Pads', Shapes='PatternDrawings', Holes='Holes', Dimensions='Dimensions',
-                 UserFields='UserFields', Model3D='Model3D', Pattern_Groups='LocalGroups',
-                 InternalConnections='InternalConnections', PadPoints='Points')
-PAD = _owned(PAD, PadPoints_New='Points')
-PAD_STYLE = _owned(PAD_STYLE, PadPoints='Points')
-for _name in ('PAD', 'PAD_STYLE', 'PATTERN'):
-    _schema = globals()[_name]
-    globals()[_name] = replace(_schema, children={**_schema.children,
-        'PadTerminal': Child('PadTerminal', 'PadTerminal', maximum=None)})
-SYMBOL_SHAPE = _owned(SYMBOL_SHAPE, Points_New='Points', TextLine='TextLines')
 SHEET_SHAPE = _owned(SHEET_SHAPE, Points_New='Points', TextLine='TextLines')
-PATTERN_SHAPE = _owned(PATTERN_SHAPE, Points_New='Points', TextLine='TextLines')
 PAGE = _owned(PAGE, TitleBlocks='TitleBlocks')
 NET = _owned(NET, Parts='NetMembers', Lines='Wires')
 BUS = _owned(BUS, Nets='BusNets', Numbers='BusNumbers', Lines='BusWires')
 NET_LINE = _owned(NET_LINE, Points='WirePoints')
 BUS_LINE = _owned(BUS_LINE, Points='WirePoints')
 TABLE = _owned(TABLE, Cells='TableCells', ColWidths='ColumnWidths', RowHeights='RowHeights')
-CATALOG_CATEGORY = replace(_CATALOG_ENTRY, name='CatalogCategory', children={
-    'Type': Child('Type', 'CatalogType', maximum=None)})
-CATALOG_TYPE = replace(_CATALOG_ENTRY, name='CatalogType', children={
-    'Subtype': Child('Subtype', 'CatalogSubtype', maximum=None)})
-CATALOG_SUBTYPE = replace(_CATALOG_ENTRY, name='CatalogSubtype')
 TITLE_BLOCK = _owned(TITLE_BLOCK, Cells='TitleCells', Contents='TitleFields',
                      ColWidths='ColumnWidths', RowHeights='RowHeights')
-TERMINAL = _owned(TERMINAL, ShapePoints='Points')
-SLOT = replace(SLOT, children={'Definition': Child('Definition', 'LibraryDefinition', maximum=None)})
-DEFINITION = _owned(DEFINITION, Part='CachedPart', Pattern='Pattern')
 SIMULATOR = _owned(SIMULATOR, signals='Signals', **{
     name: schema.name for name, schema in {**ARGUMENT_SCHEMAS, **OPTION_SCHEMAS}.items()})
 for _name, _schema in ARGUMENT_SCHEMAS.items():
     ARGUMENT_SCHEMAS[_name] = replace(_schema, children={'Item': Child('Item', 'SimulationItem', maximum=None)})
-for _name in ('PIN', 'CACHED_PIN', 'PAD', 'SYMBOL_SHAPE', 'SHEET_SHAPE', 'PATTERN_SHAPE',
-              'DIMENSION', 'HOLE', 'INTERNAL_CONNECTION'):
+for _name in ('PIN', 'SHEET_SHAPE', 'INTERNAL_CONNECTION'):
     globals()[_name] = _owned(globals()[_name], UnresolvedKeys='UnresolvedKeys')
 
 

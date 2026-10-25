@@ -18,7 +18,7 @@ deletion using Python mapping conventions. Schema definitions own type/default
 and mutation rules. File positions are generated adapter views, not the required
 public editing API. See ../doc/MODEL.md for concise access rules.
 
-Resolved electrical membership has one owner: each net's ordered pin identity
+Resolved schematic electrical membership has one owner: each net's ordered pin identity
 members. Pin.Net provides the reverse relationship and assignment operation;
 NetNumber and component/pin member numbers are calculated. Preserve member order
 when moving assignments and preserve identities when collections reorder.
@@ -31,6 +31,17 @@ text through private dependency indexes. Validate the final proposed state befor
 changing values: reject incompatible types, ambiguous keys, dependency cycles and
 mode changes that reinterpret existing resolved or unresolved identities.
 Literal text remains independently authored.
+Field-bound labels follow current source data. Family-specific selection rules
+remain distinct; generic single-line refresh
+keeps the first row identity and refuses to discard a referenced extra row.
+User-field selections follow field identities when their collection reorders.
+Text content refresh does not imply font, placement or routing recalculation.
+RefDes collisions are an editing constraint, not a reason to reject imported
+components. Preserve existing duplicate names and independent component identities.
+Renaming rejects another component's equivalent occupied name across sheets and
+hierarchy, atomically; unchanged assignments remain valid. Leading zeros in the
+final counter do not create a new name. Legitimate multipart units remain one
+component for coordinated naming purposes.
 Calculated property users and guards declare their order, collection and
 relationship dependencies. Bind, retarget and discard preflight a temporary
 graph view; named property links can read calculated fields directly, including
@@ -118,6 +129,13 @@ on the original file or its edit history.
 Context provides environment choices, overrides or services. Ordinary output
 uses meaningful stored settings and documented defaults; no mandatory context
 object should be needed just to supply routine choices.
+
+Text layout and label appearance/measurement services belong to common.text.
+Document adapters choose their own placement policies and compatibility views.
+Full footprint text bounds use all lines and the authored angle; the older ASC
+compatibility box is a separate projection. Environment font/DPI choices can
+affect legacy automatic placement. Accept an explicit measurement service rather
+than storing environment snapshots or adding design-specific placement rules.
 
 Destination adaptation leaves the author's model unchanged. Expected regeneration
 or equivalent normalization is quiet or informational. Meaningful irreversible

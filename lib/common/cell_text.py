@@ -2,7 +2,7 @@
 
 
 def cell_text_lines(text):
-    """Split LF and discard trailing space-only lines, as native cell views do."""
+    """Split LF and discard trailing ASCII-space-only lines in cell views."""
     result = text.split('\n')
     while result and not result[-1].replace(' ', ''):
         result.pop()
@@ -53,9 +53,9 @@ def normalized_cell_text(text):
     return '\n'.join(cell_text_lines(text))
 
 
-def modernize_cell_text(schematic):
-    for path in ('Tables/Table/Cells/Cell', 'Pages/Page/TitleBlocks/TitleBlock/Contents/Content'):
-        for cell in schematic.select(path):
+def modernize_cell_text(owner, *, paths):
+    for path in paths:
+        for cell in owner.select(path):
             field = cell.child('Text')
             if field is None:
                 continue

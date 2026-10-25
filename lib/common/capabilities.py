@@ -1,5 +1,6 @@
 """Immutable descriptions of the versions understood by format adapters."""
 from dataclasses import dataclass
+from .errors import UnsupportedFileError
 
 
 @dataclass(frozen=True)
@@ -34,5 +35,7 @@ class FormatCapabilities:
         description = (f'{min(versions)} through {max(versions)}'
                        if all(type(v) is int for v in versions)
                        and tuple(range(min(versions), max(versions) + 1)) == versions else str(versions))
-        raise ValueError(f"{self.format.upper()} cannot write version {requested!r}; "
-                         f"supported output versions: {description}")
+        raise UnsupportedFileError(f"{self.format.upper()} cannot write version {requested!r}; "
+                                   f"supported output versions: {description}",
+                                   format=self.format, family=self.family,
+                                   version=requested, reason='version')

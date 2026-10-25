@@ -2,13 +2,13 @@
 from decimal import Decimal
 
 from ....common.model import (SourceSpan)
+from ....common.footprint_codec import read_pad_mask_states
 from ...model.traversal import (placed_components, footprints)
 
 
 def _pad_states(r, pattern):
     for pad in pattern.child("Pads").children("Pad"):
-        for name in ("DisableTopMask", "DisableBottomMask", "DisableTopPaste", "DisableBottomPaste"):
-            r.field(pad, name, "integer", replace=True)
+        read_pad_mask_states(r, pad, extended=True)
 
 
 def read_common_extensions(r, schematic, document):

@@ -1,14 +1,28 @@
-"""Length/axis conversion between shared schematic data and public DCHXML.
+"""Shared display-unit names and public XML length/axis conversion.
 
-Shared DCH schematic and embedded footprint lengths both use three units per
-millimetre. XML chooses mm/mil/inch and reverses the two-dimensional Y axis.
+Schematic and PCB lengths use three units per millimetre. Public XML chooses
+mm/mil/inch and reverses the two-dimensional Y axis.
 Angles, font sizes, scales and enum values must not pass through length().
 """
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
 import math
 
-from ....common.model import (Value)
+from .model import Value
+
+
+DISPLAY_UNITS = ('mm', 'mil', 'inch')
+
+
+def display_units(value):
+    """Validate a display choice, accepting 'in' as an input alias for 'inch'."""
+    if not isinstance(value, str):
+        raise TypeError('display units must be text')
+    if value == 'in':
+        value = 'inch'
+    if value not in DISPLAY_UNITS:
+        raise ValueError('display units must be mm, mil or inch')
+    return value
 
 
 def _number(value):
@@ -27,13 +41,22 @@ def _number(value):
     return value
 
 
+def square_length(value):
+    """Return an exact decimal area from a finite length, without context drift."""
+    value = _number(value)
+    value = value if isinstance(value, Decimal) else Decimal(str(value))
+    with localcontext() as context:
+        context.prec = max(1, 2 * len(value.as_tuple().digits))
+        return value * value
+
+
 @dataclass(frozen=True)
-class DchXmlUnits:
+class XmlUnits:
     units: str
 
     def __post_init__(self):
-        if self.units not in ('mm', 'mil', 'inch'):
-            raise ValueError('DCHXML length units must be mm, mil or inch')
+        if self.units not in DISPLAY_UNITS:
+            raise ValueError('XML length units must be mm, mil or inch')
 
     @property
     def internal_unit(self):
@@ -54,11 +77,13 @@ class DchXmlUnits:
         return self._convert(value)
 
     def point(self, x, y):
-        return self.length(x), -self.length(y)
+        y = self.length(y)
+        return self.length(x), y.copy_negate() if isinstance(y, Decimal) else -y
 
     def internal_length(self, value):
         """Normalize an XML length before the selected output's quantization."""
         return self._convert(value, to_internal=True)
 
     def internal_point(self, x, y):
-        return self.internal_length(x), -self.internal_length(y)
+        y = self.internal_length(y)
+        return self.internal_length(x), y.copy_negate() if isinstance(y, Decimal) else -y

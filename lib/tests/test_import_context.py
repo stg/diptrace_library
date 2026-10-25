@@ -49,7 +49,7 @@ def modernize(root, context):
 class ImportContextTests(unittest.TestCase):
     def test_vector_labels_need_no_platform_service_or_source_snapshots(self):
         _, root, part = legacy_document()
-        with patch('lib.schematic.layout.text_layout._system_metrics', side_effect=AssertionError('unexpected platform access')):
+        with patch('lib.common.text.layout._system_metrics', side_effect=AssertionError('unexpected platform access')):
             modernize(root, ImportContext())
         self.assertEqual((part.scalar('X'), part.scalar('Y')), (105, 203))
         self.assertEqual(part.one('ShowRefDes').values[-3:-1], (-4, -8))
@@ -67,7 +67,7 @@ class ImportContextTests(unittest.TestCase):
             return TextMetrics(100, 20)
         _, root, part = legacy_document(vector=False, dimensions=(2, 10),
             corners=((-1, -5), (1, 5)), alignment=7, shifts=(1, 0))
-        with patch('lib.schematic.layout.text_layout._system_metrics', side_effect=AssertionError('unexpected platform access')):
+        with patch('lib.common.text.layout._system_metrics', side_effect=AssertionError('unexpected platform access')):
             modernize(root, ImportContext(font_size=3, font_name='ExampleSans', text_layout=TextLayout(measure)))
         self.assertEqual(calls, [('R1', 'ExampleSans', 25)])
         label = part.one('ShowRefDes')

@@ -4,7 +4,7 @@ These are semantic projectors, not XML spelling emulation. Numbers retain
 their available precision. Application choices absent from DCH are explicit.
 """
 from .syntax import (set_attribute)
-from .units import (DchXmlUnits)
+from ....common.units import XmlUnits
 from ....common.model import (Element, Value)
 from ...layout.markings import (MarkingStyle)
 
@@ -61,7 +61,7 @@ def _boolean(value):
     raise ValueError(f'XML boolean projection requires a boolean: {value!r}')
 
 
-def project_sheet_settings(schematic, *, units: DchXmlUnits, active_sheet, version=46):
+def project_sheet_settings(schematic, *, units: XmlUnits, active_sheet, version=46):
     result = Element('SheetSettings')
     settings = schematic.one('Settings')
     field(result, 'DisplayTitles', _boolean(settings.scalar('DisplayTitles')))
@@ -109,7 +109,7 @@ def _choice(settings, first, second, labels):
     return labels[0 if left else 1]
 
 
-def project_settings(schematic, *, units: DchXmlUnits, grid_snap, style: MarkingStyle,
+def project_settings(schematic, *, units: XmlUnits, grid_snap, style: MarkingStyle,
                      use_part_font_color=None, project_dir=None, version=46):
     result = Element('Settings')
     settings = schematic.one('Settings')

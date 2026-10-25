@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib import parse_dchxml
 from lib.schematic.formats.dchxml.buses import (project_bus, project_bus_connectors, project_groups)
-from lib.schematic.formats.dchxml.units import (DchXmlUnits)
+from lib.common.units import XmlUnits
 from lib.common.model import (Element)
 
 
@@ -57,7 +57,7 @@ class XmlBusesTests(unittest.TestCase):
         points = line.add('Points')
         points.add('pt', 3, 6, 1)
         points.add('pt', 9, 12, 0)
-        result = project_bus(bus, units=DchXmlUnits('mm'))
+        result = project_bus(bus, units=XmlUnits('mm'))
         self.assertEqual(result.scalar('Name'), 'DATA')
         self.assertFalse(result.scalar('Enabled'))
         self.assertEqual([(n.scalar('NetId'), n.scalar('ConnectionNumber')) for n in result.select('Nets/Net')], [(8, 4), (8, 7)])
@@ -66,14 +66,14 @@ class XmlBusesTests(unittest.TestCase):
         self.assertEqual(tuple(float(view.one('Points/Point[1]').scalar(n)) for n in ('X', 'Y')), (1, -2))
         numbers.children()[0].detach()
         with self.assertRaisesRegex(ValueError, 'one connection number'):
-            project_bus(bus, units=DchXmlUnits('mm'))
+            project_bus(bus, units=XmlUnits('mm'))
 
     def test_disabled_connectors_and_groups_are_public_records(self):
         schematic = Element('Schematic')
         connector = schematic.add('PageConnectors').add('PageConnector', 'PAGE', 3, 6)
         for name, value in dict(Number=6, Page=0, Enabled=False, Connected=False, Group=-1, Selected=True, Locked=False).items():
             connector.add(name, value)
-        result = project_bus_connectors(schematic, units=DchXmlUnits('mm')).one('BusConnector')
+        result = project_bus_connectors(schematic, units=XmlUnits('mm')).one('BusConnector')
         self.assertEqual(result.scalar('Name'), 'PAGE')
         self.assertIs(result.scalar('Connected'), False)
         group = schematic.add('Groups').add('Group', 9, 15, 18)

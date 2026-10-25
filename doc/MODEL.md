@@ -91,7 +91,7 @@ immutable and used by both editing validation and reflection.
 | Definition | Describes |
 | --- | --- |
 | Record | Record type, named fields, permitted child records and collections |
-| Field | Type, required presence, nullability, fallback, units, tuple members and calculated/read-only status |
+| Field | Type, required presence, nullability, fallback, allowed choices, units, tuple members and calculated/read-only status |
 | Child | Child name, allowed record types and minimum/maximum cardinality |
 
 `record.schema.field(name)` retrieves a field definition.

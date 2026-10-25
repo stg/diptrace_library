@@ -1,6 +1,6 @@
 """Optional environment inputs for modernizing older schematic data."""
 from dataclasses import dataclass
-from ..layout.text_layout import (TextLayout, default_layout)
+from ...common.text.layout import TextLayout, default_layout
 
 
 @dataclass(frozen=True)

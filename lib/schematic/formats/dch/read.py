@@ -12,46 +12,22 @@ from .records import (COMPONENT_PLACEMENT, PIN_FONT)
 from .data import (stored_data)
 from ...model.document import (Document)
 from ....common.model import (Element, IncompleteDocumentError, SourceSpan, Value)
+from ....common.binary_records import RecordReader
+from ....common.footprint_codec import (read_holes, read_model, read_parameters as _pattern_parameters,
+                                       read_pad_geometry, read_pad_mask_states)
+from ....common.dimension_codec import read_dimensions
+from ....common.title_block_codec import read_title_block
+from ....common.catalog_codec import read_category_types, read_possible_names
 
 _OLD_TEXT_ALIGNMENT = {0: 1, 1: 2, 2: 5, 3: 7, 5: 3}
 
 
-class Reader(Cursor):
+class Reader(RecordReader, Cursor):
     """Populate our document elements from named wire fields."""
+    source_format = 'dch'
 
-    def argument(self, kind: str) -> Value:
-        start = self.pos
-        value = {"integer": self.integer, "number": self.number,
-                 "boolean": self.boolean, "text": self.text, "color": self.color}[kind]()
-        span = SourceSpan("dch", start, self.pos, self.source)
-        value_kind = {'text': 'string', 'boolean': 'boolean'}.get(kind, 'number')
-        return Value(value, value_kind, source=span)
-
-    def record(self, parent: Element, name: str, *kinds: str) -> Element:
-        """Read a public tuple, retaining provenance for every argument."""
-        start = self.pos
-        values = tuple(self.argument(kind) for kind in kinds)
-        node = parent.append(Element(name, *values, source=SourceSpan('dch', start, self.pos, self.source)))
+    def _annotate(self, node):
         node.annotations['source_version'] = self.header.version
-        return node
-
-    def field(self, parent: Element, name: str, kind: str, *, replace=False) -> Element:
-        value = self.argument(kind)
-        span = value.source
-        node = parent.child(name) if replace else None
-        if node is None:
-            node = parent.append(Element(name, value, source=span))
-        else:
-            node.set_values(value)
-            node.source = span
-        node.annotations["source_version"] = self.header.version
-        return node
-
-    def fields(self, parent, layout, *, replace=False):
-        """Read an ordered sequence of (public field name, wire type) pairs."""
-        for name, kind in layout:
-            self.field(parent, name, kind, replace=replace)
-        return parent
 
 
 def _preamble(r: Reader, doc: Document) -> tuple[Element, int]:
@@ -235,29 +211,6 @@ def _component_pattern(r: Reader, part: Element):
     return pattern
 
 
-def _pattern_parameters(r: Reader, pattern: Element):
-    """Shared ordered footprint fields for placed parts and cache definitions."""
-    r.field(pattern, "Type", "integer")
-    for index in range(1, 5):
-        r.field(pattern, f"VariableParameter{index}", "boolean")
-    for name in ("Number1", "Number2"):
-        r.field(pattern, name, "integer")
-    for name in ("Spacing1", "Spacing2"):
-        r.field(pattern, name, "number")
-    r.field(pattern, "VariableParameter5", "boolean")
-    r.field(pattern, "Spacing3", "number")
-    r.field(pattern, "LockProperties", "boolean")
-    r.field(pattern, "PatternOrientation", "integer")
-    for name in ("Width", "Height", "PadWidth", "PadHeight"):
-        r.field(pattern, name, "number")
-    r.field(pattern, "PadShape", "integer")
-    r.field(pattern, "SurfacePad", "boolean")
-    for name in ("PadHole", "PadHoleH"):
-        r.field(pattern, name, "number")
-    r.field(pattern, "PadHoleType", "integer")
-    pattern.set_values(r.argument('text'))
-    for name in ("OriginX", "OriginY"):
-        r.field(pattern, name, "number")
 
 
 def _pattern_pads(r: Reader, pattern: Element, *, omit_reserved=True):
@@ -282,25 +235,10 @@ def _pattern_pads(r: Reader, pattern: Element, *, omit_reserved=True):
             pad.annotations["asc_omit"] = "reserved pad record outside the format export range"
         pad.add("Number_New", number)
         pad.add("PadAngle", Decimal(str(math.pi/2)) if inverted.value else Decimal(0))
-        for name in ("PadWidth_New", "PadHeight_New", "PadHole", "PadHoleH"):
-            r.field(pad, name, "number")
-        r.field(pad, "PadHoleType", "integer")
-        r.field(pad, "SurfacePad", "boolean")
-        r.field(pad, "PadShape_New", "integer")
-        standard = r.boolean()
-        pad.add("Standard", standard)
-        point_count = r.count("pad polygon points")
-        if point_count:
-            points = pad.add("PadPoints_New")
-            for _ in range(point_count):
-                r.record(points, 'pt', 'number', 'number')
+        read_pad_geometry(r, pad)
         r.field(pad, "Locked", "boolean")
         r.field(pad, "Sided", "boolean")
-        # Schema 29 introduced these four booleans. format upgrades each to
-        # state 2 (disabled) or 0 (inherited); later records can override them.
-        for name in ("DisableTopMask", "DisableBottomMask", "DisableTopPaste", "DisableBottomPaste"):
-            disabled = r.boolean()
-            pad.add(name, 2 if disabled else 0)
+        read_pad_mask_states(r, pad)
         for name in ("CustomSwell_New", "CustomShrink_New"):
             r.field(pad, name, "number")
         pad.source = SourceSpan("dch", start, r.pos, r.source)
@@ -345,55 +283,16 @@ def _pattern_graphics(r: Reader, pattern: Element):
             r.record(points, 'pt', 'number', 'number')
         shape.source = SourceSpan("dch", start, r.pos, r.source)
         shape.annotations["incomplete"] = "extended geometry and legacy ASC projection remain"
-    holes = pattern.add("Holes")
-    for _ in range(r.count("footprint holes")):
-        start = r.pos
-        first = r.argument('boolean')
-
-
-        x, y, diameter, hole_diameter = (r.argument('number') for _ in range(4))
-        second = r.argument('boolean')
-        hole = holes.add("Hole", first, second, x, y, diameter, hole_diameter)
-        hole.source = SourceSpan("dch", start, r.pos, r.source)
+    holes = read_holes(r, pattern)
+    for hole in holes.children():
         hole.annotations["incomplete"] = "hole group is stored in the later extension"
-    dimensions = pattern.add("Dimensions")
-    for index in range(r.count("footprint dimensions")):
-        start = r.pos
-        dimension = dimensions.add("Dimension", index)
-        for name in ("Enabled", "Locked"):
-            r.field(dimension, name, "boolean")
-        for name in ("Type", "Connected1", "Object1", "SubObject1", "Point1",
-                     "Connected2", "Object2", "SubObject2", "Point2", "Layer"):
-            r.field(dimension, name, "integer")
-        for name in ("X1", "Y1", "X2", "Y2", "XD", "YD", "ArrowSize"):
-            r.field(dimension, name, "number")
-        r.field(dimension, "Units", "integer")
-        r.field(dimension, "VectorFont", "boolean")
-        r.field(dimension, "FontName", "text")
-        r.field(dimension, "FontSize", "integer")
-        for name in ("FontScale", "FontWidth"):
-            r.field(dimension, name, "number")
-        r.field(dimension, "ShowUnits", "boolean")
-        r.field(dimension, "Angle", "number")
-        for name in ("ExternalRadius", "PointerMode"):
-            r.field(dimension, name, "integer")
-        r.field(dimension, "PointerText", "text")
-        dimension.source = SourceSpan("dch", start, r.pos, r.source)
+    dimensions = read_dimensions(r, pattern)
+    for dimension in dimensions.children():
         dimension.annotations["incomplete"] = "dimension group is stored in the later extension"
 
 
 def _pattern_model(r: Reader, pattern: Element):
-    model = pattern.add("Model3D")
-    r.field(model, "Model3DFile", "text")
-    # Public XML terminology, linked to the DCH reader and ASC tuple by the
-
-    # the ASC tuple orders Rotate before Offset. Keep named data in our tree.
-    for name in ('Offset', 'Rotate', 'Zoom'):
-        vector = model.add(name)
-        for axis in ('X', 'Y', 'Z'):
-            r.field(vector, axis, 'number')
-    r.field(model, 'Mirror', 'boolean')
-    r.field(model, 'NoSearch', 'boolean')
+    model = read_model(r, pattern)
     model.annotations["incomplete"] = "later 3D settings and ASC projection remain"
     pattern.annotations["incomplete"] = "later footprint extensions and ASC projection remain"
 
@@ -536,43 +435,7 @@ def _buses_and_groups(r: Reader, schematic: Element):
 
 
 def _title_grid(r: Reader, parent: Element, index: int):
-    """Cell placement, shared text styles and grid borders are explicit editable
-    elements. No format arrays or memory offsets become document structures.
-    """
-    start = r.pos
-    grid = parent.add("TitleBlock", index, r.argument('text'))
-    r.field(grid, "Width", "number")
-    r.field(grid, "Height", "number")
-    columns, rows = r.count("title columns"), r.count("title rows")
-    widths = grid.add("ColWidths")
-    for _ in range(columns):
-        widths.add("pt", r.argument('number'))
-    heights = grid.add("RowHeights")
-    for _ in range(rows):
-        heights.add("pt", r.argument('number'))
-    if columns * rows > (len(r.data) - r.pos) // 7:
-        raise DchError(f"title grid dimensions exceed remaining data at byte {r.pos:#x}")
-    cells = grid.add("Cells")
-    for column in range(columns):
-        for row in range(rows):
-            cell = cells.add("Cell", column, row, r.argument('integer'))
-            cell.add("Edges", *(r.argument('boolean') for _ in range(4)))
-    contents = grid.add("Contents")
-    for index in range(r.count("title cell contents")):
-        cell = contents.add("Content", index)
-        r.field(cell, "FOrientation", "boolean")
-        for name in ("FontSize", "FontType", "Align"):
-            r.field(cell, name, "integer")
-        r.field(cell, "FontColor", "color")
-        r.field(cell, "Text", "text")
-        r.field(cell, "FontName", "text")
-        cell.add("Placement", *(r.argument('number') for _ in range(4)))
-        r.field(cell, "VectorFont", "boolean")
-        for name in ("FontWidth", "FontScale"):
-            r.field(cell, name, "number")
-    grid.source = SourceSpan("dch", start, r.pos, r.source)
-    # ASC has no title-grid record; retain this source-only page content for
-    # querying/editing and make the intentional projection omission visible.
+    grid = read_title_block(r, parent, index)
     grid.annotations["asc_omit"] = "format schematic ASC does not emit page title grids"
 
 
@@ -704,21 +567,12 @@ def _extensions_to_33(r: Reader, schematic: Element):
             r.field(pattern, "Mounting", "integer")
             r.field(pattern, "Pattern_CategoryName", "text")
             r.field(pattern, "Pattern_CategoryIndex", "integer")
-            count = r.count("footprint category types")
-            types = pattern.add("Pattern_CategoryTypes", count)
-            for _ in range(count):
-                types.add("CategoryType", r.argument('text'), r.argument('text'), r.argument('integer'), r.argument('integer'))
-            count = r.count("possible footprint names")
-            names = pattern.add("PossibleNames", count)
-            for _ in range(count):
-                names.add("PossibleName", r.argument('text'))
+            read_category_types(r, pattern, 'Pattern_CategoryTypes')
+            read_possible_names(r, pattern)
             r.field(part, "Manufacturer", "text")
             r.field(part, "Component_CategoryName", "text")
             r.field(part, "Component_CategoryIndex", "integer")
-            count = r.count("component category types")
-            types = part.add("Component_CategoryTypes", count)
-            for _ in range(count):
-                types.add("CategoryType", r.argument('text'), r.argument('text'), r.argument('integer'), r.argument('integer'))
+            read_category_types(r, part, 'Component_CategoryTypes')
     if r.header.version >= 33:
         for page in schematic.child("Pages").children("Page"):
             r.field(page, "PageHiddenId", "integer")
@@ -823,8 +677,8 @@ def loads(data, *, source=None, allow_partial=False, ansi_encoding="cp1252", com
     if doc.complete:
         from ...model.user_fields import (modernize_user_field_names)
         modernize_user_field_names(schematic)
-        from ...model.cell_text import (modernize_cell_text)
-        modernize_cell_text(schematic)
+        from ....common.cell_text import (modernize_cell_text)
+        modernize_cell_text(schematic, paths=('Tables/Table/Cells/Cell', 'Pages/Page/TitleBlocks/TitleBlock/Contents/Content'))
     bind_schematic_references(doc, clamp_segments=True)
     if doc.metadata['binary_consumed']:
         from ...model.symbol_text import (refresh_symbol_text)

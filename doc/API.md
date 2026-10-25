@@ -38,7 +38,7 @@ are keyword-only.
 ### `read()`
 
 ```text
-read(path, *, format=None, context=None, report=None, label=None, **options)
+read(path, *, format=None, family=None, context=None, report=None, label=None, **options)
     -> Document
 ```
 
@@ -49,6 +49,7 @@ the result has `representation == "schematic"`.
 | --- | --- |
 | `path` | Input filename as `str` or `pathlib.Path` |
 | `format` | Format name; `None` infers it from the extension |
+| `family` | Optional document family; see [family selection](#document-families) |
 | `context` | Optional [ImportContext](#importcontext) |
 | `report`, `label` | Optional [diagnostic collection](#reports) and caller label |
 | `**options` | [Format-specific input options](#format-options) |
@@ -68,7 +69,7 @@ design = read("design.dch")
 ### `parse()`
 
 ```text
-parse(data, *, format, context=None, report=None, label=None, **options)
+parse(data, *, format, family=None, context=None, report=None, label=None, **options)
     -> Document
 ```
 
@@ -90,7 +91,7 @@ design = parse(Path("design.dchxml").read_bytes(), format="dchxml")
 ### `write()`
 
 ```text
-write(document, path, *, format=None, context=None, report=None, label=None, **options)
+write(document, path, *, format=None, family=None, context=None, report=None, label=None, **options)
     -> None
 ```
 
@@ -102,6 +103,7 @@ change authored values to fit the destination.
 | `document` | Document to export |
 | `path` | Output filename as `str` or `pathlib.Path` |
 | `format` | Output format; `None` infers it from the extension |
+| `family` | Optional document family; see [family selection](#document-families) |
 | `context` | Optional [ExportContext](#exportcontext) or destination subclass |
 | `report`, `label` | Optional [diagnostic collection](#reports) and caller label |
 | `**options` | `version` and [format-specific output options](#format-options) |
@@ -124,7 +126,7 @@ write(design, "converted.dchxml")
 ### `serialize()`
 
 ```text
-serialize(document, *, format, context=None, report=None, label=None, **options)
+serialize(document, *, format, family=None, context=None, report=None, label=None, **options)
     -> bytes
 ```
 
@@ -137,6 +139,29 @@ from lib import serialize
 data = serialize(design, format="dchxml")
 xml_text = data.decode("utf-8")
 ```
+
+### Document families
+
+`family` accepts `"schematic"`, `"pcb"`, `"component"` or `"pattern"`, ignoring
+case. When omitted, input uses the binary signature, ASC `Source` declaration
+or XML root/type declaration to identify the family. Output uses the document's
+current representation or source-tree declaration. An explicit family overrides
+this detection. There is no preferred family for ASC. Headerless syntax fragments
+require an explicit family for source inspection.
+
+Only schematic adapters are currently available. An unavailable family, unknown
+format or unrecognized input raises `UnsupportedFileError`, a `ValueError`
+subclass; import/export reports collect the failure as usual. Known unsupported
+versions use this same exception family. Ordinary parsing errors and file access
+failures retain their existing exception types.
+
+`lib.pcb`, `lib.component` and `lib.pattern` are placeholders exposing `read`,
+`parse`, `write`, `serialize` and `format_capabilities` with their family selected.
+They currently provide no conversion support, models or contexts.
+
+`document_family(document) -> str` returns the current family using the same
+model/declaration rules as export. It does not use provenance metadata. An
+unidentifiable document raises `UnsupportedFileError`.
 
 ### Format options
 
@@ -279,13 +304,15 @@ The same definitions drive validation, reflection and the
 | Definition | Attributes |
 | --- | --- |
 | `Record` | `name`, `description`, `fields`, `children` |
-| `Field` | `name`, `kind`, `required`, `nullable`, `default`, `unit`, `description`, `readonly`, `members`, `item_kind`, `length` |
+| `Field` | `name`, `kind`, `required`, `nullable`, `default`, `choices`, `unit`, `description`, `readonly`, `members`, `item_kind`, `length` |
 | `Child` | `name`, `record` (allowed record types), `minimum`, `maximum`, `description` |
 | `MISSING` | Sentinel indicating no schema fallback |
 
 The definition types and `MISSING` are available from `lib.common.schema`.
 A schema fallback is an adapter/construction fallback, not an implicit read value.
 `maximum=None` means an unbounded child count.
+An empty `choices` tuple leaves the field's values unrestricted within its type;
+a populated tuple lists the accepted values.
 
 | Method | Behavior |
 | --- | --- |
@@ -467,11 +494,14 @@ previous = refs.previous("R1-X4", mode="existing")  # R1-X003
 
 ### Editing rules
 
-`R003` and `R3` occupy the same identity. So do a bare prefix and its zero
-suffix. Named component edits preflight collisions before mutation. A
-spelling-only change is valid when unshared; identically named multipart units
-may coexist, but these helpers do not coordinate renaming a whole group.
-Existing managed property-copy relationships follow valid edits.
+`R003` and `R3` occupy the same numbered name. So do a bare prefix and its zero
+suffix. Renaming rejects another component's occupied name before mutation,
+across sheets and hierarchy. A spelling-only change is valid when unshared.
+Imported duplicates retain their separate identities and remain editable;
+assigning an unchanged name is allowed, but renaming away does not reserve it
+for later reuse. Units of one multipart component may share a name. These
+helpers do not coordinate renaming a whole group; existing managed property-copy
+relationships follow valid edits.
 
 Imports do not silently remove spaces from source names. The stricter helper
 and named-authoring rules do not rewrite a file's imported data.
@@ -734,11 +764,14 @@ These supplementary types are imported from their owning modules.
 
 | Type / import | Constructor fields |
 | --- | --- |
-| `lib.schematic.layout.markings.MarkingStyle` | `font_size=2`, `font_name=""`, `vector=True`, `font_width=-2.0`, `font_scale=1.0`, `font_color=0`, `pen_width=1.0`, `mono=False` |
-| `lib.schematic.layout.text_layout.TextLayout` | `measure_system=None`, `resolution=10.0`, `font_scale=1.0` |
+| `lib.common.text.markings.MarkingStyle` | `font_size=2`, `font_name=""`, `vector=True`, `font_width=-2.0`, `font_scale=1.0`, `font_color=0`, `pen_width=1.0`, `mono=False` |
+| `lib.common.text.layout.TextLayout` | `measure_system=None`, `resolution=10.0`, `font_scale=1.0` |
 | `lib.common.text.windows.WindowsFontMetrics` | `dpi=96` (keyword-only) |
 
-`TextLayout.symbol_bounds(shape)` returns two text-box corners.
+The previous schematic import paths remain available for these same types.
+`TextLayout.symbol_bounds(shape)` returns two text-box corners for symbol text;
+`pattern_bounds(shape)` does the same for footprint text. Both include all text
+lines and the full authored angle, leaving stored geometry unchanged.
 A system-font callback has signature `(text, family, point_size)` and returns
 an object with pixel `width`/`height`. `WindowsFontMetrics.measure`
 provides that interface on Windows; other platforms can supply a service.
@@ -847,11 +880,14 @@ attribute. Python's `warnings` module can filter or log these warnings.
 ### `format_capabilities()`
 
 ```text
-format_capabilities(format) -> FormatCapabilities
+format_capabilities(format, *, family=None) -> FormatCapabilities
 ```
 
 Return the immutable capability declaration for an adapter. Format names accept
-case differences and a leading dot. Unknown names raise `ValueError`.
+case differences and a leading dot. Unique native/XML names identify their
+family. ASC has several dialects and requires an explicit `family`; omitting it
+raises `ValueError`. Unknown names and unavailable families raise
+`UnsupportedFileError`.
 
 | Attribute | Meaning |
 | --- | --- |
@@ -932,8 +968,8 @@ This operation does not snap components, route wires or follow moved pins.
 ### Syntax views
 
 ```text
-read_source(path, *, format=None, report=None, label=None, **options) -> Document
-parse_source(data, *, format, report=None, label=None, **options) -> Document
+read_source(path, *, format=None, family=None, report=None, label=None, **options) -> Document
+parse_source(data, *, format, family=None, report=None, label=None, **options) -> Document
 document.as_schematic(*, report=None, label=None) -> Document
 ```
 
@@ -1034,6 +1070,7 @@ without schematic normalization.
 | `LookupError` | Unknown UID, or zero/multiple matches for `one()` |
 | `TypeError` | Incompatible argument/field type, read-only assignment, required-field deletion |
 | `ValueError` | Invalid selector/value/version/option |
+| `UnsupportedFileError` | Unsupported file format, document family or version; subclass of `ValueError` |
 | `ReferenceError` | Relationship constraint violation; library subclass of `ValueError` |
 | `IncompleteDocumentError` | Complete output requested from partial data; subclass of `ValueError` |
 | `NotImplementedError` | Unimplemented mapping, geometry case or required measurement service |
@@ -1041,6 +1078,13 @@ without schematic normalization.
 The library's `ReferenceError` is separate from Python's built-in exception
 with that name. Conversion reports retain diagnostics while preserving the
 original exception type.
+
+`UnsupportedFileError` exposes `format`, `family` and `version` when known;
+unavailable identity values are `None`. Its `reason` is `"format"` for an unknown
+or unavailable format, `"family"` for a recognized unavailable document family,
+or `"version"` for an unsupported revision. These attributes allow callers to
+describe support limits without parsing an error message. Invalid family names
+and ambiguous capability queries remain configuration errors (`ValueError`).
 
 ## Conversion limits
 

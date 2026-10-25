@@ -9,7 +9,7 @@ from lib.schematic.model.refs import (bind_schematic_references)
 class TextImportTests(unittest.TestCase):
     def test_cell_import_removes_only_trailing_blank_rows(self):
         from lib.tests.test_cell_text import table_document
-        from lib.schematic.model.cell_text import (normalized_cell_text)
+        from lib.common.cell_text import (normalized_cell_text)
         values = ('', ' ', '\n', 'a\n', 'a\n\n', 'a\n ', 'a ', ' a ', 'a\nb\n', 'a\n\t', '\na', 'a\n\r', 'a\n\u00a0')
         expected = ('', '', '', 'a', 'a', 'a', 'a ', ' a ', 'a\nb', 'a\n\t', '\na', 'a\n\r', 'a\n\u00a0')
         source = table_document(rows=tuple(5 for _ in values))

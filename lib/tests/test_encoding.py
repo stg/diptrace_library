@@ -53,9 +53,9 @@ class EncodingTests(unittest.TestCase):
 
     def test_ansi_input_is_not_guessed_as_utf8_when_both_decodings_are_valid(self):
         data = b'(Name "\xc3\xa9")\r\n'
-        self.assertEqual(parse_source(data, format='asc').one('/Name').values, ('\u00c3\u00a9',))
-        self.assertEqual(parse_source(data, format='asc', encoding='utf-8').one('/Name').values, ('\u00e9',))
-        self.assertEqual(parse_source(b'\xef\xbb\xbf'+data, format='asc').one('/Name').values, ('\u00e9',))
+        self.assertEqual(parse_source(data, format='asc', family='schematic').one('/Name').values, ('\u00c3\u00a9',))
+        self.assertEqual(parse_source(data, format='asc', family='schematic', encoding='utf-8').one('/Name').values, ('\u00e9',))
+        self.assertEqual(parse_source(b'\xef\xbb\xbf'+data, format='asc', family='schematic').one('/Name').values, ('\u00e9',))
 
     def test_shared_export_defaults_do_not_depend_on_import_encoding(self):
         source = new_schematic()
@@ -98,7 +98,7 @@ class EncodingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             path=Path(folder)/'controls.asc'
             path.write_bytes(raw)
-            document=read(path)
+            document=read(path, family='schematic')
             self.assertEqual(document.to_asc_bytes(),raw)
             name=document.one('/Name')
             name.set_values(name.values[0]+' edited')

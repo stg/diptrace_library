@@ -8,7 +8,7 @@ import sys
 from tempfile import TemporaryDirectory
 import unittest
 
-from lib import ConversionReport, format_capabilities, new_schematic, new_symbol, read, serialize
+from lib import ConversionReport, UnsupportedFileError, format_capabilities, new_schematic, new_symbol, read, serialize
 from apps.diptrace_convert.convert import convert, main
 from apps.diptrace_convert.context import load_context
 
@@ -79,7 +79,19 @@ class ConvertTests(unittest.TestCase):
         with redirect_stderr(errors), self.assertRaises(SystemExit) as stopped:
             main(["input.dch", "output.unknown"])
         self.assertEqual(stopped.exception.code, 2)
-        self.assertIn("no capabilities registered", errors.getvalue())
+        self.assertIn("unsupported file format", errors.getvalue())
+
+    def test_pcb_ascii_is_detected_without_touching_existing_output(self):
+        with TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source, target = Path(folder) / 'input.asc', Path(folder) / 'output.dch'
+            source.write_text('(Source "DipTrace-PCBN" 62)\n(Board)\n')
+            target.write_bytes(b'existing output')
+            report = ConversionReport()
+            with self.assertRaises(UnsupportedFileError) as failed:
+                convert(source, target, report=report)
+            self.assertEqual(failed.exception.family, 'pcb')
+            self.assertEqual(len(report.errors), 1)
+            self.assertEqual(target.read_bytes(), b'existing output')
 
     def test_failed_conversion_keeps_existing_output_and_reports_one_error(self):
         with TemporaryDirectory(dir=Path(__file__).parent) as folder:

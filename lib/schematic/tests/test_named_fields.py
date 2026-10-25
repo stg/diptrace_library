@@ -149,6 +149,23 @@ class NamedFieldTests(unittest.TestCase):
         self.assertEqual(part['Value'], '1k')
         self.assertEqual([row.values for row in bound.one('TextLine').children()], [('1k',), ('extra authored row',)])
 
+    def test_bound_text_follows_new_component_ownership_within_and_between_documents(self):
+        for separate_document in (False, True):
+            with self.subTest(separate_document=separate_document):
+                source = design()
+                part = source.one('/Schematic/Components/Part')
+                shape = next(item for item in part.select('Shapes/Shape') if item['FontType'] == 2)
+                row = shape.one('TextLine/pt')
+                destination = new_schematic() if separate_document else source
+                other = destination.one('/Schematic/Components').append(new_symbol('Other', 'R8'))
+                shape.move_to(other.one('Shapes'))
+                self.assertEqual(row['Text'], 'R8')
+                other['RefDes'] = 'R9'
+                self.assertEqual(row['Text'], 'R9')
+                self.assertIs(shape.one('TextLine/pt'), row)
+                source.validate()
+                destination.validate()
+
 
 if __name__ == '__main__':
     unittest.main()

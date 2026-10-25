@@ -5,6 +5,7 @@ become targets; their containing array positions are projections of those target
 """
 from ...common.references import (Guard, Index, Property, ReferenceError, Segment)
 from ...common.structural_edits import assembling
+from ...common.indexing import at as _at, integer as _integer
 from .reference_scope import select as source_records, OrdinalLookup
 
 
@@ -16,21 +17,6 @@ REFERENCE_COLLECTIONS = frozenset(('Components', 'Pins', 'Nets', 'Lines', 'Point
 def _children(parent, field, kind):
     node = parent.child(field) if parent else None
     return node._child_sequence(kind) if node else ()
-
-
-def _integer(value):
-    if isinstance(value, bool):
-        return None
-    try:
-        number = int(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    return number if number == value else None
-
-
-def _at(items, position):
-    position = _integer(position)
-    return items[position] if position is not None and 0 <= position < len(items) else None
 
 
 def _number_keys(records):
@@ -277,8 +263,9 @@ def _reference_specifications(document, *, clamp_segments=False, scope=None):
                     yield line, None, 'unmapped-bus-mode-'+str(mode), slots, (guard,)
     from .pattern_refs import (specifications as pattern_specifications)
     yield from pattern_specifications(document, scope=scope)
-    from .cache_refs import (specifications as cache_specifications)
-    yield from cache_specifications(document, scope=scope)
+    from ...common.cache_refs import specifications as cache_specifications
+    if document.representation == 'schematic':
+        yield from cache_specifications(schematic, scope=scope)
     from .data_refs import (specifications as data_specifications)
     yield from data_specifications(document, scope=scope)
     from .simulation_refs import (specifications as simulation_specifications)
@@ -287,7 +274,7 @@ def _reference_specifications(document, *, clamp_segments=False, scope=None):
 
 def reference_collections(document, source, role, *, authoring=False):
     from .pattern_refs import (issue_collections as pattern_scopes)
-    from .cache_refs import (issue_collections as cache_scopes)
+    from ...common.cache_refs import issue_collections as cache_scopes
     from .data_refs import (issue_collections as data_scopes)
     from .simulation_refs import (collections as simulation_scopes)
 

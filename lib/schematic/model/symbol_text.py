@@ -1,5 +1,5 @@
 """Resolve component-bound symbol text without changing drawing appearance."""
-from ...common.references import (ReferenceError)
+from ...common.text_lines import check_refresh, replace_line
 
 
 def dependent_shapes(document, slot, *, include_outputs=False):
@@ -130,32 +130,14 @@ def plan_symbol_text(document, *, parts=None, overrides=None, shapes=None):
             rows = lines.children('pt') if lines is not None else []
             if [row.values for row in rows] != [(text,)] or (show_part is not None and shape.scalar('ShowPart') != show_part):
                 plans.append((shape, lines, rows, text, show_part))
-    structural = [(shape, lines, rows) for shape, lines, rows, _, _ in plans if len(rows) != 1]
-    graph = document.references
-    graph._check_collection_changes(lines if lines is not None else shape for shape, lines, _ in structural)
-    removed = {node for _, _, rows in structural for row in rows[1:]
-               for node in row.walk(include_self=True)}
-    if any(graph.incoming(node) or graph.outgoing(node) or
-            graph.guard_consumers(node) or graph.unresolved_guard_consumers(node) or any(
-            graph.manages(node, index) or graph.unresolved_slot(node, index) or
-            graph.value_consumers(node, index) or graph.guard_consumers(node, index) or
-            graph.unresolved_guard_consumers(node, index)
-            for index in range(len(node.arguments))) for node in removed):
-        raise ReferenceError('symbol text refresh would remove a referenced text row')
+    check_refresh(document, ((shape, lines, rows) for shape, lines, rows, _, _ in plans))
     return plans
 
 
 def apply_symbol_text(plans):
     """Apply a preflighted local plan without touching drawing appearance."""
     for shape, lines, rows, text, show_part in plans:
-        if lines is None:
-            lines = shape.add('TextLine')
-        if rows:
-            rows[0].set_values(text)
-            for row in rows[1:]:
-                row.detach()
-        else:
-            lines.add('pt', text)
+        replace_line(shape, lines, rows, text)
         if show_part is not None:
             shape.set_field('ShowPart', show_part)
     if plans:

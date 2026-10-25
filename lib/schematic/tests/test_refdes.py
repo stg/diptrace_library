@@ -83,6 +83,38 @@ class SchematicRefDesTests(unittest.TestCase):
             first['RefDes'] = 'U3'
         self.assertEqual((first['RefDes'], second['RefDes']), ('U003', 'U003'))
 
+    def test_imported_duplicates_survive_but_cannot_be_recreated_by_renaming(self):
+        from lib import parse_asc
+        from lib.schematic.model.new import new_page
+
+        self.document.one('/Schematic/Pages').append(new_page('Sheet 2'))
+        self.part('D13_3')
+        self.part('D14_3', Page=1)
+        source = parse_asc(self.document.to_asc())
+        for spelling in ('D13_3', 'D13_003'):
+            # Construct source data without invoking the named authoring API.
+            source.one('/Schematic/Components/Part[2]').set_argument(1, spelling)
+            imported = source.as_schematic()
+            for format in ('dch', 'asc', 'dchxml'):
+                with self.subTest(spelling=spelling, format=format):
+                    document = parse(serialize(imported, format=format), format=format)
+                    first, second = document.select('/Schematic/Components/Part')
+                    self.assertCountEqual(document.refdes('D13_').matches('D13_3'), [first, second])
+                    self.assertIsNot(first, second)
+                    second['RefDes'] = spelling  # An unchanged imported name is valid.
+                    second['Value'] = 'Independent'
+                    self.assertNotEqual(first['Value'], second['Value'])
+                    before = document.to_dch_bytes()
+                    with self.assertRaisesRegex(ValueError, 'already occupied'):
+                        first['RefDes'] = 'D13_0003'
+                    self.assertEqual(document.to_dch_bytes(), before)
+                    second['RefDes'] = 'D14_3'
+                    for occupied in ('D13_3', 'D13_003'):
+                        with self.assertRaisesRegex(ValueError, 'already occupied'):
+                            second.set('RefDes', occupied)
+                        self.assertEqual(second['RefDes'], 'D14_3')
+                    document.validate()
+
     def test_enabling_a_conflicting_alias_is_atomic(self):
         self.part('R3')
         disabled = self.part('R003', Enabled=False)

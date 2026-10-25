@@ -6,6 +6,22 @@ from lib.common.schema import Field, Record
 
 
 class SchemaAccessTests(unittest.TestCase):
+    def test_declared_choices_validate_edits_and_full_audits(self):
+        choices = ['mm', 'mil', 'inch']
+        field = Field('Units', 'text', choices=choices)
+        choices.append('cm')
+        self.assertEqual(field.choices, ('mm', 'mil', 'inch'))
+        node = Element('Settings').bind_schema(Record('Settings', {'Units': field}))
+        document = Document()
+        document.root.append(node)
+        node['Units'] = 'mil'
+        with self.assertRaisesRegex(ValueError, 'must be one of'):
+            node['Units'] = 'cm'
+        self.assertEqual(node['Units'], 'mil')
+        node.one('Units').set_values('invalid')  # Deliberately bypass named access.
+        with self.assertRaisesRegex(ValueError, 'must be one of'):
+            document.validate()
+
     def test_full_audit_checks_nonparameter_types_duplicates_and_required_presence(self):
         schema = Record('Typed', {
             'Name': Field('Name', 'text', required=True, default=''),

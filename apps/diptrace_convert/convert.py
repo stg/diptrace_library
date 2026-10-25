@@ -2,32 +2,39 @@
 import argparse
 from pathlib import Path
 
-from lib import ConversionReport, format_capabilities, read, serialize
+from lib import ConversionReport, document_family, format_capabilities, read, serialize
 from apps.common.cli import Console, PROCESSING_ERRORS, add_report_argument
 from apps.common.paths import require_distinct_paths
 from .context import load_context
 
 
-def conversion_formats(source: Path, target: Path, version=None):
+def conversion_formats(source: Path, target: Path, version=None, *, family):
     """Ask the adapters about extensions and versions; keep no app version list."""
-    source_format = format_capabilities(source.suffix)
-    target_format = format_capabilities(target.suffix)
+    source_format = format_capabilities(source.suffix, family=family)
+    target_format = format_capabilities(target.suffix, family=family)
     if source_format.family != target_format.family:
         raise ValueError("input and output must belong to the same document family")
     return source_format.format, target_format.format, target_format.output_version(version)
 
 
-def convert(source: Path, target: Path, *, version=None, context=None, report=None):
-    """Read and serialize completely before touching an existing output file."""
-    source, target = Path(source), Path(target)
-    require_distinct_paths(source, target)
-    source_format, target_format, version = conversion_formats(source, target, version)
-    design = read(source, format=source_format, report=report)
-    data = serialize(design, format=target_format, version=version,
+def _save_conversion(design, target, *, format, version, context, report):
+    """Finish output in memory before creating directories or replacing a file."""
+    data = serialize(design, format=format, version=version,
                      context=context, report=report, label=str(target))
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
     return design
+
+
+def convert(source: Path, target: Path, *, version=None, context=None, report=None):
+    """Read once, detect its family, then serialize before touching the output."""
+    source, target = Path(source), Path(target)
+    require_distinct_paths(source, target)
+    design = read(source, report=report)
+    _, target_format, version = conversion_formats(source, target, version,
+                                                   family=document_family(design))
+    return _save_conversion(design, target, format=target_format, version=version,
+                            context=context, report=report)
 
 
 def main(argv=None) -> int:
@@ -46,14 +53,30 @@ def main(argv=None) -> int:
 
     try:
         require_distinct_paths(args.input, args.output)
-        _, target_format, _ = conversion_formats(args.input, args.output, args.version)
-        context = load_context(args.context, format=target_format, windows_fonts=args.windows_fonts)
+        # ASC's family comes from its Source declaration. Unique extensions
+        # can be checked early, without loading the input or favoring a family.
+        for path in (args.input, args.output):
+            if path.suffix.lower() != '.asc':
+                format_capabilities(path.suffix)
     except PROCESSING_ERRORS as error:
         parser.error(str(error))
 
     report = ConversionReport()
     try:
-        convert(args.input, args.output, version=args.version, context=context, report=report)
+        design = read(args.input, report=report)
+    except PROCESSING_ERRORS as error:
+        return console.failure("conversion failed", error, report=report)
+
+    try:
+        _, target_format, version = conversion_formats(args.input, args.output, args.version,
+                                                        family=document_family(design))
+        context = load_context(args.context, format=target_format, windows_fonts=args.windows_fonts)
+    except PROCESSING_ERRORS as error:
+        parser.error(str(error))
+
+    try:
+        _save_conversion(design, args.output, format=target_format, version=version,
+                         context=context, report=report)
     except PROCESSING_ERRORS as error:
         return console.failure("conversion failed", error, report=report)
 

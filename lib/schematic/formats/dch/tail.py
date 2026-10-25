@@ -1,6 +1,7 @@
 """Project settings, external resources and simulation extension records."""
 from ...model.traversal import (placed_components, cached_definitions, symbols, footprints)
 from ...model.simulation import ARGUMENT_SCHEMAS
+from ....common.supplier_codec import read_supplier
 
 
 def read_simulation_arguments(reader, group):
@@ -10,16 +11,11 @@ def read_simulation_arguments(reader, group):
 
 
 def _suppliers(r, part, *, prices):
-    suppliers = part.add("Suppliers")
-    for name in ("PartNumber", "Manufacturer", "Pattern", "Supplier", "SourceLocator", "Currency"):
-        node = r.field(suppliers, name, "text")
-        if name == "SourceLocator":
-            node.annotations["asc_omit"] = "stored supplier locator is not emitted by format schematic ASC"
+    suppliers = read_supplier(r, part, prices=prices)
+    suppliers.one('SourceLocator').annotations["asc_omit"] = "stored supplier locator is not emitted by format schematic ASC"
     if prices:
-        quotes = suppliers.add("Prices")
+        quotes = suppliers.one("Prices")
         quotes.annotations["asc_omit"] = "stored price breaks are not emitted by format schematic ASC"
-        for _ in range(r.count("supplier price breaks")):
-            quotes.add("Quote", r.argument('integer'), r.argument('number'))
 
 
 def read_project_extensions(r, schematic):

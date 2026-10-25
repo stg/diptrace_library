@@ -3,7 +3,7 @@ import unittest
 
 from lib import ExportReport, new_schematic, parse
 from lib.schematic.formats.dch.read import (Reader)
-from lib.schematic.formats.dch.cache import (_discard_groups)
+from lib.common.library_codec import discard_legacy_groups
 from lib.schematic.model.objects import (new_pattern, new_symbol)
 from lib.schematic.model.refs import (bind_schematic_references)
 
@@ -71,7 +71,7 @@ class LegacyGroupTests(unittest.TestCase):
                 for version in range(34, 49):
                     header = b'\x07DTSCHEM'+integer(version)
                     reader = Reader(header+raw+integer(123))
-                    _discard_groups(reader, range(kinds))
+                    discard_legacy_groups(reader, range(kinds))
                     self.assertEqual(reader.pos, len(header)+len(raw))
                     self.assertEqual(reader.integer(), 123)
 

@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib import Document, Element, new_schematic, new_net, new_schematic_shape, parse_dchxml
 from lib.schematic.formats.dchxml.graphics import (project_drawing)
-from lib.schematic.formats.dchxml.units import (DchXmlUnits)
+from lib.common.units import XmlUnits
 from lib.schematic.model.refs import (bind_schematic_references)
 
 
@@ -25,7 +25,7 @@ def drawing(kind):
 
 class XmlGraphicsTests(unittest.TestCase):
     def test_picture_and_text_units_and_paths(self):
-        units = DchXmlUnits('mm')
+        units = XmlUnits('mm')
         picture = project_drawing(drawing(11), index=4, units=units)
         self.assertEqual((picture.scalar('PictureWidth'), picture.scalar('PictureHeight')), (2, 3))
         self.assertEqual((picture.scalar('HorzAlign'), picture.scalar('VertAlign')), ('Left', 'Top'))
@@ -40,7 +40,7 @@ class XmlGraphicsTests(unittest.TestCase):
         source = drawing(1)
         for width, present in ((-2, False), (-1, False), (-.5, True), (0, True), (1, True)):
             source.set_field('PenWidth', width)
-            projected = project_drawing(source, index=0, units=DchXmlUnits('mm'))
+            projected = project_drawing(source, index=0, units=XmlUnits('mm'))
             self.assertEqual(projected.child('LineWidth') is not None, present)
             if present:
                 self.assertAlmostEqual(float(projected.scalar('LineWidth')), width/3)
@@ -56,7 +56,7 @@ class XmlGraphicsTests(unittest.TestCase):
         first.move_to(nets, 1)
         document.rebuild()
         self.assertEqual(label.scalar('RelatedNet'), 1)
-        self.assertEqual(project_drawing(label, index=0, units=DchXmlUnits('mm')).scalar('NetId'), 1)
+        self.assertEqual(project_drawing(label, index=0, units=XmlUnits('mm')).scalar('NetId'), 1)
 
     def test_xml_net_and_bus_label_keys_are_numeric_and_follow_renaming(self):
         document = parse_dchxml('<Source Type="DipTrace-Schematic"><Schematic>'

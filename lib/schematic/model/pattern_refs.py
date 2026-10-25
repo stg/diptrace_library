@@ -1,6 +1,7 @@
 """Local footprint pad assignments and dimension attachments."""
 from .traversal import (footprints, symbols)
 from ...common.references import (Guard, Index)
+from ...common.dimension_refs import local_attachment
 from .refs import (_at, _integer, _children)
 from .local_keys import (missing_key)
 from .reference_scope import select as source_records
@@ -13,45 +14,19 @@ def _real_member(records, number):
     return _at(records, number) if number is not None and 1 <= number < len(records)-1 else None
 
 
-def _dimension_link(dimension, side, choices):
+def _dimension_link(dimension, side, objects):
     mode = dimension.child('Connected'+side)
-    owner = dimension.child('Object'+side)
     member = dimension.child('SubObject'+side)
     if mode is None or member is None:
         return
-    selected, number = _integer(mode.values[0]), _integer(member.values[0])
+    selected = _integer(mode.values[0])
     if selected is None or selected < 0:
         return
     guards = (Guard(mode, mode.values),)
     missing = missing_key(dimension, 'SubObject'+side)
     if missing is not None:
         return None, (Index(missing, argument=1), Index(member)), guards
-    if selected in (0, 1, 2):
-        # Object is retained but unused by these local attachment modes.
-        target = _real_member(choices[selected], number)
-        if selected == 1 and target is not None:
-            kind = _integer(target.scalar('Type', 1))
-            if kind is not None and kind < 1:
-                target = None
-            elif kind in (8, 9):
-                point = dimension.child('Point'+side)
-                if point is not None:
-                    return _at(target.select('Points_New/pt'), point.values[0]), (
-                        Index(member, ancestor=2), Index(point)), guards
-                target = None
-        if selected == 2 and target is not None and target.values and target.values[0] in (False, 'N'):
-            target = None
-        return target, (Index(member),), guards
-    if selected == 3 and owner is not None:
-        pad = _real_member(choices[0], _integer(owner.values[0]))
-        terminal = _at(pad.children('PadTerminal'), number) if pad is not None else None
-        point = dimension.child('Point'+side)
-        anchor = _integer(point.values[0]) if point is not None else None
-        if terminal is not None and terminal.scalar('Type') == 3 and anchor is not None and anchor > 0:
-            target = _at(terminal.select('ShapePoints/pt'), anchor-1)
-            return target, (Index(owner, ancestor=3), Index(member, ancestor=2), Index(point, offset=1)), guards
-        return terminal, (Index(owner, ancestor=1), Index(member)), guards
-    return None, (Index(member),), guards
+    return local_attachment(dimension, side, objects)
 
 
 def specifications(document, *, scope=None):
@@ -125,11 +100,13 @@ def specifications(document, *, scope=None):
                 yield shape, None, 'pattern-shape-pad', (Index(missing, argument=1), Index(field)), ()
             elif number is not None and number >= 0:
                 yield shape, _at(choices[0], number), 'pattern-shape-pad', (Index(field),), ()
-        for dimension in source_records(pattern, 'Dimensions/Dimension', scope):
+        dimensions = source_records(pattern, 'Dimensions/Dimension', scope)
+        objects = {kind: dict(enumerate(records[1:-1], 1)) for kind, records in choices.items()} if dimensions else {}
+        for dimension in dimensions:
             if dimension.scalar('Enabled') in (False, 'N'):
                 continue
             for side in ('1', '2'):
-                link = _dimension_link(dimension, side, choices)
+                link = _dimension_link(dimension, side, objects)
                 if link is not None:
                     target, indices, guards = link
                     yield dimension, target, 'pattern-dimension-'+side, indices, guards

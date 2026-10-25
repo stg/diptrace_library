@@ -38,7 +38,7 @@ class MarkingEditTests(unittest.TestCase):
         current = source()
         metrics = Mock()
         metrics.measure.return_value = TextMetrics(100, 20)
-        with patch('lib.schematic.layout.text_layout._system_metrics', return_value=metrics) as backend:
+        with patch('lib.common.text.layout._system_metrics', return_value=metrics) as backend:
             current.to_dch_bytes()
             backend.assert_not_called()
             current.one('/Schematic').set_field('PartFontVector', False)

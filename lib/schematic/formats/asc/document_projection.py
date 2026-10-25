@@ -1,7 +1,7 @@
 """Document-level ASC views and compatibility fields over current public data."""
 from ....common.model import (Element, Value)
 from .projection import (ProjectionError, _head, _ordered, _plain, _value, _visible)
-from ...model.cell_text import (cell_text_lines, cell_lines, asc_cell_text)
+from ....common.cell_text import (cell_text_lines, cell_lines, asc_cell_text)
 
 
 from ...model.vocabulary import (PAGE_CONNECTOR_FIELDS)

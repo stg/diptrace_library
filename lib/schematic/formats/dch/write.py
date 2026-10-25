@@ -1,5 +1,5 @@
 """Binary output through schema 52 by named traversal, without source replay."""
-from .encode import (Encoder, NUMBER_LIMIT)
+from ....common.binary import BinaryWriter, NUMBER_LIMIT
 from .records import (COMPONENT_PLACEMENT, PIN_FONT)
 from ..capabilities import DCH
 from ....common.conversion import (export_diagnostics)
@@ -14,7 +14,9 @@ def legacy_pad_orientation(angle):
     return abs(angle-math.pi/2)<.001 or abs(angle-3*math.pi/2)<.001
 
 
-class Writer(Encoder):
+class Writer(BinaryWriter):
+    format_name = 'DCH'
+
     def __init__(self,version=DCH.default_write_version,*,compatibility_changes=None):
         super().__init__()
         self.version=version
@@ -350,7 +352,7 @@ class Writer(Encoder):
         self.field(cell,'FOrientation','boolean')
         self.fields(cell,'integer','FontSize FontType Align')
         self.field(cell,'FontColor','color')
-        from ...model.cell_text import (cell_text)
+        from ....common.cell_text import (cell_text)
         self.text(cell_text(cell))
         self.field(cell,'FontName','text')
 

@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib import parse_dchxml, ReferenceError
 from lib.schematic.formats.dchxml.tables import (project_table, project_title_block)
-from lib.schematic.formats.dchxml.units import (DchXmlUnits)
+from lib.common.units import XmlUnits
 from lib.common.model import (Element)
 
 
@@ -34,7 +34,7 @@ class XmlTablesTests(unittest.TestCase):
             style(cell)
             cell.add('Align', 0)
             cell.add('Text', str(index)+'\nsecond\n  \n')
-        result = project_table(table, index=7, units=DchXmlUnits('mm'))
+        result = project_table(table, index=7, units=XmlUnits('mm'))
         self.assertEqual((result.scalar('Orientation'), result.scalar('FontWidth'), result.scalar('Y1')), (90, 3, -2))
         self.assertEqual([[cell.select('TextLines/TextLine')[0].values[0] for cell in column.children('Cell')]
                           for column in result.select('Cells/Cell')], [['0', '1'], ['2', '3']])
@@ -42,7 +42,7 @@ class XmlTablesTests(unittest.TestCase):
         self.assertEqual(result.one('Cells/Cell[1]/Cell[1]').scalar('Y2'), -4)
         cells.children()[0].detach()
         with self.assertRaisesRegex(ValueError, 'declared rectangle'):
-            project_table(table, index=7, units=DchXmlUnits('mm'))
+            project_table(table, index=7, units=XmlUnits('mm'))
 
     def test_title_font_width_is_physical_and_fields_preserve_text(self):
         grid = Element('TitleBlock', 0, 'Custom')
@@ -56,13 +56,13 @@ class XmlTablesTests(unittest.TestCase):
         content.add('Text', 'Title\n\nRevision\n')
         content.add('Align', 1)
         content.add('Placement', 3, 6, 9, 12)
-        result = project_title_block(grid, name='BottomRightBlock', units=DchXmlUnits('mm'))
+        result = project_title_block(grid, name='BottomRightBlock', units=XmlUnits('mm'))
         field = result.one('Fields/Field')
         self.assertEqual((field.scalar('FontWidth'), field.scalar('TextShow')), (1, 'Text'))
         self.assertEqual([line.values for line in field.select('TextLines/TextLine')], [('Title',), (), ('Revision',)])
         self.assertEqual(result.one('Cells/Item/Item').scalar('BottomLine'), False)
         content.set_field('FontWidth', -1)
-        result = project_title_block(grid, name='BottomRightBlock', units=DchXmlUnits('mm'))
+        result = project_title_block(grid, name='BottomRightBlock', units=XmlUnits('mm'))
         self.assertEqual(result.one('Fields/Field').scalar('FontWidth'), -1)
 
     def test_title_cell_field_links_follow_key_edits_and_reject_other_blocks(self):

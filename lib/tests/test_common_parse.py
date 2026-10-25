@@ -41,7 +41,7 @@ class CommonParseTests(unittest.TestCase):
             current = parse(value, format='asc')
             self.assertEqual(current.select('/Units'), [])
             self.assertTrue(current.one('/Schematic/Settings').scalar('UnitsMM'))
-        with self.assertRaisesRegex(ValueError, 'no parser'):
+        with self.assertRaisesRegex(ValueError, 'unsupported file format'):
             parse(data, format='unknown')
 
 

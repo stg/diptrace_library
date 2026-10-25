@@ -8,7 +8,7 @@ from decimal import Decimal
 import math
 
 from ....common.model import (Element, Value)
-from .model_body import (project_model_body)
+from ....common.asc_model_body import project_model_body
 from .policy import (model3d_arguments, number_text, component_orientation)
 from ....common.numbers import (calculation_number as _calculation)
 from .pad_geometry import (PadContour, legacy_pad_contour, requires_modern_points)
@@ -311,7 +311,7 @@ def project_pattern_drawing(shape, pattern, *, line_width=None, text_bounds=None
         if text_bounds is None:
             if shape.scalar('VectorFont') not in (True, 'Y'):
                 raise ProjectionError(f'{shape.path}: system-font bounds require a font layout service')
-            from ...layout.vector_text import (pattern_vector_text_bounds)
+            from ....common.text.vector_layout import (pattern_vector_text_bounds)
             text_bounds = pattern_vector_text_bounds
         corners = tuple(text_bounds(shape))
         if len(corners) != 2 or any(len(point) != 2 for point in corners):
@@ -461,7 +461,7 @@ def _project_drawing(shape, names, *, index=None, text_bounds=None,
                 if text_bounds is None:
                     if shape.scalar('VectorFont') not in (True, 'Y'):
                         raise ProjectionError(f'{shape.path}: system-font bounds require a font layout service')
-                    from ...layout.vector_text import (symbol_vector_text_bounds)
+                    from ....common.text.vector_layout import (symbol_vector_text_bounds)
                     text_bounds = symbol_vector_text_bounds
                 geometry = result.add(name)
                 layout_shape = shape

@@ -1,5 +1,5 @@
 """format schematic ASC layout from public records, without source-text replay."""
-from .syntax import (_value)
+from ....common.asc import _value
 
 
 # These public array/count records keep an opening and closing line even when

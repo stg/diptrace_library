@@ -87,6 +87,22 @@ def ellipse_points(first, opposite, *, segments=30, closed=False):
     return points+(points[0],) if closed else points
 
 
+def transform_point(point, *, origin=(0, 0), angle=0):
+    """Rotate in stored coordinates, then translate; angles are radians.
+
+    Positive angles use (x*cos(a)+y*sin(a), y*cos(a)-x*sin(a)). Exact quarter
+    turns use their integer matrices; other angles retain their full value.
+    Inputs are not modified and the result is independent of previous results.
+    """
+    x, y = map(float, point)
+    ox, oy = map(float, origin)
+    angle = float(angle)
+    if not all(math.isfinite(value) for value in (x, y, ox, oy, angle)):
+        raise ValueError('point transforms require finite coordinates and angles')
+    turn = angle % math.tau
+    exact = {0.: (1, 0), math.pi/2: (0, 1), math.pi: (-1, 0), 3*math.pi/2: (0, -1)}
+    cosine, sine = exact[turn] if turn in exact else (math.cos(turn), math.sin(turn))
+    return ox+x*cosine+y*sine, oy+y*cosine-x*sine
 
 
 def polar_rotate(point, angle):

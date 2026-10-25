@@ -1,5 +1,5 @@
 """SPICE model text at the ASC boundary, with owned lines in the shared model."""
-from ....common.model import (Element)
+from .model import Element
 
 
 def project_model_body(body):

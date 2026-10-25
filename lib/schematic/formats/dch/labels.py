@@ -67,9 +67,10 @@ def upgrade_instance_labels(version, schematic, *, font_size, font_name='', text
         return
     from ....common.numbers import (calculation_number)
     from ...model.traversal import (placed_components)
-    from ...layout.legacy_labels import (LegacyLabelSlot, resolve_legacy_labels, LABEL_NAMES)
+    from ....common.legacy_labels import LegacyLabelSlot
+    from ...layout.legacy_labels import (resolve_legacy_labels, LABEL_NAMES)
     from ...layout.markings import (MarkingStyle, marking_width)
-    from ...layout.text_layout import (TextLayout)
+    from ....common.text.layout import TextLayout
     layout = text_layout or TextLayout()
     style = MarkingStyle(font_size=font_size, font_name=font_name,
         vector=schematic.scalar('PartFontVector') in (True, 'Y'),

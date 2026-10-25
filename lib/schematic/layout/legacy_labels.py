@@ -1,15 +1,6 @@
 """Old two-slot label choices expressed as public, editable label settings."""
 from dataclasses import dataclass
-import math
-
-
-@dataclass(frozen=True)
-class LegacyLabelSlot:
-    mode: int = 0
-    alignment: int = 0
-    user_field: int = -1
-    x_shift: float = 0.
-    y_shift: float = 0.
+from ...common.legacy_labels import LegacyLabelSlot, label_anchor
 
 
 @dataclass
@@ -51,20 +42,8 @@ def label_side(preferred, pin_orientations):
 
 
 def _anchor(settings, alignment, slot, dimensions):
-    width, height = dimensions
-    x, y = slot.x_shift, slot.y_shift
-    # Placement names are the ASC position choices. The data table describes
-    # local anchor coordinates and alignment, rather than a format record.
-    positions = {
-        1: (-y, -x, 0, 0, math.pi/2) if height > width else (x, -y, 0, 0, 0.),
-        2: (x, -height/2-y, 0, 1, 0.),
-        3: (x, height/2+y, 0, -1, 0.),
-        4: (-width/2-y, -x, 0, 1, math.pi/2),
-        5: (width/2+y, -x, 0, -1, math.pi/2),
-        6: (width/2+x, -height/2-y, -1, 1, 0.),
-    }
-    if alignment in positions:
-        settings.x, settings.y, settings.horizontal, settings.vertical, settings.angle = positions[alignment]
+    if (anchor := label_anchor(alignment, (slot.x_shift, slot.y_shift), dimensions)) is not None:
+        settings.x, settings.y, settings.horizontal, settings.vertical, settings.angle = anchor
 
 
 def resolve_legacy_labels(*, version, first=LegacyLabelSlot(), second=LegacyLabelSlot(),

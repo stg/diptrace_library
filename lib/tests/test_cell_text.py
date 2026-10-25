@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib import new_schematic, parse_asc, parse_dch, parse_dchxml, DchXmlExportContext, AscExportContext, ExportReport
 from lib.schematic.formats.dchxml.import_tables import (read_tables)
 from lib.schematic.formats.dchxml.import_values import (XmlRecord)
-from lib.schematic.formats.dchxml.units import (DchXmlUnits)
+from lib.common.units import XmlUnits
 from lib.schematic.layout.markings import (MarkingStyle)
 from lib.schematic.model.refs import (bind_schematic_references)
 
@@ -21,7 +21,7 @@ def table_document(*, columns=(10,), rows=(5,)):
     <Cells>{column*len(columns)}</Cells>
     </Table></Tables></Schematic></Source>''')
     result = new_schematic()
-    read_tables(XmlRecord(source.one('/Source/Schematic')), result.one('/Schematic'), units=DchXmlUnits('mm'), sheets={0: 0})
+    read_tables(XmlRecord(source.one('/Source/Schematic')), result.one('/Schematic'), units=XmlUnits('mm'), sheets={0: 0})
     bind_schematic_references(result)
     for node in result.root.walk(include_self=True):
         node._dirty = node._reordered = False

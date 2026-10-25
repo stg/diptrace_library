@@ -112,7 +112,7 @@ def length(value, units, *, reverse=False):
     value = value if isinstance(value, Value) else Value.of(value)
     if value.kind != 'number' or value.unit:
         raise ValueError('XML length requires an unqualified number')
-    factor = {'mm': Decimal(3), 'mil': Decimal('.0762'), 'inch': Decimal('76.2')}[units.units]
+    factor = Decimal(str(units.internal_unit))
     result = Decimal(str(value.value))*factor*(-1 if reverse else 1)
     return Value(result, 'number')
 

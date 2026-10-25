@@ -1,5 +1,5 @@
 """Public XML table grids and page title blocks from owned data."""
-from ...model.cell_text import (cell_lines)
+from ....common.cell_text import (cell_lines)
 from .syntax import (set_attribute)
 from .settings import (enum_text, field, numeric, stroke_width)
 from ....common.model import (Element)

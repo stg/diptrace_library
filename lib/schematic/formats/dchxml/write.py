@@ -10,7 +10,7 @@ from .nets import (project_nets, project_net_classes, project_differential_pairs
 from .project import (project_libraries, project_simulator)
 from .settings import (project_sheet_settings, project_settings, project_erc)
 from .tables import (project_tables)
-from .units import (DchXmlUnits)
+from ....common.units import XmlUnits
 from ...model.document import (Document)
 from ....common.model import (IncompleteDocumentError)
 from ....common.conversion import (export_diagnostics)
@@ -62,7 +62,7 @@ def project_document(document, *, context=None, version=DCHXML.default_write_ver
         from ..path_variables import (prepare_variable_paths)
         prepare_variable_paths(schematic, context.path_variables,
             project_dir=context.project_dir if context.project_dir is not None else schematic.scalar('ProjectDir', ''))
-    units = DchXmlUnits(context.units)
+    units = XmlUnits(context.units)
     library = project_library(schematic, units=units, version=version, report=report)
     output = Document(representation='dchxml')
     source = output.root.add('Source')

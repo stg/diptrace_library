@@ -3,6 +3,9 @@ from decimal import Decimal
 import math
 
 from ....common.model import (SourceSpan)
+from ....common.drawing_codec import read_text_lines as _text_lines
+from ....common.footprint_codec import read_pattern_extensions
+from ....common.symbol_codec import read_symbol_extensions
 from ...model.traversal import (placed_components, cached_definitions)
 
 
@@ -28,123 +31,16 @@ def _label(r, parent, name, integer_count):
     return node
 
 
-def _text_lines(r, shape):
-    start = r.pos
-    lines = shape.child("TextLine")
-    if lines is None:
-        lines = shape.add("TextLine")
-    else:
-        for child in tuple(lines.children()):
-            child.detach()
-    for _ in range(r.count("shape text lines")):
-        lines.add("pt", r.argument('text'))
-    lines.source = SourceSpan("dch", start, r.pos, r.source)
-
-
-def _replace_point_coordinates(r, shape):
-    # The extension has the same point count as the earlier compatibility
-    # array; it does not serialize a second count here.
-    for point in shape.child("Points_New").children("pt"):
-        start = r.pos
-        point.set_values(r.argument('number'), r.argument('number'))
-        point.source = SourceSpan("dch", start, r.pos, r.source)
-
-
-def _terminals(r, parent):
-    count = r.count("pad terminals")
-    for index in range(count):
-        node = parent.add("PadTerminal", index)
-        r.field(node, "Type", "integer")
-        for name in ("X", "Y"):
-            r.field(node, name, "number")
-        _angle(r, node, "Angle")
-        for name in ("ShapeWidth", "ShapeHeight", "ShapeCorner"):
-            r.field(node, name, "number")
-        points = node.add("ShapePoints")
-        for _ in range(r.count("terminal polygon points")):
-            points.add("pt", r.argument('number'), r.argument('number'))
-
-
-def _mask_segments(r, parent):
-    for name in ("PadMask_TopSegments", "PadMask_BotSegments"):
-        count = r.count("pad mask segments")
-        node = parent.add(name, count)
-        for _ in range(count):
-            node.add("pt", *(r.argument('number') for _ in range(4)))
-
-
-def _groups(r, parent, name):
-    groups = parent.add(name)
-    for _ in range(r.count("drawing groups")):
-        groups.add("pt", r.argument('boolean'), r.argument('integer'), r.argument('number'), r.argument('number'))
-
-
 def pattern_properties(r, pattern):
-    """Pattern properties."""
-    for name in ("OriginCross", "OriginCircle"):
-        r.field(pattern, name, "boolean")
-    common = r.field(pattern, "OriginCommon", "integer")
-    r.field(pattern, "OriginCourtyard", "integer")
+    """Read shared footprint data with schematic angle and origin policy."""
+    read_pattern_extensions(r, pattern, angle_reader=_angle)
+    common = pattern.one("OriginCommon")
     if common.values[0] == 2:
         common.set_values(1)
-    for name in ("Name_Description", "Name_Unique", "RecoveryCode"):
-        r.field(pattern, name, "text")
-    for name in ("RecoveryCode_Generator", "RecoveryCode_Model"):
-        r.field(pattern, name, "boolean")
-    r.field(pattern, "Pattern_Manufacturer", "text")
-    for name in ("PadCorner", "PadShape_X", "PadShape_Y"):
-        r.field(pattern, name, "number")
-    _terminals(r, pattern)
-    for name in ("TopMask_State", "BotMask_State", "TopPaste_State", "BotPaste_State"):
-        r.field(pattern, name, "integer")
-    for name in ("CustomSwell_New", "CustomShrink_New", "PadMask_Percent", "PadMask_EdgeGap", "PadMask_SegmentGap", "PadMask_SegmentSide"):
-        r.field(pattern, name, "number")
-    _mask_segments(r, pattern)
-    for pad in pattern.child("Pads").children("Pad"):
-        r.field(pad, "Group", "integer")
-        r.field(pad, "PadCorner", "number")
-        _angle(r, pad, "PadAngle")
-        for name in ("PadShape_X", "PadShape_Y"):
-            r.field(pad, name, "number")
-        _terminals(r, pad)
-        for name in ("PadMask_Percent", "PadMask_EdgeGap", "PadMask_SegmentGap", "PadMask_SegmentSide"):
-            r.field(pad, name, "number")
-        _mask_segments(r, pad)
-    for shape in pattern.child("Shapes").children("Shape"):
-        _replace_point_coordinates(r, shape)
-        _angle(r, shape, "TextAngle")
-        for name in ("TextHorz", "TextVert", "TextAlign"):
-            r.field(shape, name, "integer")
-        r.field(shape, "LineSpacing", "number")
-        _text_lines(r, shape)
-        r.field(shape, "AllLayers", "boolean")
-        r.field(shape, "Group", "integer")
-    for hole in pattern.child("Holes").children("Hole"):
-        hole.set_values(*hole.arguments, r.argument('integer'))
-    for dimension in pattern.child("Dimensions").children("Dimension"):
-        r.field(dimension, "Group", "integer")
-    _groups(r, pattern, "Pattern_Groups")
-    model = pattern.child("Model3D")
-    for name, kind in (('IPC_XOff', 'number'), ('IPC_YOff', 'number'),
-                       ('AutoHeight', 'number'), ('AutoColor', 'color'), ('Type', 'integer')):
-        r.field(model, name, kind)
 
 
 def symbol_properties(r, part, *, placed):
-    for pin in part.child("Pins").children("Pin"):
-        r.field(pin, "Group", "integer")
-    for shape in part.child("Shapes").children("Shape"):
-        _angle(r, shape, "TextAngle")
-        for name in ("TextHorz", "TextVert", "TextAlign"):
-            r.field(shape, name, "integer")
-        r.field(shape, "LineSpacing", "number")
-        _text_lines(r, shape)
-        r.field(shape, "Group", "integer")
-        if placed:
-            for name in ("ShowPart", "MarkingGenerated"):
-                r.field(shape, name, "boolean", replace=True)
-    if not placed:
-        _groups(r, part, "Groups")
+    read_symbol_extensions(r, part, placed=placed, angle_reader=_angle)
 
 
 def read_drawing_extensions(r, schematic):

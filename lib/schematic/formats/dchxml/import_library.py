@@ -5,7 +5,7 @@ from .import_patterns import (read_pattern)
 from .import_pads import (read_pad_style)
 from .import_symbols import (read_symbol)
 from .import_values import (XmlRecord, replace_rows)
-from .units import (DchXmlUnits)
+from ....common.units import XmlUnits
 from ....common.model import (Element)
 from ...model.objects import (new_pattern)
 from ...model.local_keys import (map_key)
@@ -79,7 +79,7 @@ def _header(record, kind, units):
     if record.text('Type', 'DipTrace-'+kind+'Library') != 'DipTrace-'+kind+'Library':
         raise ValueError(f'{record.node.path}: expected a {kind.lower()} library')
     record.text('Version', '')
-    return DchXmlUnits(record.text('Units', units.units))
+    return XmlUnits(record.text('Units', units.units))
 
 
 def read_library(record, schematic, *, units, cache_count):

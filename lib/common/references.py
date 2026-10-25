@@ -253,8 +253,25 @@ class References:
             owner, argument = self._property_source(target, item.name,
                 item.target_argument if isinstance(item, Property) else 0)
             if owner is not None:
-                slots.add(self._source_slot(owner, argument))
+                slots.update(self._property_dependencies(owner, argument))
         return slots
+
+    def _property_dependencies(self, owner, argument, active=frozenset()):
+        slot = self._source_slot(owner, argument)
+        if slot in active:
+            raise ReferenceError('calculated value dependencies cannot form a cycle')
+        result = {slot}
+        schema = owner.schema
+        name = (argument.name if isinstance(argument, _NamedArgument) else
+                schema.parameters[argument] if schema is not None and argument < len(schema.parameters) else None)
+        definition = schema.fields.get(name) if schema is not None else None
+        if definition is not None and definition.value_dependencies is not None:
+            for record, field_name in definition.value_dependencies(owner):
+                dependency, position = self._property_source(record, field_name, 0)
+                if dependency is None:
+                    raise ReferenceError(f'calculated dependency {field_name} is missing')
+                result.update(self._property_dependencies(dependency, position, active | {slot}))
+        return result
 
     @staticmethod
     def _property_source(target, name, argument):
@@ -346,7 +363,8 @@ class References:
 
     def _calculated_fields(self, reference):
         for guard in reference.guards:
-            yield from self._calculated_parameters(guard.field)
+            for owner, definition in self._calculated_parameters(guard.field):
+                yield from self._calculated_value_fields(owner, definition)
         if isinstance(reference, UnresolvedReference):
             return
         for item in reference.indices:
@@ -360,19 +378,51 @@ class References:
                 owner, argument = self._property_source(target, item.name,
                     item.target_argument if isinstance(item, Property) else 0)
                 if owner is not None and owner.schema is not None and isinstance(argument, _NamedArgument):
-                    yield owner, owner.schema.fields[argument.name]
+                    yield from self._calculated_value_fields(owner, owner.schema.fields[argument.name])
                 elif owner is not None and owner.schema is not None and argument < len(owner.schema.parameters):
                     definition = owner.schema.fields[owner.schema.parameters[argument]]
                     if definition.getter is not None:
-                        yield owner, definition
+                        yield from self._calculated_value_fields(owner, definition)
+
+    @staticmethod
+    def _calculated_value_fields(owner, definition):
+        pending, seen = [(owner, definition)], set()
+        while pending:
+            record, field = pending.pop()
+            key = record, field.name
+            if key in seen:
+                continue
+            seen.add(key)
+            yield record, field
+            if field.value_dependencies is not None:
+                for target, name in field.value_dependencies(record):
+                    dependency = target.schema.fields.get(name) if target.schema is not None else None
+                    if dependency is not None and dependency.getter is not None:
+                        pending.append((target, dependency))
 
     def _refresh_computed(self, reference):
         key = reference if isinstance(reference, UnresolvedReference) else reference.uid
+        if not isinstance(reference, UnresolvedReference):
+            slots = self._dependency_slots(reference)
+            previous = self._value_slots.get(key, set())
+            if previous != slots:
+                for slot in previous:
+                    self._unindex(self._value_consumers, slot, key)
+                if slots:
+                    self._value_slots[key] = slots
+                else:
+                    self._value_slots.pop(key, None)
+                for slot in slots:
+                    self._value_consumers.setdefault(slot, {})[key] = None
+                if key in self._reference_content:
+                    self._untrack_collections(reference)
+                    self._track_collections(reference)
         self._computed.update(key, self._calculated_fields(reference),
                               ordinals=(guard.member for guard in reference.guards if isinstance(guard, OrdinalGuard)))
 
     def _track_collections(self, reference):
         collections = set(self._index_collections(reference))
+        collections.update(self.document._reference_collection_dependencies(reference))
         if isinstance(reference.target, Segment):
             collections.add((reference.target.start.parent, reference.target.start.kind))
         if collections:
@@ -743,6 +793,10 @@ class References:
         self._refresh_computed(issue)
         return issue
 
+    def _source_issues(self, source):
+        """Use the content index when a getter needs only its own constraints."""
+        return tuple(issue for issue in self._issues_by_node.get(source, ()) if issue.source is source)
+
     def discard_issue(self, issue):
         """Explicitly stop tracking an unresolved link, for deletion/replacement."""
         if issue not in self.issues:
@@ -850,7 +904,9 @@ class References:
                 positions, _ = self._positions(binding.reference, {}, check_keys=False)
                 selections[uid].update(index for index, item in enumerate(binding.reference.indices)
                                        if isinstance(item, Index) and positions[index] != binding.positions[index])
-            plan = self._plan_value_overrides({}, index_selection=selections, seeds=users,
+            inputs = {slot: slot[0].arguments[slot[1]]
+                      for slot in self.document._structural_calculation_slots(moved)}
+            plan = self._plan_value_overrides(inputs, index_selection=selections, seeds=users,
                                              excluded=excluded, excluded_issues=excluded_issues)
             self._validate_managed_values(plan)
             return plan
@@ -1028,6 +1084,35 @@ class References:
     def bind(self, source, target, *indices, role='', guards=(), preserve=False):
         prepared = self._prepare_binding(source, target, indices, role=role, guards=guards, preserve=preserve)
         return self._register_binding(*prepared, preserve=preserve)
+
+    def _replace_identity_roles(self, source, assignments):
+        """Replace related, index-free links after checking their combined state.
+
+        Domain setters use this for facts with several identity members, such as
+        a layer span. Consumers never observe a half-replaced relationship.
+        """
+        if source._owner() is not self.document:
+            raise ReferenceError('relationship source is outside this document')
+        old, specifications = [], []
+        for role, target in assignments.items():
+            links = self.outgoing(source, role=role)
+            if len(links) > 1 or any(link.indices or link.guards for link in links):
+                raise ReferenceError('replacement requires unique, index-free identity roles')
+            if links and links[0].target is target:
+                continue
+            old.extend(links)
+            if target is not None:
+                specifications.append((source, target, role, (), ()))
+        removals = dict.fromkeys(link.uid for link in old)
+        with preview_references(self, removals):
+            additions = self._prepare_additions(specifications)
+            changes = {**removals, **{binding.reference.uid: binding.reference for binding in additions.bindings}}
+            with preview_references(self, changes):
+                for link in old:
+                    self.document._validate_reference_removal(link)
+            additions.projections = self._plan_reference_changes(changes, extra=additions.bindings)
+        self._discard_bindings(old)
+        self._apply_additions(additions)
 
     def _prepare_additions(self, specifications, *, structure=None):
         """Preflight a related group of new links against one prospective graph."""

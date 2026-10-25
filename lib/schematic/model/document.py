@@ -5,6 +5,9 @@ from ..formats.capabilities import ASC, DCH, DCHXML
 
 
 class Document(BaseDocument):
+    _representations = (*BaseDocument._representations, 'schematic', 'dchxml')
+    _named_representations = ('schematic',)
+
     def refdes(self, prefix):
         """Return a live numbered-family view of enabled physical components.
 
@@ -72,6 +75,13 @@ class Document(BaseDocument):
         parts = tuple(dict.fromkeys(shape.parent.parent for shape in shapes))
         return tuple((plan[0], plan, tuple(self._field_plan_values((plan,))))
                      for plan in plan_symbol_text(self, parts=parts, shapes=shapes))
+
+    def _structural_calculation_slots(self, nodes):
+        if self.representation == 'schematic' and self._automatic_structure:
+            from .symbol_text import is_bound_label
+            for node in nodes:
+                if node._owner() is self and node.kind == 'Shape' and is_bound_label(node):
+                    yield node.one('FontType')._argument_owner(0)
 
     def _apply_calculations(self, plans):
         from ...common.structural_edits import assembly

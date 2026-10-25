@@ -80,3 +80,36 @@ class ValueEdit:
         self.document._apply_field_change(self.derived)
         if self.parent is not None:
             self.document.references.finish_structure((self.parent,))
+
+
+@dataclass
+class ReferenceValueEdit:
+    """Commit a named edit that also activates newly meaningful relationships."""
+    document: object
+    additions: object
+    derived: object
+    issues: tuple
+    parent: object = None
+
+    def apply(self):
+        graph = self.document.references
+        graph._apply_additions(self.additions)
+        self.document._apply_field_change(self.derived)
+        for source, message, indices, collections, guards in self.issues:
+            graph.note(source, message, *indices, collections=collections, guards=guards)
+        if self.parent is not None:
+            graph.finish_structure((self.parent,))
+
+
+def prepare_reference_edit(document, record, field, values, *, created, base,
+                           specifications=(), issues=()):
+    """Preflight values and newly activated links as one atomic named edit."""
+    from .references import UnresolvedReference
+    graph = document.references
+    with preview_slots(base.projections.values):
+        additions = graph._prepare_additions(specifications, structure=base.projections)
+        requested = {field._argument_owner(index): value for index, value in enumerate(values)}
+        graph._validate_requested_values(requested, additions.projections, additions=additions.bindings)
+        for source, message, indices, collections, guards in issues:
+            graph._validate_reference_guards(UnresolvedReference(source, message, indices, collections, guards), {})
+    return ReferenceValueEdit(document, additions, base.derived, tuple(issues), record if created else None)

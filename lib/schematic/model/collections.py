@@ -1,22 +1,19 @@
 """Owned collection definitions, independent of serialized count headers."""
-from ...common.schema import Child, Field, Record
+from ...common.schema import Child, Record
+from ...common.drawing_records import POINTS, TEXT_LINES
+from ...common.symbol_records import DRAWINGS
+from ...common.footprint_records import PASTE_SEGMENTS
+from ...common.group_records import LOCAL_GROUPS
+from ...common.user_fields import USER_FIELDS, COMPONENT_USER_FIELDS
+from ...common.library_records import DESIGN_LINK, DESIGN_LINKS
+from ...common.cell_records import CELLS, COLUMN_WIDTHS, ROW_HEIGHTS
+from ...common.library_metadata import (CLASSIFICATIONS, POSSIBLE_NAMES, PROJECT_FOLDERS,
+    PROJECT_LIBRARIES, CATEGORIES, SUBFOLDERS, MODEL_BODY)
 
 
 def collection(name, kind, record):
     return Record(name, {}, description='An ordered collection of '+record+' records.',
                   children={kind: Child(kind, record, maximum=None)})
-
-
-CLASSIFICATIONS = collection('Classifications', 'CategoryType', 'CategoryType')
-POSSIBLE_NAMES = collection('PossibleNames', 'PossibleName', 'PossibleName')
-PASTE_SEGMENTS = collection('PasteSegments', 'pt', 'PasteSegment')
-PROJECT_FOLDERS = collection('ProjectFolders', 'Folder', 'LibraryPath')
-PROJECT_LIBRARIES = collection('ProjectLibraries', 'Lib', 'LibraryPath')
-DESIGN_LINKS = collection('DesignCacheLinks', 'Link', 'DesignCacheLink')
-DESIGN_LINK = Record('DesignCacheLink', {
-    'SlotIndex': Field('SlotIndex', 'integer', required=True, default=-1,
-                       description='Managed library-slot index in the active prefix; a literal capacity value beyond it.'),
-}, ('SlotIndex',))
 
 
 # Collection names describe their contents; tree names remain the public names.
@@ -28,25 +25,25 @@ COLLECTIONS = {
         ('Tables', 'Table', 'Table'), ('NetClasses', 'NetClass', 'NetClass'),
         ('DifferentialPairs', 'DifferentialPair', 'DifferentialPair'),
         ('Pins', 'Pin', 'Pin'), ('CachedPins', 'Pin', 'CachedPin'),
-        ('SymbolDrawings', 'Shape', 'SymbolDrawing'), ('SheetDrawings', 'Shape', 'SheetDrawing'),
+        ('SheetDrawings', 'Shape', 'SheetDrawing'),
         ('PatternDrawings', 'Shape', 'PatternDrawing'), ('Pads', 'Pad', 'Pad'),
         ('Holes', 'Hole', 'Hole'), ('Dimensions', 'Dimension', 'Dimension'),
-        ('UserFields', 'UserField', 'UserField'), ('ComponentUserFields', 'UserField', 'ComponentUserField'),
-        ('ModelBody', 'Line', 'ModelLine'), ('TextLines', 'pt', 'TextLine'),
-        ('Points', 'pt', 'Point'), ('WirePoints', 'pt', 'WirePoint'),
+        ('WirePoints', 'pt', 'WirePoint'),
         ('Wires', 'Line', 'Wire'), ('BusWires', 'Line', 'BusWire'),
         ('NetMembers', 'pt', 'NetMember|UnresolvedNetMember'),
-        ('BusNets', 'pt', 'BusNet'), ('BusNumbers', 'pt', 'BusNumber'), ('LocalGroups', 'pt', 'LocalGroup'),
+        ('BusNets', 'pt', 'BusNet'), ('BusNumbers', 'pt', 'BusNumber'),
         ('SchematicGroups', 'Group', 'SchematicGroup'), ('Slots', 'Slot', 'LibrarySlot'),
         ('Patterns', 'Pattern', 'Pattern'), ('PadStyles', 'PadStyle', 'PadStyle'),
-        ('Categories', 'Category', 'CatalogCategory'), ('Subfolders', 'Folder', 'LibrarySubfolder'),
         ('InternalConnections', 'IntCon', 'InternalConnection'), ('Prices', 'Quote', 'Quote'),
-        ('Signals', 'signal', 'SimulationSignal'), ('ColumnWidths', 'pt', 'ColumnWidth'),
-        ('RowHeights', 'pt', 'RowHeight'), ('TableCells', 'Cell', 'Cell'),
+        ('Signals', 'signal', 'SimulationSignal'),
         ('TitleCells', 'Cell', 'TitleCell'), ('TitleFields', 'Content', 'TitleField'),
         ('GlobalUserFields', 'pt', 'GlobalUserField'), ('UnresolvedKeys', 'Key', 'UnresolvedKey'),
     )
 }
+COLLECTIONS.update(Points=POINTS, TextLines=TEXT_LINES, SymbolDrawings=DRAWINGS, LocalGroups=LOCAL_GROUPS,
+                   Categories=CATEGORIES, Subfolders=SUBFOLDERS, ModelBody=MODEL_BODY,
+                   UserFields=USER_FIELDS, ComponentUserFields=COMPONENT_USER_FIELDS,
+                   TableCells=CELLS, ColumnWidths=COLUMN_WIDTHS, RowHeights=ROW_HEIGHTS)
 COLLECTIONS['TitleBlocks'] = Record('TitleBlocks', {}, children={
     'TitleBlock': Child('TitleBlock', 'TitleBlock', maximum=6),
 })

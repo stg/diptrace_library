@@ -37,8 +37,8 @@ def get_net(pin):
     targets.update(reference.target for reference in assignments)
     if len(members) > 1 or len(targets) > 1:
         raise ReferenceError('pin has contradictory net memberships')
-    if document and any(issue.source is pin and issue.message.startswith('pin-net:')
-                        for issue in document.references.issues):
+    if document and any(issue.message.startswith('pin-net:')
+                        for issue in document.references._source_issues(pin)):
         raise ReferenceError('pin has an unresolved net identity')
     return next(iter(targets), None)
 

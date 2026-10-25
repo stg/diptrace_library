@@ -1,8 +1,8 @@
 """Calculated vector text boxes for schematic and footprint drawings."""
 import math
-from ...common.numbers import (calculation_number)
-from ...common.geometry import (aligned_text_box)
-from ...common.text.vector import (builtin_vector_metrics)
+from ..numbers import calculation_number
+from ..geometry import aligned_text_box
+from .vector import builtin_vector_metrics
 
 
 def _vector_pen(size, width_choice):
@@ -54,7 +54,16 @@ def symbol_vector_text_bounds(shape, *, font=None):
     LineSpacing determines the separation between baseline rows. This is a
     derived compatibility box over editable public fields, never stored geometry.
     """
-    anchor, texts, size, pen, scale = _text_inputs(shape, 10)
+    return _full_text_bounds(shape, 10, font=font)
+
+
+def footprint_vector_text_bounds(shape, *, font=None):
+    """Footprint text bounds using every line and the authored angle."""
+    return _full_text_bounds(shape, 7, font=font)
+
+
+def _full_text_bounds(shape, kind, *, font=None):
+    anchor, texts, size, pen, scale = _text_inputs(shape, kind)
     if not texts:
         return anchor, anchor
     font = font or builtin_vector_metrics()

@@ -28,8 +28,11 @@ class Field:
     ordinal_dependencies: Callable | None = None
     reference_dependencies: Callable | None = None
     collection_dependencies: Callable | None = None
+    value_dependencies: Callable | None = None
+    choices: tuple = ()
 
     def __post_init__(self):
+        object.__setattr__(self, 'choices', tuple(self.choices))
         if (self.item_kind or self.length is not None) and self.kind != 'tuple':
             raise ValueError('tuple item types and lengths require a tuple field')
         if self.length is not None and (isinstance(self.length, bool) or
@@ -82,6 +85,8 @@ class Field:
             raise ValueError(f'unknown schema field type: {self.kind}')
         if not valid:
             raise TypeError(f'{self.name} requires {self.kind}')
+        if self.choices and value not in self.choices:
+            raise ValueError(f'{self.name} must be one of {self.choices}')
         if self.kind == 'tuple' and self.length is not None and len(value) != self.length:
             raise ValueError(f'{self.name} requires {self.length} tuple values')
         if self.kind == 'tuple' and self.item_kind:

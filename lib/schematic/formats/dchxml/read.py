@@ -12,7 +12,7 @@ from .import_project import (read_project)
 from .import_settings import (read_sheets, read_settings, read_erc, read_classes)
 from .import_tables import (read_tables)
 from .import_values import (XmlRecord, replace_rows)
-from .units import (DchXmlUnits)
+from ....common.units import XmlUnits
 from ....common.model import (Value)
 from ....common.references import (References)
 from ...model.new import (new_schematic)
@@ -26,7 +26,7 @@ def import_schematic(document):
     if source.text('Type') != 'DipTrace-Schematic':
         raise ValueError('expected a public XML schematic')
     version = source.text('Version', '')
-    units = DchXmlUnits(source.text('Units', 'mm'))
+    units = XmlUnits(source.text('Units', 'mm'))
     view = new_schematic()
     view._automatic_structure = False
     schematic = view.one('/Schematic')
@@ -86,8 +86,8 @@ def import_schematic(document):
     from ...model.refs import (bind_schematic_references)
     from ...model.user_fields import (modernize_user_field_names)
     modernize_user_field_names(schematic)
-    from ...model.cell_text import (modernize_cell_text)
-    modernize_cell_text(schematic)
+    from ....common.cell_text import (modernize_cell_text)
+    modernize_cell_text(schematic, paths=('Tables/Table/Cells/Cell', 'Pages/Page/TitleBlocks/TitleBlock/Contents/Content'))
     bind_schematic_references(view)
     from ...model.symbol_text import (refresh_symbol_text)
     refresh_symbol_text(view)

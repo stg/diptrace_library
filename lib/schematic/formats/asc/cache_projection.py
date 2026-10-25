@@ -5,7 +5,7 @@ Geometry and scalar policies are shared with placed records; binary/format
 runtime layouts are not part of this adapter.
 """
 from ....common.model import (Element, Value)
-from .model_body import (project_model_body)
+from ....common.asc_model_body import project_model_body
 from .projection import (ProjectionError, _head, _plain, _visible, _ordered, _value, _project_drawing, project_pad, project_model3d, project_user_fields, project_pattern_drawing, _project_terminals, _scalar_field)
 from ...model.vocabulary import (PATTERN_FIELDS, DIMENSION_FIELDS)
 
