@@ -3,7 +3,8 @@ import os
 from pathlib import Path
 import subprocess
 
-from .files import atomic_write
+from .files import atomic_write, json_bytes
+from .locking import ACTIVE
 
 
 class Repository:
@@ -15,7 +16,17 @@ class Repository:
         self.common_dir = common if common.is_absolute() else self.root / common
 
     def run(self, *args, data=None, check=True):
-        result = subprocess.run(['git', '-C', str(self.root), *args], input=data,
+        prefix = ['git', '-C', str(self.root)]
+        env = None
+        if os.environ.get(ACTIVE):
+            # An outer `git --literal-pathspecs ...` must not change the
+            # meaning of our own discovery patterns or committed selection.
+            modes = {'GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS',
+                     'GIT_NOGLOB_PATHSPECS', 'GIT_ICASE_PATHSPECS'}
+            env = {key: value for key, value in os.environ.items() if key not in modes}
+        if os.environ.get(ACTIVE) and args[:1] != ('config',):
+            prefix += ['-c', 'core.fsmonitor=', '-c', 'core.hooksPath=' + str(self.root / '.git/diptrace-git/no-hooks')]
+        result = subprocess.run([*prefix, *args], input=data, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if check and result.returncode:
             raise ValueError(result.stderr.decode('utf-8', errors='replace').strip()
@@ -47,7 +58,7 @@ class Repository:
         result = self.run(*args, check=False).decode().rstrip('\n')
         return result or None
 
-    def selected(self, names, rules):
+    def legacy_selected(self, names, rules):
         """Evaluate real gitignore syntax against virtual binary paths too.
 
         A clone may have only companions, with no DCH on disk. An isolated empty
@@ -61,10 +72,10 @@ class Repository:
         worktree.mkdir(parents=True, exist_ok=True)
         env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
         if not (git_dir / 'HEAD').exists():
-            subprocess.run(['git', 'init', '--bare', '-q', str(git_dir)], env=env, check=True)
+            subprocess.run(['git', '-c', 'core.longpaths=true', 'init', '--bare', '-q', str(git_dir)], env=env, check=True)
         rule_file = matcher / 'rules'
         atomic_write(rule_file, ('\n'.join(rules) + '\n').encode('utf-8'))
-        command = ['git', '--git-dir=' + str(git_dir), '--work-tree=' + str(worktree),
+        command = ['git', '-c', 'core.longpaths=true', '--git-dir=' + str(git_dir), '--work-tree=' + str(worktree),
                    '-c', 'core.excludesFile=' + str(rule_file),
                    '-c', 'core.ignorecase=' + (self.config('core.ignorecase') or 'false'),
                    'check-ignore', '--no-index', '-z', '--stdin']
@@ -74,6 +85,48 @@ class Repository:
         if result.returncode not in (0, 1):
             raise ValueError(result.stderr.decode(errors='replace'))
         return {os.fsdecode(name) for name in result.stdout.split(b'\0') if name}
+
+    def selected(self, names, rules):
+        """Let Git evaluate pathspecs against an index of virtual native names.
+
+        No design bytes are copied. This also matches binaries absent in a clone.
+        Rules are ordered enable/disable operations; each operation accepts Git's
+        normal include/exclude pathspec syntax as a group.
+        """
+        if not names or not rules:
+            return set()
+        matcher = self.state_dir / 'pathspecs'
+        git_dir, worktree = matcher / 'git', matcher / 'worktree'
+        worktree.mkdir(parents=True, exist_ok=True)
+        env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+        env['GIT_INDEX_FILE'] = str((matcher / 'index').resolve())
+        prefix = ['git', '--git-dir=' + str(git_dir.resolve()), '--work-tree=' + str(worktree.resolve()),
+                  '-c', 'core.longpaths=true', '-c', 'core.fsmonitor=',
+                  '-c', 'core.hooksPath=' + str((matcher / 'no-hooks').resolve())]
+        def run(*args, data=None):
+            result = subprocess.run([*prefix, *args], env=env, input=data,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                raise ValueError(result.stderr.decode('utf-8', 'replace').strip())
+            return result.stdout
+        if not (git_dir / 'HEAD').exists():
+            subprocess.run(['git', '-c', 'core.longpaths=true', 'init', '--bare', '-q', str(git_dir)], env=env, check=True)
+        inventory = json_bytes({'names': sorted(names)})
+        saved = matcher / 'names.json'
+        if not saved.exists() or saved.read_bytes() != inventory:
+            oid = run('hash-object', '-w', '--stdin', data=b'').strip()
+            run('read-tree', '--empty')
+            data = b''.join(b'100644 ' + oid + b'\t' + os.fsencode(name) + b'\0' for name in sorted(names))
+            run('update-index', '-z', '--index-info', data=data)
+            atomic_write(saved, inventory)
+        chosen = set()
+        for rule in rules:
+            found = {os.fsdecode(n) for n in run('ls-files', '-z', '--', *rule['pathspecs']).split(b'\0') if n}
+            if rule['enabled']:
+                chosen.update(found)
+            else:
+                chosen.difference_update(found)
+        return chosen
 
     def stage(self, names):
         if names:

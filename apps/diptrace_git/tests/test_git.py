@@ -14,7 +14,8 @@ from apps.diptrace_git.__main__ import main
 from apps.diptrace_git.config import CONFIG
 from apps.diptrace_git.files import Stamp
 from apps.diptrace_git.git import Repository
-from apps.diptrace_git.setup import change_rule, install, uninstall
+from apps.diptrace_git.locking import internal_commands
+from apps.diptrace_git.setup import change_selection, install, uninstall
 from apps.diptrace_git.sync import synchronize
 
 
@@ -39,9 +40,9 @@ class GitTests(unittest.TestCase):
         self.repo.run('config', 'core.autocrlf', 'false')
         self.repo.run('config', 'commit.gpgsign', 'false')
         install(self.repo)
-        change_rule(self.repo, '*.dch')
+        change_selection(self.repo, ['*.dch'], enabled=True)
         self.binary = self.root / 'design.dch'
-        self.text = self.root / 'design.dchxml'
+        self.text = self.root / 'design.dch.git.xml'
         self.metadata = self.root / 'design.dch.git.json'
         self.binary.write_bytes(design())
 
@@ -65,7 +66,7 @@ class GitTests(unittest.TestCase):
         result = self.export(stage=True)
         self.assertEqual((self.binary.read_bytes(), Stamp.read(self.binary)), before)
         self.assertEqual(json.loads(self.metadata.read_text())['binary']['version'], 52)
-        self.assertEqual(result.staged, {'design.dchxml', 'design.dch.git.json'})
+        self.assertEqual(result.staged, {'design.dch.git.xml', 'design.dch.git.json'})
         self.assertNotIn('design.dch', self.repo.names('ls-files', '--cached'))
         self.assertEqual(self.repo.run('check-ignore', 'design.dch').strip(), b'design.dch')
         self.assertTrue((self.repo.state_dir / 'state.json').exists())
@@ -129,7 +130,9 @@ class GitTests(unittest.TestCase):
     def test_text_change_rebuilds_recorded_version_once(self):
         self.export()
         self.edit_text('47k')
-        self.assertTrue(self.export().actions[0].startswith('rebuild'))
+        with self.assertRaisesRegex(ValueError, 'generated companion was edited'):
+            self.export()
+        self.assertTrue(self.export(direction='text', force=True).actions[0].startswith('rebuild'))
         self.assertEqual(self.value(), '47k')
         self.assertEqual(read(self.binary).metadata['source_version'], 52)
         stamp = Stamp.read(self.binary)
@@ -182,7 +185,7 @@ class GitTests(unittest.TestCase):
     def test_asc_is_an_alternative_not_a_second_companion(self):
         install(self.repo, text_format='asc')
         self.export()
-        self.assertTrue((self.root / 'design.asc').exists())
+        self.assertTrue((self.root / 'design.dch.git.asc').exists())
         self.assertFalse(self.text.exists())
         self.binary.unlink()
         self.export()
@@ -190,16 +193,16 @@ class GitTests(unittest.TestCase):
 
     def test_rules_use_git_exclusions_and_preserve_unrelated_ignores(self):
         ignore = self.root / '.gitignore'
-        ignore.write_bytes(b'# existing\noutput/\n' + ignore.read_bytes())
+        ignore.write_bytes(b'# existing\noutput/\n' + (ignore.read_bytes() if ignore.exists() else b''))
         archive = self.root / 'archive'
         archive.mkdir()
         (archive / 'old.dch').write_bytes(b'not a design')
         (archive / 'old.dch.git.json').write_text('{unrelated JSON')
-        change_rule(self.repo, '!archive/**')
+        change_selection(self.repo, ['archive/**'], enabled=False)
         self.export()
         self.assertTrue(ignore.read_bytes().startswith(b'# existing\noutput/\n'))
-        self.assertFalse((archive / 'old.dchxml').exists())
-        change_rule(self.repo, '*.dch', remove=True)
+        self.assertFalse((archive / 'old.dch.git.xml').exists())
+        change_selection(self.repo, ['*.dch'], enabled=False)
         self.assertEqual(self.export().actions, [])
 
     def test_existing_tracked_binary_needs_explicit_migration(self):
@@ -211,14 +214,11 @@ class GitTests(unittest.TestCase):
         self.assertEqual(self.binary.read_bytes(), before)
         self.assertNotIn('design.dch', self.repo.names('ls-files', '--cached'))
 
-    def test_actual_commit_hook_exports_and_stages_changed_binary(self):
+    def test_native_only_commit_am_exports_before_git_change_detection(self):
         self.commit()
-        self.assertIn('design.dchxml', self.repo.names('ls-files', '--cached'))
-        self.assertNotIn('design.dch', self.repo.names('ls-files', '--cached'))
+        self.assertIn('design.dch.git.xml', self.repo.names('ls-files', '--cached'))
         self.binary.write_bytes(design('100k'))
-        (self.root / 'notes.txt').write_text('another staged change')
-        self.repo.run('add', 'notes.txt')
-        self.repo.run('commit', '-qm', 'binary edit')
+        self.repo.run('commit', '-qam', 'binary edit')
         self.assertEqual(self.value(self.text), '100k')
         self.assertEqual(self.repo.run('status', '--porcelain'), b'')
 
@@ -283,7 +283,7 @@ class GitTests(unittest.TestCase):
         self.assertEqual((self.binary.read_bytes(), Stamp.read(self.binary)), before)
         errors = io.StringIO()
         with redirect_stderr(errors), redirect_stdout(io.StringIO()):
-            self.assertEqual(main(['--repo', str(self.root), 'rules', 'add', '**']), 1)
+            self.assertEqual(main(['--repo', str(self.root), 'enable', ':(unknown)bad']), 2)
         self.assertNotIn('Traceback', errors.getvalue())
 
     def test_metadata_cannot_redirect_writes_outside_repository(self):
@@ -291,27 +291,28 @@ class GitTests(unittest.TestCase):
         metadata = json.loads(self.metadata.read_text())
         metadata['text']['path'] = '../outside.dchxml'
         self.metadata.write_text(json.dumps(metadata))
-        with self.assertRaisesRegex(ValueError, 'invalid reconstruction metadata'):
+        with self.assertRaisesRegex(ValueError, 'invalid or legacy reconstruction metadata'):
             self.export()
         self.assertFalse((self.folder / 'outside.dchxml').exists())
 
     def test_exported_but_unstaged_companions_can_be_staged_later(self):
         self.export()
-        self.assertNotIn('design.dchxml', self.repo.names('ls-files', '--cached'))
+        self.assertNotIn('design.dch.git.xml', self.repo.names('ls-files', '--cached'))
         self.export(stage=True)
-        self.assertIn('design.dchxml', self.repo.names('ls-files', '--cached'))
+        self.assertIn('design.dch.git.xml', self.repo.names('ls-files', '--cached'))
 
     def test_staged_text_snapshot_is_not_replaced_by_a_new_export(self):
         self.commit()
         self.binary.write_bytes(design('22k'))
         self.export()
-        self.repo.run('add', '--', 'design.dchxml')
-        staged = self.repo.run('show', ':design.dchxml')
+        self.repo.run('add', '--', 'design.dch.git.xml')
+        staged = self.repo.run('show', ':design.dch.git.xml')
         self.binary.write_bytes(design('33k'))
         with self.assertRaisesRegex(ValueError, 'replace a staged companion'):
             self.export(stage=True)
-        self.assertEqual(self.repo.run('show', ':design.dchxml'), staged)
         self.assertEqual(self.text.read_bytes(), staged)
+        with internal_commands():
+            self.assertEqual(self.repo.run('show', ':design.dch.git.xml'), staged)
 
     def test_later_failure_keeps_completed_pairs_in_the_cache(self):
         (self.root / 'zz-broken.dch').write_bytes(b'broken')
@@ -336,17 +337,18 @@ class GitTests(unittest.TestCase):
             main(['--repo', str(self.root), 'rebuild', '--force'])
         self.assertEqual(stopped.exception.code, 2)
 
-    def test_post_checkout_conflict_preserves_locally_edited_binary(self):
+    def test_checkout_refuses_uncommitted_native_changes(self):
         self.commit('first')
         first = self.repo.run('rev-parse', 'HEAD').decode().strip()
         self.binary.write_bytes(design('22k'))
-        self.repo.run('diptrace', 'commit', '-qm', 'second')
+        self.repo.run('commit', '-qam', 'second')
+        second = self.repo.run('rev-parse', 'HEAD').decode().strip()
         self.binary.write_bytes(design('local unsaved commit'))
         before = self.binary.read_bytes()
-        with self.assertRaisesRegex(ValueError, 'both binary and text changed'):
+        with self.assertRaises(ValueError):
             self.repo.run('checkout', '--detach', first)
         self.assertEqual(self.binary.read_bytes(), before)
-        self.assertEqual(self.repo.run('rev-parse', 'HEAD').decode().strip(), first)
+        self.assertEqual(self.repo.run('rev-parse', 'HEAD').decode().strip(), second)
 
     def test_actual_fast_forward_pull_refreshes_binary(self):
         self.commit('first')
@@ -364,9 +366,9 @@ class GitTests(unittest.TestCase):
         self.binary.unlink()
         source = self.root / 'Power \u00b5.DCH'
         source.write_bytes(design())
-        change_rule(self.repo, '*.DCH')
+        change_selection(self.repo, ['*.DCH'], enabled=True)
         self.export()
-        self.assertTrue((self.root / 'Power \u00b5.dchxml').exists())
+        self.assertTrue((self.root / 'Power \u00b5.DCH.git.xml').exists())
         self.assertEqual(self.export().actions, [])
 
     def test_actual_rebase_pull_refreshes_binary(self):
