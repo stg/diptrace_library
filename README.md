@@ -187,6 +187,16 @@ repeated writer/reopen cycles, model behavior and edge cases.
 These files remain private because they contain professional, client, and personal
 projects and library collections.
 
+## Check the library with your designs
+
+I've included a [check app](apps/diptrace_check/README.md) so you can try the
+library with your own designs. It checks for changes and drift during conversion,
+and compares results with matching exports you provide from DipTrace. It leaves
+your originals alone. Use it for added confidence in the library, or to
+help find bugs or areas that need improvement. If a check fails or reports something
+unexpected, please [let me know](#bugs-and-contributions) with the report and a
+design you can share.
+
 ## Known problems
 
 ### Speed and memory

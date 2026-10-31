@@ -974,6 +974,7 @@ raises `ValueError`. Unknown names and unavailable families raise
 | `read_versions` | Tuple of recognized input revisions |
 | `write_versions` | Tuple of selectable output revisions |
 | `default_write_version` | Output revision used when omitted |
+| `write_declarations` | `(schema, header_version)` pairs when file headers use different version labels; otherwise empty |
 
 DCH revisions are schema integers. DCHXML input revisions are vocabulary strings
 such as `"5.3"`; its output revisions are target schematic schema integers.
@@ -987,6 +988,14 @@ release mappings are listed in [the support table](../README.md#schematics).
 | `supports_read(version)` | Whether an exact input revision is supported |
 | `supports_write(version)` | Whether an exact output revision is supported |
 | `output_version(requested=None, *, fallback=False)` | Supported output revision, or `ValueError` |
+| `output_versions_for(declaration)` | Tuple of output schemas matching an exact file-header version; unsupported declarations raise `UnsupportedFileError` |
+
+`write_declarations` contains `(schema, header_version)` pairs where the output
+header differs from the schema selector, as with XML application versions.
+`output_versions_for()` uses those same adapter declarations; ordinary binary
+and ASC formats match their schema directly. Several XML targets can share a
+header, so the method returns all candidates without choosing one. It does not
+infer compatibility with a different application patch release.
 
 `output_version()` returns the default when `requested` is `None`.
 Otherwise it requires exact support. With explicit `fallback=True`, an

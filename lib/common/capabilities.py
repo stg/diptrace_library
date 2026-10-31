@@ -10,12 +10,30 @@ class FormatCapabilities:
     read_versions: tuple[int | str, ...]
     write_versions: tuple[int | str, ...]
     default_write_version: int | str
+    write_declarations: tuple[tuple[int | str, int | str], ...] = ()
 
     def supports_read(self, version):
         return type(version) in (int, str) and version in self.read_versions
 
     def supports_write(self, version):
         return type(version) in (int, str) and version in self.write_versions
+
+    def output_versions_for(self, declaration):
+        """Return output schemas with this exact file-header version.
+
+        XML application versions can describe several binary schema targets.
+        Keep those candidates explicit rather than guessing an earlier dialect.
+        """
+        matches = tuple(version for version, header in self.write_declarations
+                        if type(header) is type(declaration) and header == declaration)
+        if matches:
+            return matches
+        if not self.write_declarations and self.supports_write(declaration):
+            return (declaration,)
+        raise UnsupportedFileError(f'{self.format.upper()} has no output schema for '
+                                   f'file version {declaration!r}',
+                                   format=self.format, family=self.family,
+                                   version=declaration, reason='version')
 
     def output_version(self, requested=None, *, fallback=False):
         """Choose an exact version, or an explicitly allowed earlier version.

@@ -1,7 +1,7 @@
 """Capability declarations agree with actual adapter boundaries."""
 import unittest
 
-from lib import ConversionReport, UnsupportedFileError, format_capabilities, new_schematic, parse, serialize
+from lib import ConversionReport, UnsupportedFileError, format_capabilities, input_identity, new_schematic, parse, serialize
 from lib.schematic.formats.dch.binary import MAX_KNOWN_VERSION, MIN_VERSION
 from lib.schematic.formats.dch.versions import xml_application_version
 
@@ -13,6 +13,8 @@ class CapabilityTests(unittest.TestCase):
             for version in format_capabilities(format, family='schematic').write_versions:
                 with self.subTest(format=format, version=version):
                     data = serialize(document, format=format, version=version, report=ConversionReport())
+                    self.assertIn(version, format_capabilities(format, family='schematic').output_versions_for(
+                        input_identity(data).version))
                     restored = parse(data, format=format)
                     self.assertTrue(restored.complete)
                     if format == 'dchxml':
@@ -49,3 +51,11 @@ class CapabilityTests(unittest.TestCase):
         error = stopped.exception
         self.assertEqual((error.format, error.family, error.version, error.reason),
                          ('dch', 'schematic', 53, 'version'))
+
+    def test_header_queries_expose_xml_aliases_without_guessing_other_patch_versions(self):
+        xml = format_capabilities('dchxml')
+        self.assertEqual(xml.output_versions_for('4.9.5.0'), (47, 48))
+        self.assertEqual(format_capabilities('dipxml').output_versions_for('4.3.0.5'), (54,))
+        for declaration in ('4.3.0.3', '4.3', 46, True):
+            with self.subTest(declaration=declaration), self.assertRaises(UnsupportedFileError):
+                xml.output_versions_for(declaration)

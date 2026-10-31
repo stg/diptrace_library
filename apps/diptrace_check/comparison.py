@@ -80,7 +80,8 @@ def compare(before, after, *, tolerance, examples=20):
             kind = 'added'
         elif path not in after:
             kind = 'removed'
-        elif (a[:2] == b[:2] and a[0] == 'number' and
+        elif (a[:2] == b[:2] and a[0] in ('number', 'serialized-number') and
+              not (a[0] == 'serialized-number' and all(type(v) is int for v in (a[2], b[2]))) and
               all(isinstance(v, (int, float, Decimal)) and not isinstance(v, bool) for v in (a[2], b[2]))):
             delta = abs(Decimal(str(a[2]))-Decimal(str(b[2])))
             if not delta.is_finite():

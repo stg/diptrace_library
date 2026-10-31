@@ -29,7 +29,8 @@ DCH = FormatCapabilities('dch', 'schematic', tuple(REVISIONS), _BINARY_OUTPUT, m
 ASC = FormatCapabilities('asc', 'schematic', (46,), (46,), 46)
 DCHXML = FormatCapabilities('dchxml', 'schematic',
                             tuple(dict.fromkeys('.'.join(v.split('.')[:2]) for v in XML_APPLICATION_VERSIONS.values())),
-                            tuple(XML_APPLICATION_VERSIONS), min(XML_APPLICATION_VERSIONS))
+                            tuple(XML_APPLICATION_VERSIONS), min(XML_APPLICATION_VERSIONS),
+                            tuple(XML_APPLICATION_VERSIONS.items()))
 FORMATS = {item.format: item for item in (DCH, ASC, DCHXML)}
 
 

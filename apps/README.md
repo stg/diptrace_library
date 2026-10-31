@@ -2,19 +2,8 @@
 
 These are small tools built with the [design library](../README.md): keep text
 companions in Git, convert formats, find prior component usage and build bills
-of materials. They show a few uses of the library rather than its full API.
-
-## Why these exist
-
-The original need was to quickly answer:
-"Where have I already used this component so I can source compatible spare parts
-for new designs?"
-
-Binary designs are difficult to search with ordinary text tools. The component
-database makes prior usage searchable across projects. The same library now also
-supports format conversion, BOM extraction and readable Git companions.
-
-Run these commands from the repository root.
+of materials. You can also check how the library handles your own designs.
+These tools show a few uses of the library rather than its full API.
 
 ## Designs in Git
 
@@ -40,6 +29,23 @@ python -m apps.diptrace_convert input.dch output.dchxml
 python -m apps.diptrace_convert input.dchxml output.dch --version 52
 ```
 
+## Check the library with your designs
+
+`diptrace_check` compares data and references across repeated save/reopen cycles,
+separating initial rounding from larger changes or accumulating drift. Supply
+matching DipTrace ASC/XML exports with `--reference` to compare against those
+too. Your originals stay untouched; the app does not run DipTrace. Use it to
+assess the library with your own designs and find cases that need better support.
+
+```sh
+python -m apps.diptrace_check design.dip --json check.json
+```
+
+If a check fails or something looks wrong, please
+[open an issue](../README.md#bugs-and-contributions) with the command, JSON report
+and a design you can share. The [check app guide](diptrace_check/README.md)
+explains the different checks and how to read the results.
+
 ## Component usage database
 
 `diptrace_db` links components to the designs that use them. The first run needs
@@ -60,17 +66,6 @@ CSV, accepting the library's supported schematic inputs. See [BOM details](diptr
 
 ```sh
 python -m apps.diptrace_bom.build_bom input.dch output.csv
-```
-
-## Round-trip and drift checks
-
-`diptrace_check` repeatedly saves and reopens one design. It separates small
-initial rounding from larger data changes and changes that continue across
-saves. The input stays untouched. See [checking a design](diptrace_check/README.md)
-for results, thresholds and limits.
-
-```sh
-python -m apps.diptrace_check design.dch --json check.json
 ```
 
 ## Command output
