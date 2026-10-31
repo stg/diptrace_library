@@ -11,19 +11,19 @@ from xml.parsers import expat
 from xml.sax.saxutils import escape
 
 from dataclasses import dataclass, field
-from .model import Document, Element, Value, ELEMENT_NAME
+from .model import Document, Element, Value, _valid_element_name
 
-_NAME = re.compile(ELEMENT_NAME + r'\Z')
 _NUMBER = re.compile(r'[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z')
 
 @dataclass(frozen=True)
 class XmlDialect:
+    """Public XML vocabulary; ambiguous names can use (owner, name) keys."""
     format: str = 'xml'
     source_type: str | None = None
     representation: str = 'xml'
-    number_attributes: frozenset[str] = field(default_factory=frozenset)
-    boolean_attributes: frozenset[str] = field(default_factory=frozenset)
-    boolean_text: frozenset[str] = field(default_factory=frozenset)
+    number_attributes: frozenset[str | tuple[str, str]] = field(default_factory=frozenset)
+    boolean_attributes: frozenset[str | tuple[str, str]] = field(default_factory=frozenset)
+    boolean_text: frozenset[str | tuple[str, str]] = field(default_factory=frozenset)
     number_text: frozenset[tuple[str, str]] = field(default_factory=frozenset)
 
 
@@ -44,9 +44,13 @@ def _boolean(text):
     return Value(text == 'Y', 'boolean')
 
 
+def _listed(vocabulary, parent, name):
+    return name in vocabulary or (parent, name) in vocabulary
+
+
 def set_attribute(node, name, value):
     """Add or edit an XML attribute through the ordinary model field API."""
-    if not _NAME.fullmatch(name):
+    if not _valid_element_name(name):
         raise ValueError(f'invalid XML attribute name: {name!r}')
     matches = [child for child in node.children(name)
                if child.annotations.get('xml_role') == 'attribute']
@@ -58,10 +62,10 @@ def set_attribute(node, name, value):
     return field
 
 
-def _attribute_value(name, text, dialect):
-    if name in dialect.boolean_attributes:
+def _attribute_value(name, text, dialect, parent=''):
+    if _listed(dialect.boolean_attributes, parent, name):
         return _boolean(text)
-    if name in dialect.number_attributes:
+    if _listed(dialect.number_attributes, parent, name):
         return _number(text)
     return Value(text, 'string')
 
@@ -82,14 +86,14 @@ def loads(data, *, source=None, dialect=DEFAULT_DIALECT, document_factory=Docume
     def start(name, attributes):
         if len(stack) > 256:
             raise ValueError('XML nesting exceeds 256 elements')
-        if not _NAME.fullmatch(name):
+        if not _valid_element_name(name):
             raise ValueError(f'unsupported XML element name: {name!r}')
         flush()
         node = stack[-1].add(name)
         node.annotations.update(xml_role='element', xml_line=parser.CurrentLineNumber)
         for index in range(0, len(attributes), 2):
             key, text = attributes[index:index+2]
-            set_attribute(node, key, _attribute_value(key, text, dialect))
+            set_attribute(node, key, _attribute_value(key, text, dialect, name))
         stack.append(node)
         pending.append([])
 
@@ -105,7 +109,7 @@ def loads(data, *, source=None, dialect=DEFAULT_DIALECT, document_factory=Docume
         elif not children and len(values) == 1:
             text = values[0].value
             parent = stack[-1].kind
-            if node.kind in dialect.boolean_text:
+            if _listed(dialect.boolean_text, parent, node.kind):
                 node.set_values(_boolean(text))
             elif (parent, node.kind) in dialect.number_text:
                 node.set_values(_number(text))
@@ -183,14 +187,14 @@ def _render(node, newline, dialect):
         return '<!--'+text+'-->'
     if role == 'instruction':
         target, text = values
-        if not _NAME.fullmatch(target) or '?>' in text or target.lower() == 'xml':
+        if not _valid_element_name(target) or '?>' in text or target.lower() == 'xml':
             raise ValueError('invalid XML processing instruction')
         return '<?'+target+(' '+text if text else '')+'?>'
-    if not _NAME.fullmatch(node.kind):
+    if not _valid_element_name(node.kind):
         raise ValueError(f'invalid XML element name: {node.kind!r}')
     if not node.children() and len(node.arguments) == 1:
         parent = node.parent.kind if node.parent is not None else ''
-        expected = ('boolean' if node.kind in dialect.boolean_text else
+        expected = ('boolean' if _listed(dialect.boolean_text, parent, node.kind) else
                     'number' if (parent, node.kind) in dialect.number_text else None)
         if expected is not None and node.arguments[0].kind != expected:
             raise ValueError(f'{node.path}: expected an XML {expected} value')
@@ -198,12 +202,12 @@ def _render(node, newline, dialect):
     seen = set()
     for item in node._items:
         if isinstance(item, Element) and item.annotations.get('xml_role') == 'attribute':
-            if item.kind in seen or not _NAME.fullmatch(item.kind):
+            if item.kind in seen or not _valid_element_name(item.kind):
                 raise ValueError(f'{node.path}: duplicate or invalid XML attribute {item.kind!r}')
             if len(item.arguments) != 1 or item.children():
                 raise ValueError(f'{item.path}: an XML attribute needs one scalar value')
-            expected = ('boolean' if item.kind in dialect.boolean_attributes else
-                        'number' if item.kind in dialect.number_attributes else None)
+            expected = ('boolean' if _listed(dialect.boolean_attributes, node.kind, item.kind) else
+                        'number' if _listed(dialect.number_attributes, node.kind, item.kind) else None)
             if expected is not None and item.arguments[0].kind != expected:
                 raise ValueError(f'{item.path}: expected an XML {expected} value')
             seen.add(item.kind)

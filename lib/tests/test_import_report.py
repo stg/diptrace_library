@@ -11,6 +11,43 @@ from lib.schematic.model.refs import (bind_schematic_references)
 
 
 class ImportReportTests(unittest.TestCase):
+    def test_expected_unavailable_targets_are_informational_and_remain_so_when_copied(self):
+        from lib.common.conversion import import_diagnostics
+        from lib.common.model import Document
+        from lib.common.references import Index
+
+        @import_diagnostics('asc')
+        def imported():
+            document = Document()
+            row = document.root.add('Result')
+            document.references.note(row, 'cached target unavailable', Index(row.add('Index', 99)),
+                                     collections=(), severity='info')
+            return document
+
+        report = ConversionReport()
+        document = imported(report=report)
+        self.assertEqual(report.warnings, [])
+        self.assertEqual([(n.rule, n.severity) for n in report.notices], [('unresolved-reference', 'info')])
+        with warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            imported()
+        self.assertEqual(emitted, [])
+        document.copy(document.root.one('Result'))
+        for current in (document, document.clone()):
+            self.assertEqual([issue.severity for issue in current.references.issues], ['info', 'info'])
+            current.references.validate()
+
+    def test_invalid_unresolved_severity_does_not_register_an_issue(self):
+        from lib.common.model import Document
+        from lib.common.references import Index
+        document = Document()
+        row = document.root.add('Result')
+        slot = row.add('Index', 99)
+        with self.assertRaisesRegex(ValueError, 'severity'):
+            document.references.note(row, 'invalid classification', Index(slot), severity='error')
+        self.assertEqual(document.references.issues, [])
+        self.assertFalse(document.references.unresolved_slot(slot))
+
     def test_each_adapter_collects_modernization_without_emitting_warnings(self):
         original = source()
         for format in ('dch','asc','dchxml'):

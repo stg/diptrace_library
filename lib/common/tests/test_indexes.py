@@ -46,6 +46,33 @@ class TreeLookupTests(unittest.TestCase):
         self.assertEqual(parent.children(), [value])
         self.assertEqual(parent.scalar('Value'), 1)
 
+    def test_appended_fields_preserve_order_and_isolate_empty_lookups(self):
+        first, second = Element('Fields', 'header'), Element('Fields')
+        self.assertEqual(first.children(), [])
+        self.assertEqual(second.children(), [])
+        self.assertIsNone(first.child('Name'))
+        earlier = first.children()
+        name = first.set_field('Name', 'A')
+        self.assertIsNone(first.child('Value'))
+        value = first.set_field('Value', 3)
+        self.assertEqual(earlier, [])
+        self.assertEqual(first.values, ('header',))
+        self.assertEqual(first.children(), [name, value])
+        self.assertEqual(first.children('Name'), [name])
+        self.assertEqual(first.children('Value'), [value])
+        self.assertEqual(second.children(), [])
+        self.assertIsNone(second.child('Name'))
+
+        # Repeated kinds and middle insertions retain their own child ordinals.
+        later = first.set_field('Value', 5, occurrence=1)
+        label = first.insert(Element('Label', 'middle'), 1)
+        self.assertEqual(first.children(), [name, label, value, later])
+        self.assertEqual(first.children('Value'), [value, later])
+        self.assertEqual((value.path, later.path), ('/Value[1]', '/Value[2]'))
+        value.detach()
+        self.assertIs(first.child('Value'), later)
+        self.assertEqual(later.path, '/Value[1]')
+
     def test_value_arity_changes_keep_children_and_scalar_reads_current(self):
         parent = Element('Fields', 'header')
         value = parent.add('Value', 1)
@@ -68,6 +95,18 @@ class TreeLookupTests(unittest.TestCase):
         copied.child('Value').kind = 'Changed'
         self.assertIsNone(copied.child('Value'))
         self.assertIs(parent.child('Value'), original)
+
+    def test_clone_owns_empty_and_nested_annotations(self):
+        parent = Element('Fields')
+        original = parent.add('Value', 1)
+        parent.annotations['notes'] = [{'text': 'original'}]
+        copied = parent.clone()
+        copied.annotations['notes'][0]['text'] = 'copy'
+        copied.child('Value').annotations['notes'] = ['copy']
+        self.assertEqual(parent.annotations, {'notes': [{'text': 'original'}]})
+        self.assertEqual(original.annotations, {})
+        self.assertNotEqual(copied.uid, parent.uid)
+        self.assertNotEqual(copied.child('Value').uid, original.uid)
 
 
 class ReferenceLookupTests(unittest.TestCase):

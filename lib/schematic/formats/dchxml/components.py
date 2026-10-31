@@ -5,13 +5,12 @@ that explicit association and does not infer definitions from reference names.
 """
 import math
 
+from ....common.xml_footprint_vocabulary import HORZ, VERT
 from .syntax import (set_attribute)
-from .settings import (SHOW, ALIGN, enum_text, field, numeric)
+from .settings import SHOW, ALIGN
+from ....common.xml_output import enum_text, field, numeric
 from ....common.model import (Element)
-
-
-HORZ = ('Center', 'Right', 'Left')
-VERT = ('Center', 'Bottom', 'Top')
+from ....common.xml_library_output import project_category
 
 
 def project_marking(name, values, *, units, show_part=False):
@@ -29,32 +28,6 @@ def project_marking(name, values, *, units, show_part=False):
     x, y = units.point(*values[-3:-1])
     for public, value in (('X', x), ('Y', y), ('Angle', values[-1])):
         set_attribute(result, public, numeric(value))
-    return result
-
-
-def _category(part):
-    prefix = 'Pattern_' if part.kind == 'Pattern' else 'Component_'
-    name, index = part.scalar(prefix+'CategoryName'), part.scalar(prefix+'CategoryIndex')
-    types = part.select(prefix+'CategoryTypes/CategoryType')
-    if not name and index < 0 and not types:
-        return None
-    result = Element('Category')
-    if index >= 0:
-        set_attribute(result, 'Index', index)
-    if name:
-        field(result, 'Name', name)
-    if types:
-        target = result.add('CategoryTypes')
-        for row in types:
-            if len(row.arguments) != 4:
-                raise ValueError(f'{row.path}: category type requires two names and two indices')
-            type_name, subtype, type_id, subtype_id = row.arguments
-            item = target.add('CategoryType')
-            field(item, 'Type', type_name)
-            set_attribute(item.one('Type'), 'Index', type_id)
-            if subtype.value or subtype_id.value >= 0:
-                child = field(item, 'SubType', subtype)
-                set_attribute(child, 'Index', subtype_id)
     return result
 
 
@@ -123,7 +96,7 @@ def project_component(part, *, units, component_style, component_part=0, version
         set_attribute(item, 'NetId', pin.scalar('NetNumber'))
         if pin.scalar('NoConnect'):
             set_attribute(item, 'NotConnected', True)
-    category = _category(part)
+    category = project_category(part)
     if category is not None:
         result.append(category)
     return result

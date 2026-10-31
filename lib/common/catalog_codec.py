@@ -15,3 +15,7 @@ def read_possible_names(reader, owner):
     for _ in range(count):
         reader.record(names, 'PossibleName', 'text')
     return names
+
+
+def write_category_types(writer, owner, kind):
+    writer.rows(owner.child(kind), 'CategoryType', 'text text integer integer')

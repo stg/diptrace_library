@@ -1,8 +1,8 @@
 """Public XML schematic drawings from current geometry and display data."""
 from .syntax import (set_attribute)
 from .components import (HORZ, VERT)
-from .settings import (enum_text, field, numeric)
-from .symbols import (point_attributes)
+from ....common.xml_output import enum_text, field, numeric
+from ....common.xml_output import point_attributes
 from ....common.model import (Element)
 
 

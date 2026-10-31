@@ -87,5 +87,6 @@ def coalesce_routes(document, *, enabled_only=False):
     graph._check_collection_changes(item.point.parent for item in removed)
     for item in removed:
         item.point.detach()
-    document.rebuild()
+    if removed:
+        document.rebuild()
     return tuple(removed)

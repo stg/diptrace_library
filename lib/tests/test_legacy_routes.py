@@ -1,7 +1,7 @@
 """Legacy handle upgrades retain editable geometry and stable identities."""
 import unittest
 
-from lib import Document, Index, Segment, ReferenceError, coalesce_routes
+from lib import Document, Element, Index, Segment, ReferenceError, coalesce_routes
 from lib.schematic.editing.route_normalization import (upgrade_redundant_route_handles, upgrade_short_route_axes, upgrade_short_junctions)
 from lib.schematic.model.refs import (bind_schematic_references)
 
@@ -54,6 +54,18 @@ def junction(*, axis=0, side=0, parallel=17, perpendicular=3, pinned=False, orie
 
 
 class LegacyRouteTests(unittest.TestCase):
+    def test_noop_coalescing_preserves_points_and_still_audits_structure(self):
+        document, _, line = route([(0, 0, 0), (10, 0, 0)])
+        points = line.one('Points')
+        original = points.children()
+        self.assertEqual(coalesce_routes(document), ())
+        self.assertEqual(points.children(), original)
+        # A no-op must still audit the tree, even with a warmed identity index.
+        document.get(line.uid)
+        points._items.append(Element('pt', 20, 0, 0))
+        with self.assertRaisesRegex(ValueError, 'inconsistent parent'):
+            coalesce_routes(document)
+
     def test_segment_local_junctions_keep_host_anchors_and_all_geometry_identities(self):
         for axis in (0, 1):
             for side in (0, 1):

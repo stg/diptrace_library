@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib import new_schematic, parse_asc, parse_dch, parse_dchxml, DchXmlExportContext, AscExportContext, ExportReport
 from lib.schematic.formats.dchxml.import_tables import (read_tables)
-from lib.schematic.formats.dchxml.import_values import (XmlRecord)
+from lib.common.xml_records import (XmlRecord)
 from lib.common.units import XmlUnits
 from lib.schematic.layout.markings import (MarkingStyle)
 from lib.schematic.model.refs import (bind_schematic_references)

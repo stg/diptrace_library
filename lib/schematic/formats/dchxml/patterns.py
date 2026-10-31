@@ -1,121 +1,36 @@
 """XML footprint geometry and model placement over shared editable records."""
+from ....common.xml_footprint_vocabulary import PATTERN_TYPES
 from .syntax import (set_attribute)
-from .components import (HORZ, VERT, _category)
-from .settings import (enum_text, field, numeric)
-from .symbols import (point_attributes)
+from .components import HORZ, VERT
+from ....common.xml_library_output import project_category
+from ....common.xml_output import enum_text, field, numeric
+from ....common.xml_output import point_attributes
 from ....common.model import (Element)
+from .fonts import uses_physical_width
+from ....common.xml_footprint_output import project_model3d, project_drawing as _project_drawing, project_dimension as _project_dimension
 from ...model.local_keys import (project_key, public_keys, reserved_keys, missing_key)
 
 
-PATTERN_TYPES = ('Free', 'Right Angle', 'Left Angle', 'T', 'Circle', 'Lines', 'Square', 'Matrix',
-                 'Rectangle', 'Zig-Zag', 'IPC-7351')
-DRAWING_TYPES = ('None', 'Line', 'Rectangle', 'Obround', 'FillRect', 'FillObround', 'Arc', 'Text', 'Polyline', 'Polygon')
-LAYERS = ('Top Silk', 'Top Assy', 'Top Mask', 'Top Paste', 'Bottom Paste', 'Bottom Mask', 'Bottom Assy',
-    'Bottom Silk', 'Top', 'Top Keepout', 'Bottom Keepout', 'Bottom', 'Board Cutout', 'Top Dimension',
-    'Bottom Dimension', 'Non-Signal', 'Top Courtyard', 'Bottom Courtyard', 'Top Outline', 'Bottom Outline',
-    'Top Terminals', 'Bottom Terminals')
-TEXT_SHOW = ('Any Text', 'Name', 'RefDes', 'Value', 'Manufacturer', 'Unique Name', 'Datasheet')
-
-
-def project_model3d(model, *, units):
-    result = Element('Model3D')
-    for name in ('Mirror', 'NoSearch'):
-        set_attribute(result, name, model.scalar(name))
-    set_attribute(result, 'Units', enum_text(model.scalar('Units'), ('mm', 'mil', 'inch', 'Wings'), negative='Wings'))
-    point_attributes(result, model.one('IPC_XOff').arguments[0], model.one('IPC_YOff').arguments[0],
-                     units, names=('IPC_XOff', 'IPC_YOff'))
-    set_attribute(result, 'AutoHeight', numeric(units.length(model.one('AutoHeight').arguments[0])))
-    set_attribute(result, 'AutoColor', model.scalar('AutoColor'))
-    set_attribute(result, 'Type', enum_text(model.scalar('Type'), ('File', 'IPC-7351', 'Outline')))
-    set_attribute(result, 'KeepPins', model.scalar('KeepPins'))
-    path = model.scalar('Model3DFile')
-    variable = model.scalar('Model3DFile_Variable', '')
-    if not variable.replace(' ', ''):
-        variable = path
-    if path or variable:
-        filename = result.add('Filename')
-        field(filename, 'Path', path)
-        field(filename, 'Var', variable)
-    for name in ('Rotate', 'Offset', 'Zoom'):
-        target = result.add(name)
-        for axis in ('X', 'Y', 'Z'):
-            value = model.one(name+'/'+axis).arguments[0]
-            if name == 'Offset':
-                value = units.length(value) * (-1 if axis == 'Y' else 1)
-            set_attribute(target, axis, numeric(value))
-    return result
 
 
 def project_pattern_drawing(shape, *, index, units, pad_ids=True, pad_keys=None, group_keys=None, version=46):
-    result = Element('Shape')
-    kind = shape.scalar('Type')
-    set_attribute(result, 'Id', index)
-    set_attribute(result, 'Type', enum_text(kind, DRAWING_TYPES))
-    set_attribute(result, 'Locked', shape.scalar('Locked'))
-    set_attribute(result, 'Layer', enum_text(shape.scalar('Layer'), LAYERS))
-    if kind == 7:
-        for public, own in (('FontVector', 'VectorFont'), ('FontName', 'FontName'), ('FontSize', 'FontSize'),
-                            ('FontWidth', 'FontWidth'), ('FontScale', 'FontScale'), ('LineSpacing', 'LineSpacing')):
-            set_attribute(result, public, shape.one(own).arguments[0])
-        set_attribute(result, 'TextShow', enum_text(shape.scalar('TextShow'), TEXT_SHOW))
-        from .fonts import (project_size)
-        project_size(shape, result, version=version)
-        set_attribute(result, 'Angle', shape.one('TextAngle').arguments[0])
-        for public, own, labels in (('HorzAlign', 'TextHorz', HORZ), ('VertAlign', 'TextVert', VERT),
-                                    ('TextAlign', 'TextAlign', HORZ)):
-            set_attribute(result, public, enum_text(shape.scalar(own), labels, negative=labels[-1]))
-    else:
-        width = shape.one('Width').arguments[0]
-        if width.value != -1:
-            set_attribute(result, 'LineWidth', numeric(units.length(width)))
-    set_attribute(result, 'AllLayers', shape.scalar('AllLayers'))
-    group = project_key(shape, 'Group', shape.scalar('Group'), group_keys)
-    if group >= 0:
-        set_attribute(result, 'Group', group)
-    key = project_key(shape, 'PadId', shape.scalar('PadId', -1), pad_keys)
-    if pad_ids and key >= 0:
-        set_attribute(result, 'PadId', key)
-    if kind == 7 and shape.select('TextLine/pt'):
-        target = result.add('Lines')
-        for line in shape.select('TextLine/pt'):
-            field(target, 'Item', line.arguments[0])
-    if shape.select('Points_New/pt'):
-        target = result.add('Points')
-        for point in shape.select('Points_New/pt'):
-            point_attributes(target.add('Item'), *point.arguments, units)
-    return result
+    group = project_key(shape,'Group',shape.scalar('Group'),group_keys)
+    pad = project_key(shape,'PadId',shape.scalar('PadId',-1),pad_keys) if pad_ids else -1
+    return _project_drawing(shape,index=index,units=units,group=group,pad_id=pad,
+                            fractional_font=version >= 52,physical_font_width=uses_physical_width(version))
 
 
 def project_dimension(dimension, *, units, pad_keys=None, shape_keys=None, hole_keys=None, group_keys=None, version=46):
-    result = Element('Dimension')
-    set_attribute(result, 'Locked', dimension.scalar('Locked'))
-    set_attribute(result, 'Type', enum_text(dimension.scalar('Type'), ('Horizontal', 'Vertical', 'Free', 'Radius', 'Pointer')))
-    for side in ('1', '2'):
-        set_attribute(result, 'Connected'+side, enum_text(dimension.scalar('Connected'+side), ('Pad', 'Shape', 'Hole', 'Terminal'), negative='None' if version >= 52 else None))
-        for name in ('Object', 'SubObject', 'Point'):
-            value = dimension.scalar(name+side)
-            if name == 'SubObject':
-                mapping = {0: pad_keys, 1: shape_keys, 2: hole_keys}.get(dimension.scalar('Connected'+side))
-                value = project_key(dimension, name+side, value, mapping)
-            set_attribute(result, name+side, value)
-    set_attribute(result, 'Layer', enum_text(dimension.scalar('Layer'), LAYERS))
-    for suffix in ('1', '2', 'D'):
-        point_attributes(result, dimension.one('X'+suffix).arguments[0], dimension.one('Y'+suffix).arguments[0],
-                         units, names=('X'+suffix, 'Y'+suffix))
-    set_attribute(result, 'ArrowSize', numeric(units.length(dimension.one('ArrowSize').arguments[0])))
-    set_attribute(result, 'Units', enum_text(dimension.scalar('Units'), ('Common', 'inch', 'mil', 'mm')))
-    for public, own in (('FontVector', 'VectorFont'), ('FontName', 'FontName'), ('FontSize', 'FontSize'),
-                        ('FontWidth', 'FontWidth'), ('FontScale', 'FontScale'), ('ShowUnits', 'ShowUnits'),
-                        ('Angle', 'Angle'), ('ExternalRadius', 'ExternalRadius'), ('PointerMode', 'PointerMode')):
-        set_attribute(result, public, dimension.one(own).arguments[0])
-    from .fonts import (project_size)
-    project_size(dimension, result, version=version)
-    group = project_key(dimension, 'Group', dimension.scalar('Group'), group_keys)
-    if group >= 0:
-        set_attribute(result, 'Group', group)
-    if dimension.scalar('PointerText'):
-        field(result, 'PointerText', dimension.scalar('PointerText'))
-    return result
+    attachments = []
+    for side in ('1','2'):
+        mode = dimension.scalar('Connected'+side)
+        member = dimension.scalar('SubObject'+side)
+        mapping = {0:pad_keys,1:shape_keys,2:hole_keys}.get(mode)
+        member = project_key(dimension,'SubObject'+side,member,mapping)
+        attachments.append((mode,dimension.scalar('Object'+side),member,dimension.scalar('Point'+side)))
+    group = project_key(dimension,'Group',dimension.scalar('Group'),group_keys)
+    return _project_dimension(dimension,units=units,attachments=attachments,group=group,
+        fractional_font=version >= 52,physical_font_width=uses_physical_width(version),none_label='None' if version >= 52 else None)
 
 
 def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad_ids=True, pad_keys=None, version=46):
@@ -160,7 +75,7 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
         target = result.add('PossibleNames')
         for name in names:
             field(target, 'PossibleName', name.arguments[0])
-    category = _category(pattern)
+    category = project_category(pattern)
     if category is not None:
         result.append(category)
     origin = result.add('Origin')

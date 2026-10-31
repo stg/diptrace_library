@@ -4,9 +4,11 @@ from ...common.drawing_records import POINTS, TEXT_LINES
 from ...common.symbol_records import DRAWINGS
 from ...common.footprint_records import PASTE_SEGMENTS
 from ...common.group_records import LOCAL_GROUPS
+from ...common.local_keys import UNRESOLVED_KEYS
 from ...common.user_fields import USER_FIELDS, COMPONENT_USER_FIELDS
 from ...common.library_records import DESIGN_LINK, DESIGN_LINKS
 from ...common.cell_records import CELLS, COLUMN_WIDTHS, ROW_HEIGHTS
+from ...common.supplier_records import PRICES
 from ...common.library_metadata import (CLASSIFICATIONS, POSSIBLE_NAMES, PROJECT_FOLDERS,
     PROJECT_LIBRARIES, CATEGORIES, SUBFOLDERS, MODEL_BODY)
 
@@ -34,19 +36,25 @@ COLLECTIONS = {
         ('BusNets', 'pt', 'BusNet'), ('BusNumbers', 'pt', 'BusNumber'),
         ('SchematicGroups', 'Group', 'SchematicGroup'), ('Slots', 'Slot', 'LibrarySlot'),
         ('Patterns', 'Pattern', 'Pattern'), ('PadStyles', 'PadStyle', 'PadStyle'),
-        ('InternalConnections', 'IntCon', 'InternalConnection'), ('Prices', 'Quote', 'Quote'),
+        ('InternalConnections', 'IntCon', 'InternalConnection'),
         ('Signals', 'signal', 'SimulationSignal'),
         ('TitleCells', 'Cell', 'TitleCell'), ('TitleFields', 'Content', 'TitleField'),
-        ('GlobalUserFields', 'pt', 'GlobalUserField'), ('UnresolvedKeys', 'Key', 'UnresolvedKey'),
+        ('GlobalUserFields', 'pt', 'GlobalUserField'),
     )
 }
-COLLECTIONS.update(Points=POINTS, TextLines=TEXT_LINES, SymbolDrawings=DRAWINGS, LocalGroups=LOCAL_GROUPS,
+COLLECTIONS.update(Points=POINTS, TextLines=TEXT_LINES, SymbolDrawings=DRAWINGS, LocalGroups=LOCAL_GROUPS, Prices=PRICES,
+                   UnresolvedKeys=UNRESOLVED_KEYS,
                    Categories=CATEGORIES, Subfolders=SUBFOLDERS, ModelBody=MODEL_BODY,
                    UserFields=USER_FIELDS, ComponentUserFields=COMPONENT_USER_FIELDS,
                    TableCells=CELLS, ColumnWidths=COLUMN_WIDTHS, RowHeights=ROW_HEIGHTS)
 COLLECTIONS['TitleBlocks'] = Record('TitleBlocks', {}, children={
     'TitleBlock': Child('TitleBlock', 'TitleBlock', maximum=6),
 })
+_COLLECTION_ALIASES = {
+    'ColWidths': 'ColumnWidths', 'RowHeights': 'RowHeights', 'Contents': 'TitleFields',
+    'ShowUserfield_Global': 'GlobalUserFields', 'signals': 'Signals',
+    'PatternCategories': 'Categories',
+}
 
 
 def _collection(node):
@@ -77,9 +85,7 @@ def _collection(node):
     elif name == 'Cells':
         key = 'TitleCells' if owner == 'TitleBlock' else 'TableCells'
     else:
-        key = {'ColWidths': 'ColumnWidths', 'RowHeights': 'RowHeights', 'Contents': 'TitleFields',
-               'ShowUserfield_Global': 'GlobalUserFields', 'signals': 'Signals',
-               'PatternCategories': 'Categories'}.get(name, name)
+        key = _COLLECTION_ALIASES.get(name, name)
     return COLLECTIONS.get(key)
 
 

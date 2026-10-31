@@ -2,6 +2,7 @@
 from ....common.model import (Element, Value)
 from .projection import (ProjectionError, _head, _ordered, _plain, _value, _visible)
 from ....common.cell_text import (cell_text_lines, cell_lines, asc_cell_text)
+from ....common.asc_library import project_library_paths as _project_library_paths
 
 
 from ...model.vocabulary import (PAGE_CONNECTOR_FIELDS)
@@ -32,18 +33,10 @@ def project_group(group):
 
 def project_library_paths(container,kind):
     """Flatten owned path records into format Folder/Folder_Variable siblings."""
-    records=_visible(container)
-    if any(record.kind!=kind for record in records):
-        raise ProjectionError(f'{container.path}: expected only {kind} records')
-    result=Element(container.kind,len(records))
-    for record in records:
-        if len(record.arguments)!=1 or any(child.kind!='VariablePath' for child in _visible(record)):
-            raise ProjectionError(f'{record.path}: expected a path and optional VariablePath')
-        path=record.arguments[0]
-        variable=record.scalar('VariablePath','')
-        result.add(kind,_value(path))
-        result.add(kind+'_Variable',_value(Value.of(variable if variable.replace(' ','') else path.value)))
-    return result
+    try:
+        return _project_library_paths(container,kind,convert=_value,visible=_visible,variable_fallback=True)
+    except ValueError as error:
+        raise ProjectionError(str(error)) from error
 
 
 def project_table(table):

@@ -1,6 +1,11 @@
 """Named schema-46 extension records, shared by placed and cached content."""
 from ...model.traversal import (placed_components, cached_definitions, footprints, symbols)
 from ...model.simulation import argument_values
+from ....common.footprint_codec import write_pattern_extensions
+from ....common.drawing_codec import write_text_properties
+from ....common.symbol_codec import write_symbol_extensions
+from ....common.supplier_codec import write_supplier
+from ....common.binary_records import write_grid_step
 
 
 def simulation_arguments(writer, group):
@@ -8,82 +13,6 @@ def simulation_arguments(writer, group):
     writer.integer(len(values))
     for value in values:
         writer.text(value.value)
-
-
-def _angle(writer,parent,name):
-    writer.field(parent,name,'number')
-
-
-def _terminals(writer,parent):
-    records=parent.children('PadTerminal')
-    writer.integer(len(records))
-    for terminal in records:
-        writer.field(terminal,'Type','integer')
-        writer.fields(terminal,'number','X Y')
-        _angle(writer,terminal,'Angle')
-        writer.fields(terminal,'number','ShapeWidth ShapeHeight ShapeCorner')
-        writer.rows(terminal.one('ShapePoints'),'pt','number number')
-
-
-def _mask_segments(writer,parent):
-    for name in ('PadMask_TopSegments','PadMask_BotSegments'):
-        writer.rows(parent.one(name),'pt','number '*4)
-
-
-def _drawing_text(writer,shape):
-    _angle(writer,shape,'TextAngle')
-    writer.fields(shape,'integer','TextHorz TextVert TextAlign')
-    writer.field(shape,'LineSpacing','number')
-    writer.rows(shape.one('TextLine'),'pt','text')
-
-
-def _pattern(writer,pattern):
-    writer.fields(pattern,'boolean','OriginCross OriginCircle')
-    writer.field(pattern,'OriginCommon','integer')
-    writer.field(pattern,'OriginCourtyard','integer')
-    writer.fields(pattern,'text','Name_Description Name_Unique RecoveryCode')
-    writer.fields(pattern,'boolean','RecoveryCode_Generator RecoveryCode_Model')
-    writer.field(pattern,'Pattern_Manufacturer','text')
-    writer.fields(pattern,'number','PadCorner PadShape_X PadShape_Y')
-    _terminals(writer,pattern)
-    writer.fields(pattern,'integer','TopMask_State BotMask_State TopPaste_State BotPaste_State')
-    writer.fields(pattern,'number','CustomSwell_New CustomShrink_New PadMask_Percent PadMask_EdgeGap PadMask_SegmentGap PadMask_SegmentSide')
-    _mask_segments(writer,pattern)
-    for pad in pattern.select('Pads/Pad'):
-        writer.field(pad,'Group','integer')
-        writer.field(pad,'PadCorner','number')
-        _angle(writer,pad,'PadAngle')
-        writer.fields(pad,'number','PadShape_X PadShape_Y')
-        _terminals(writer,pad)
-        writer.fields(pad,'number','PadMask_Percent PadMask_EdgeGap PadMask_SegmentGap PadMask_SegmentSide')
-        _mask_segments(writer,pad)
-    for shape in pattern.select('Shapes/Shape'):
-        for point in shape.select('Points_New/pt'):
-            writer.values(point,'number number')
-        _drawing_text(writer,shape)
-        writer.field(shape,'AllLayers','boolean')
-        writer.field(shape,'Group','integer')
-    for hole in pattern.select('Holes/Hole'):
-        writer.integer(hole.values[6])
-    for dimension in pattern.select('Dimensions/Dimension'):
-        writer.field(dimension,'Group','integer')
-    writer.rows(pattern.one('Pattern_Groups'),'pt','boolean integer number number')
-    model=pattern.one('Model3D')
-    writer.fields(model,'number','IPC_XOff IPC_YOff AutoHeight')
-    writer.field(model,'AutoColor','color')
-    writer.field(model,'Type','integer')
-
-
-def _symbol(writer,part,*,placed):
-    for pin in part.select('Pins/Pin'):
-        writer.field(pin,'Group','integer')
-    for shape in part.select('Shapes/Shape'):
-        _drawing_text(writer,shape)
-        writer.field(shape,'Group','integer')
-        if placed:
-            writer.fields(shape,'boolean','ShowPart MarkingGenerated')
-    if not placed:
-        writer.rows(part.one('Groups'),'pt','boolean integer number number')
 
 
 def common(writer,document):
@@ -107,12 +36,7 @@ def common(writer,document):
             for name in ('DisableTopMask','DisableBottomMask','DisableTopPaste','DisableBottomPaste'):
                 writer.field(pad,name,'integer')
     settings=schematic.one('Settings')
-    grid=float(settings.scalar('GridSize'))
-    # Scale small spacings before the fixed-point codec quantizes them. The
-    # denominator is destination bookkeeping, not another editable grid value.
-    divisor=max(1,min(100000,round(1000/grid))) if grid>=.000001 else 100000
-    writer.number(grid*divisor)
-    writer.integer(divisor)
+    write_grid_step(writer,settings.scalar('GridSize'))
 
 
 def drawings(writer,schematic):
@@ -128,10 +52,10 @@ def drawings(writer,schematic):
             writer.values(part.one(name),'integer '*size+'number '*3)
         for user in part.select('UserFields/UserField'):
             writer.values(user,'integer '*4+'number '*3,start=3)
-        _pattern(writer,part.one('Pattern'))
-        _symbol(writer,part,placed=True)
+        write_pattern_extensions(writer,part.one('Pattern'))
+        write_symbol_extensions(writer,part,placed=True)
     for shape in schematic.select('Shapes/Shape'):
-        _drawing_text(writer,shape)
+        write_text_properties(writer,shape)
     for table in schematic.select('Tables/Table'):
         writer.field(table,'DefLineSpacing','number')
         for cell in table.select('Cells/Cell'):
@@ -140,8 +64,8 @@ def drawings(writer,schematic):
         for content in page.select('TitleBlocks/TitleBlock/Contents/Content'):
             writer.field(content,'LineSpacing','number')
     for definition in cached_definitions(schematic):
-        _pattern(writer,definition.one('Pattern'))
-        _symbol(writer,definition.one('Part'),placed=False)
+        write_pattern_extensions(writer,definition.one('Pattern'))
+        write_symbol_extensions(writer,definition.one('Part'))
 
 
 def project(writer,schematic):
@@ -158,10 +82,7 @@ def project(writer,schematic):
     for pattern in footprints(schematic):
         writer.field(pattern.one('Model3D'),'KeepPins','boolean')
     for part in symbols(schematic):
-        supplier=part.one('Suppliers')
-        writer.fields(supplier,'text','PartNumber Manufacturer Pattern Supplier SourceLocator Currency')
-        if part.parent.kind=='Components':
-            writer.rows(supplier.one('Prices'),'Quote','integer number')
+        write_supplier(writer, part, prices=part.parent.kind=='Components')
     for part in placed_components(schematic):
         writer.field(part.one('Suppliers'),'MainSupplier','boolean')
     for part in placed_components(schematic):

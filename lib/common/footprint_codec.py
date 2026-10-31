@@ -130,3 +130,107 @@ def read_pattern_extensions(reader, pattern, *, angle_reader=read_angle):
         reader.field(dimension, 'Group', 'integer')
     read_groups(reader, pattern, 'Pattern_Groups')
     read_model_extensions(reader, pattern)
+
+
+def write_parameters(writer, pattern):
+    writer.field(pattern, 'Type', 'integer')
+    writer.fields(pattern, 'boolean', 'VariableParameter1 VariableParameter2 VariableParameter3 VariableParameter4')
+    writer.fields(pattern, 'integer', 'Number1 Number2')
+    writer.fields(pattern, 'number', 'Spacing1 Spacing2')
+    writer.field(pattern, 'VariableParameter5', 'boolean')
+    writer.field(pattern, 'Spacing3', 'number')
+    writer.field(pattern, 'LockProperties', 'boolean')
+    writer.field(pattern, 'PatternOrientation', 'integer')
+    writer.fields(pattern, 'number', 'Width Height PadWidth PadHeight')
+    writer.field(pattern, 'PadShape', 'integer')
+    writer.field(pattern, 'SurfacePad', 'boolean')
+    writer.fields(pattern, 'number', 'PadHole PadHoleH')
+    writer.field(pattern, 'PadHoleType', 'integer')
+    writer.field(pattern, 'Name', 'text')
+    writer.fields(pattern, 'number', 'OriginX OriginY')
+
+
+def write_pad_geometry(writer, pad):
+    writer.fields(pad, 'number', 'PadWidth_New PadHeight_New PadHole PadHoleH')
+    writer.field(pad, 'PadHoleType', 'integer')
+    writer.field(pad, 'SurfacePad', 'boolean')
+    writer.field(pad, 'PadShape_New', 'integer')
+    writer.field(pad, 'Standard', 'boolean')
+    writer.rows(pad.child('PadPoints_New'), 'pt', 'number number')
+
+
+def write_holes(writer, holes):
+    """Write an explicit sequence, including any adapter-generated boundaries."""
+    writer.integer(len(holes))
+    for hole in holes:
+        writer.field(hole, 'Enabled', 'boolean')
+        writer.fields(hole, 'number', 'X Y Diam HoleDiam')
+        writer.field(hole, 'Locked', 'boolean')
+
+
+def write_model(writer, pattern):
+    model = pattern.one('Model3D')
+    writer.field(model, 'Model3DFile', 'text')
+    for name in ('Offset', 'Rotate', 'Zoom'):
+        writer.fields(model.one(name), 'number', 'X Y Z')
+    writer.fields(model, 'boolean', 'Mirror NoSearch')
+
+
+def write_terminals(writer, owner):
+    terminals = owner.children('PadTerminal')
+    writer.integer(len(terminals))
+    for terminal in terminals:
+        writer.field(terminal, 'Type', 'integer')
+        writer.fields(terminal, 'number', 'X Y Angle ShapeWidth ShapeHeight ShapeCorner')
+        writer.rows(terminal.child('ShapePoints'), 'pt', 'number number')
+
+
+def write_mask_segments(writer, owner):
+    for name in ('PadMask_TopSegments', 'PadMask_BotSegments'):
+        writer.rows(owner.child(name), 'pt', 'number '*4)
+
+
+def write_model_extensions(writer, pattern):
+    model = pattern.one('Model3D')
+    writer.fields(model, 'number', 'IPC_XOff IPC_YOff AutoHeight')
+    writer.field(model, 'AutoColor', 'color')
+    writer.field(model, 'Type', 'integer')
+
+
+def write_pad_extensions(writer, pad):
+    """Current pad geometry following the caller's group/connection selectors."""
+    writer.fields(pad, 'number', 'PadCorner PadAngle PadShape_X PadShape_Y')
+    write_terminals(writer, pad)
+    writer.fields(pad, 'number', 'PadMask_Percent PadMask_EdgeGap PadMask_SegmentGap PadMask_SegmentSide')
+    write_mask_segments(writer, pad)
+
+
+def write_pattern_extensions(writer, pattern, *, pads=None, drawings=None, holes=None):
+    """Unplaced layout, with optional explicit arrays for generated boundaries."""
+    from .drawing_codec import write_text_properties
+    writer.fields(pattern, 'boolean', 'OriginCross OriginCircle')
+    writer.fields(pattern, 'integer', 'OriginCommon OriginCourtyard')
+    writer.fields(pattern, 'text', 'Name_Description Name_Unique RecoveryCode')
+    writer.fields(pattern, 'boolean', 'RecoveryCode_Generator RecoveryCode_Model')
+    writer.field(pattern, 'Pattern_Manufacturer', 'text')
+    writer.fields(pattern, 'number', 'PadCorner PadShape_X PadShape_Y')
+    write_terminals(writer, pattern)
+    writer.fields(pattern, 'integer', 'TopMask_State BotMask_State TopPaste_State BotPaste_State')
+    writer.fields(pattern, 'number', 'CustomSwell_New CustomShrink_New PadMask_Percent '
+                  'PadMask_EdgeGap PadMask_SegmentGap PadMask_SegmentSide')
+    write_mask_segments(writer, pattern)
+    for pad in pattern.select('Pads/Pad') if pads is None else pads:
+        writer.field(pad, 'Group', 'integer')
+        write_pad_extensions(writer, pad)
+    for shape in pattern.select('Shapes/Shape') if drawings is None else drawings:
+        for point in shape.select('Points_New/pt'):
+            writer.values(point, 'number number')
+        write_text_properties(writer, shape)
+        writer.field(shape, 'AllLayers', 'boolean')
+        writer.field(shape, 'Group', 'integer')
+    for hole in pattern.select('Holes/Hole') if holes is None else holes:
+        writer.field(hole, 'Group', 'integer')
+    for dimension in pattern.select('Dimensions/Dimension'):
+        writer.field(dimension, 'Group', 'integer')
+    writer.rows(pattern.child('Pattern_Groups'), 'pt', 'boolean integer number number')
+    write_model_extensions(writer, pattern)

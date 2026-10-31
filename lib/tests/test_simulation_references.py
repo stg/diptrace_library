@@ -8,7 +8,7 @@ from lib import Document, ReferenceError, parse_dchxml, parse_dch, new_schematic
 from lib.schematic.model.refs import (bind_schematic_references)
 from lib.schematic.model.objects import (new_symbol)
 from lib.schematic.formats.dchxml.import_nets import (read_nets)
-from lib.schematic.formats.dchxml.import_values import (XmlRecord)
+from lib.common.xml_records import (XmlRecord)
 from lib.common.units import XmlUnits
 from lib.schematic.layout.markings import (MarkingStyle)
 

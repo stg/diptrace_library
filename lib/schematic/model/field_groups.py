@@ -1,5 +1,6 @@
 """Reusable named field groups from the public schematic vocabulary."""
 from ...common.schema import Field, Record
+from ...common.title_records import BORDERS, TITLE_CELL, TITLE_BLOCK
 from ...common.drawing_records import POINT, TEXT_LINE
 from ...common.user_fields import USER_FIELD, COMPONENT_USER_FIELD
 from ...common.label_records import SHOW, SHOW_PART, ALIGN, POSITION, MARKING
@@ -16,22 +17,6 @@ NAMED_MARKING = group('NamedMarking', (SHOW, SHOW_PART, *POSITION),
 GLOBAL_MARKING = group('GlobalMarking', (SHOW, ALIGN), 'Default label display and alignment.')
 GLOBAL_NAMED_MARKING = group('GlobalNamedMarking', (SHOW, SHOW_PART, ALIGN),
                              'Default name/reference label display and alignment.')
-
-BORDERS = group('Borders', tuple(Field(name, 'boolean', required=True, default=False)
-                                for name in ('TopLine', 'BottomLine', 'LeftLine', 'RightLine')))
-TITLE_CELL = Record('TitleCell', {**GRID_FIELDS,
-    'FieldId': Field('FieldId', 'integer', required=True, default=-1,
-                     description='Field identity projection; -1 means no content.'),
-    'Edges': Field('Edges', 'tuple', required=True, members=tuple(BORDERS.fields.values())),
-}, ('Column', 'Row', 'FieldId'))
-TITLE_BLOCK = Record('TitleBlock', {
-    'Position': Field('Position', 'integer', getter=lambda node: node._ordinal(),
-                      ordinal_dependencies=lambda node: (node,),
-                      description='0 BottomRight, 1 BottomLeft, 2 TopRight, 3 TopLeft, 4 ExtTopLeft, 5 ExtBottomLeft.'),
-    'Name': Field('Name', 'text', required=True, default=''),
-    'Width': Field('Width', 'number', required=True, default=0, unit='shared length'),
-    'Height': Field('Height', 'number', required=True, default=0, unit='shared length'),
-}, ('Position', 'Name'))
 
 NET_CLASS = group('NetClass', (
     Field('Name', 'text', required=True, default=''),

@@ -3,9 +3,9 @@ import json
 import math
 from pathlib import Path
 
-from lib import AscExportContext, DchExportContext, DchXmlExportContext, PathVariables
-from lib.schematic.layout.markings import MarkingStyle
-from lib.schematic.layout.text_layout import TextLayout
+from lib import PathVariables
+from lib.common.text.markings import MarkingStyle
+from lib.common.text.layout import TextLayout
 
 
 def _text_layout(settings: dict, windows_fonts: bool) -> TextLayout:
@@ -41,27 +41,45 @@ def _line_widths(widths: dict, fallback):
     return line_width
 
 
-def load_context(path: Path | None = None, *, format: str, windows_fonts=False):
-    """Keep library defaults unless a caller explicitly supplies overrides."""
+def load_context(path: Path | None = None, *, format: str, family: str, windows_fonts=False):
+    """Choose the detected family's context; absent configuration stays optional."""
+    from importlib import import_module
+    from lib import format_capabilities
+    from lib.common.document_families import family_name
+
+    family = family_name(family)
+    format_capabilities(format, family=family)
+    if path is None and not windows_fonts:
+        return None
     settings = json.loads(Path(path).read_text(encoding="utf-8")) if path is not None else {}
     if not isinstance(settings, dict):
         raise ValueError("export context must be a JSON object")
 
-    for name, constructor in (("marking_style", MarkingStyle), ("path_variables", PathVariables)):
-        value = settings.get(name)
-        if value is not None:
-            if not isinstance(value, dict):
-                raise ValueError(f"{name} must be a JSON object")
-            settings[name] = constructor(**value)
-
-    if "text_layout" in settings or windows_fonts:
-        settings["text_layout"] = _text_layout(settings.get("text_layout", {}), windows_fonts)
-    widths = settings.pop("line_widths", {})
-    fallback = settings.pop("default_line_width", None)
+    if settings.get("marking_style") is not None:
+        if family != 'schematic':
+            raise ValueError('marking_style is a schematic export setting')
+        if not isinstance(settings['marking_style'], dict):
+            raise ValueError('marking_style must be a JSON object')
+        settings['marking_style'] = MarkingStyle(**settings['marking_style'])
+    if settings.get('path_variables') is not None:
+        if not isinstance(settings['path_variables'], dict):
+            raise ValueError('path_variables must be a JSON object')
+        settings['path_variables'] = PathVariables(**settings['path_variables'])
+    if 'text_layout' in settings or windows_fonts:
+        settings['text_layout'] = _text_layout(settings.get('text_layout', {}), windows_fonts)
+    widths = settings.pop('line_widths', {})
+    fallback = settings.pop('default_line_width', None)
     if not isinstance(widths, dict):
-        raise ValueError("line_widths must be a JSON object")
+        raise ValueError('line_widths must be a JSON object')
     if widths or fallback is not None:
-        settings["line_width"] = _line_widths(widths, fallback)
-    constructor = {"asc": AscExportContext, "dch": DchExportContext,
-                   "dchxml": DchXmlExportContext}[format]
+        if family != 'schematic':
+            raise ValueError('line_widths is a schematic ASC export setting')
+        settings['line_width'] = _line_widths(widths, fallback)
+
+    package = import_module('lib.'+family)
+    if family == 'schematic':
+        constructor = {'asc': package.AscExportContext, 'dch': package.DchExportContext,
+                       'dchxml': package.DchXmlExportContext}[format]
+    else:
+        constructor = package.ExportContext
     return constructor(**settings)

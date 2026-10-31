@@ -2,11 +2,12 @@
 from dataclasses import dataclass
 
 from .import_patterns import (read_pattern)
-from .import_pads import (read_pad_style)
+from ....common.xml_pads import (read_pad_style)
 from .import_symbols import (read_symbol)
-from .import_values import (XmlRecord, replace_rows)
-from ....common.units import XmlUnits
+from ....common.xml_records import XmlRecord, replace_rows, application_version
+from ....common.font_codec import PHYSICAL_XML_WIDTH_SINCE
 from ....common.model import (Element)
+from ....common.xml_library_values import read_catalog as _catalog, read_library_header as _header, resolve_category, read_subfolders
 from ...model.objects import (new_pattern)
 from ...model.local_keys import (map_key)
 
@@ -17,79 +18,16 @@ class ImportedLibrary:
     count: int
 
 
-def _index(record, preferred, default):
-    other = 'Number' if preferred == 'Index' else 'Index'
-    key = record.integer(preferred, default) if record.has(preferred) else record.integer(other, default)
-    if record.has(other):
-        alternate = record.integer(other)
-        if alternate != key:
-            raise ValueError(f'{record.node.path}: conflicting catalog keys')
-    return key
-
-
-def _catalog(record, *, key):
-    result = Element('Categories')
-    seen = set()
-    for index, source in enumerate(record.rows('Categories', 'Category')):
-        number = _index(source, key, index)
-        if number in seen:
-            raise ValueError(f'{source.node.path}: duplicate category key')
-        seen.add(number)
-        category = result.add('Category', source.text('Name', ''), number)
-        type_keys = set()
-        for ordinal, item in enumerate(source.rows('Types', 'Type')):
-            position = _index(item, key, ordinal)
-            if position in type_keys:
-                raise ValueError(f'{item.node.path}: duplicate category type key')
-            type_keys.add(position)
-            kind = category.add('Type', item.text('Name', ''), position)
-            subtype_keys = set()
-            for order, sub in enumerate(item.rows('SubTypes', 'SubType')):
-                value = _index(sub, key, order)
-                if value in subtype_keys:
-                    raise ValueError(f'{sub.node.path}: duplicate category subtype key')
-                subtype_keys.add(value)
-                kind.add('Subtype', sub.text('Name', ''), value)
-                sub.finish()
-            item.finish()
-        source.finish()
-    return result
-
-
-def resolve_category(owner, categories):
-    prefix = 'Pattern' if owner.kind == 'Pattern' else 'Component'
-    key = owner.scalar(prefix+'_CategoryIndex')
-    category = next((item for item in categories.children('Category') if item.values[1] == key), None)
-    if category is None:
-        return
-    if not owner.scalar(prefix+'_CategoryName'):
-        owner.set_field(prefix+'_CategoryName', category.arguments[0])
-    for row in owner.one(prefix+'_CategoryTypes').children():
-        kind = next((item for item in category.children('Type') if item.values[1] == row.values[2]), None)
-        if kind is None:
-            continue
-        if not row.values[0]:
-            row.set_argument(0, kind.arguments[0])
-        subtype = next((item for item in kind.children('Subtype') if item.values[1] == row.values[3]), None)
-        if subtype is not None and not row.values[1]:
-            row.set_argument(1, subtype.arguments[0])
-
-
-def _header(record, kind, units):
-    if record.text('Type', 'DipTrace-'+kind+'Library') != 'DipTrace-'+kind+'Library':
-        raise ValueError(f'{record.node.path}: expected a {kind.lower()} library')
-    record.text('Version', '')
-    return XmlUnits(record.text('Units', units.units))
-
-
 def read_library(record, schematic, *, units, cache_count):
     if record is None:
         if cache_count:
             raise ValueError('XML cache count requires a component library')
         return ImportedLibrary({}, 0)
+    component_width = application_version(record.text('Version',''),default=PHYSICAL_XML_WIDTH_SINCE) >= PHYSICAL_XML_WIDTH_SINCE
     component_units = _header(record, 'Component', units)
     categories = _catalog(record, key='Index')
     pattern_library = record.take('Library', required=True)
+    pattern_width = application_version(pattern_library.text('Version',''),default=PHYSICAL_XML_WIDTH_SINCE) >= PHYSICAL_XML_WIDTH_SINCE
     pattern_units = _header(pattern_library, 'Pattern', component_units)
     pattern_categories = _catalog(pattern_library, key='Number')
     styles = {}
@@ -100,7 +38,7 @@ def read_library(record, schematic, *, units, cache_count):
         styles[key] = source.node
     patterns, used_styles = {}, set()
     for source in pattern_library.rows('Patterns', 'Pattern'):
-        key, data = read_pattern(source, units=pattern_units, styles=styles)
+        key, data = read_pattern(source, units=pattern_units, styles=styles, physical_font_width=pattern_width)
         if key in patterns:
             raise ValueError('duplicate XML pattern style')
         resolve_category(data.element, pattern_categories)
@@ -108,7 +46,9 @@ def read_library(record, schematic, *, units, cache_count):
         used_styles.update(data.used_styles)
     pattern_library.finish()
     cache = schematic.one('CacheLib')
-    from .pads import (PAD_STYLE_FIELDS)
+    if (folders := read_subfolders(record)) is not None:
+        replace_rows(cache, 'Subfolders', [row.clone() for row in folders.children()])
+    from ...model.vocabulary import PAD_STYLE_FIELDS
     unused_styles = []
     for name, source in styles.items():
         if name not in used_styles:
@@ -137,7 +77,7 @@ def read_library(record, schematic, *, units, cache_count):
         slot.add('VariablePath', '')
         variants = []
         for ordinal, item in enumerate(source.children('Part')):
-            part, pattern_key, connections = read_symbol(item, units=component_units)
+            part, pattern_key, connections = read_symbol(item, units=component_units, physical_font_width=component_width)
             resolve_category(part, categories)
             if pattern_key is None:
                 pattern = new_pattern()
@@ -163,8 +103,6 @@ def read_library(record, schematic, *, units, cache_count):
             definition.append(part)
             definition.append(pattern)
             variants.append(definition)
-        if not variants:
-            raise ValueError(f'{source.node.path}: a component style needs at least one part')
         source.finish()
         definitions[key] = variants
     record.finish()

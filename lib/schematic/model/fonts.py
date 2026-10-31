@@ -56,11 +56,3 @@ def complete_fonts(schematic):
     for shape in schematic.select('Shapes/Shape'):
         if shape.child('PictureFlipped') is None:
             shape.add('PictureFlipped', False)
-
-
-def compatibility_size(value):
-    """Generate an integral compatibility size from the authoritative number."""
-    from decimal import Decimal
-    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
-        raise TypeError('font size requires a number')
-    return round(value)

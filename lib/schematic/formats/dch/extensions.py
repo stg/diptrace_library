@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 from ....common.model import (SourceSpan)
+from ....common.binary_records import grid_step_value
 from ....common.footprint_codec import read_pad_mask_states
 from ...model.traversal import (placed_components, footprints)
 
@@ -50,4 +51,4 @@ def read_common_extensions(r, schematic, document):
     if r.header.version >= 39:
         node = r.field(schematic.child("Settings"), "GridSize", "number", replace=True)
         divisor = r.integer()
-        node.set_values(node.values[0] / max(1, divisor))
+        node.set_values(grid_step_value(node.values[0], divisor))

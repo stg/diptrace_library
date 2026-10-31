@@ -39,3 +39,11 @@ def read_groups(reader, owner, name):
     for _ in range(reader.count('drawing groups')):
         reader.record(groups, 'pt', 'boolean', 'integer', 'number', 'number')
     return groups
+
+
+def write_text_properties(writer, shape):
+    """Write the full angle, alignment, spacing and ordered text lines."""
+    writer.field(shape, 'TextAngle', 'number')
+    writer.fields(shape, 'integer', 'TextHorz TextVert TextAlign')
+    writer.field(shape, 'LineSpacing', 'number')
+    writer.rows(shape.one('TextLine'), 'pt', 'text')

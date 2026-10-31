@@ -869,7 +869,7 @@ Ordered simulator settings; engineering suffixes and expressions remain text.
 | PadHoleH | number | yes | no | — | — | stored |
 | PadHoleType | integer | yes | no | — | — | stored |
 | SurfacePad | boolean | yes | no | — | — | stored |
-| PadShape_New | integer\|text | yes | no | — | — | stored; Current shape code or public XML label, including empty text. |
+| PadShape_New | integer | yes | no | — | — | stored; Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, 4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit. |
 | PadAngle | number | yes | no | — | — | stored |
 | PadShape_X | number | yes | no | — | — | stored |
 | PadShape_Y | number | yes | no | — | — | stored |
@@ -882,7 +882,7 @@ Ordered simulator settings; engineering suffixes and expressions remain text.
 | PadMask_Percent | number | yes | no | — | — | stored |
 | PadMask_EdgeGap | number | yes | no | — | — | stored |
 | PadMask_SegmentGap | number | yes | no | — | — | stored |
-| PadMask_SegmentSide | integer | yes | no | — | — | stored |
+| PadMask_SegmentSide | number | yes | no | — | shared length | stored |
 | Index | integer | yes | no | `0` | — | calculated |
 | StringNumber | text | yes | no | `''` | — | stored |
 | Name | text | yes | no | `''` | — | stored |
@@ -907,7 +907,7 @@ Ordered simulator settings; engineering suffixes and expressions remain text.
 | PadHoleType | integer | yes | no | — | — | stored |
 | PadHole | number | yes | no | — | — | stored |
 | PadHoleH | number | yes | no | — | — | stored |
-| PadShape | integer\|text | yes | no | — | — | stored; Shape code or public XML label, including empty text. |
+| PadShape | integer | yes | no | — | — | stored; Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, 4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit. |
 | PadWidth | number | yes | no | — | — | stored |
 | PadHeight | number | yes | no | — | — | stored |
 | PadCorner | number | yes | no | — | — | stored |
@@ -923,7 +923,7 @@ Ordered simulator settings; engineering suffixes and expressions remain text.
 | PadMask_Percent | number | yes | no | — | — | stored |
 | PadMask_EdgeGap | number | yes | no | — | — | stored |
 | PadMask_SegmentGap | number | yes | no | — | — | stored |
-| PadMask_SegmentSide | integer | yes | no | — | — | stored |
+| PadMask_SegmentSide | number | yes | no | — | shared length | stored |
 | Name | text | yes | no | `''` | — | stored |
 
 | Child | Record type | Count |
@@ -1183,7 +1183,7 @@ An ordered collection of PasteSegment records.
 | PadShape_Y | number | yes | no | — | — | stored |
 | PadWidth | number | yes | no | — | — | stored |
 | PadHeight | number | yes | no | — | — | stored |
-| PadShape | integer\|text | yes | no | — | — | stored; Shape code or public XML shape label, including empty text. |
+| PadShape | integer | yes | no | — | — | stored; Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, 4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit. |
 | SurfacePad | boolean | yes | no | — | — | stored |
 | PadHole | number | yes | no | — | — | stored |
 | PadHoleH | number | yes | no | — | — | stored |
@@ -1198,7 +1198,7 @@ An ordered collection of PasteSegment records.
 | PadMask_Percent | number | yes | no | — | — | stored |
 | PadMask_EdgeGap | number | yes | no | — | — | stored |
 | PadMask_SegmentGap | number | yes | no | — | — | stored |
-| PadMask_SegmentSide | integer | yes | no | — | — | stored |
+| PadMask_SegmentSide | number | yes | no | — | shared length | stored |
 | OriginX | number | yes | no | — | — | stored |
 | OriginY | number | yes | no | — | — | stored |
 | Mounting | integer | yes | no | — | — | stored |

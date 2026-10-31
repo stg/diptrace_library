@@ -1,6 +1,6 @@
 """Shared import/export diagnostics distinguish normalization from meaningful loss."""
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import wraps
 from inspect import signature
 import warnings
@@ -108,6 +108,13 @@ def import_notice(severity, rule, message, nodes=(), *, recoverability='current 
             session.report.notices.append(notice)
 
 
+def _set_import_format(format):
+    """Attribute a detected adapter to the current file/buffer import session."""
+    session = _import_session.get()
+    if session is not None:
+        _import_session.set(replace(session, format=format or 'unknown'))
+
+
 def import_diagnostics(format=None):
     """Collect one boundary report across parsing and semantic modernization."""
     def decorate(operation):
@@ -126,9 +133,10 @@ def import_diagnostics(format=None):
             if key is None:
                 source = args[0] if args else kwargs.get('path')
                 key = getattr(source, 'representation', None)
-                if key is None and source is not None:
+                path = file(args, kwargs)
+                if key is None and path is not None:
                     from pathlib import Path
-                    key = Path(source).suffix
+                    key = Path(path).suffix
             key = (key or 'unknown').lower().lstrip('.')
             collected = report if report is not None else ConversionReport()
             start = len(collected.notices)
@@ -139,7 +147,7 @@ def import_diagnostics(format=None):
                     if not any(n.operation == 'import' and n.message == message for n in collected.notices[start:]):
                         import_notice('warning', 'import-diagnostic', message)
                 for issue in document.references.issues:
-                    import_notice('warning', 'unresolved-reference', issue.message, (issue.source,),
+                    import_notice(issue.severity, 'unresolved-reference', issue.message, (issue.source,),
                                   recoverability='unresolved identity remains available for investigation and editing')
                 if report is None:
                     for notice in collected.notices[start:]:

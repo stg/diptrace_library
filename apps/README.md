@@ -18,20 +18,22 @@ Run these commands from the repository root.
 
 ## Designs in Git
 
-`diptrace_git` keeps tracked text companions and rebuilds working binaries when
-those companions change. Unchanged text leaves the original binary untouched.
+`diptrace_git` maintains generated ASC/XML artifacts for ordinary Git commands
+and rebuilds native working files from checked-out revisions. Unchanged text
+leaves the original binary untouched.
 
 ```sh
 python -m apps.diptrace_git --repo /path/to/project init
 ```
 
-The [Git companion guide](diptrace_git/README.md) covers setup, selection rules,
-hooks and day-to-day use.
+The [Git companion guide](diptrace_git/README.md) covers setup, enable/disable
+pathspecs, ownership, hooks and day-to-day use.
 
 ## Format and version conversion
 
-`diptrace_convert` chooses formats from file extensions and can select an output
-version. See [conversion options](diptrace_convert/README.md).
+`diptrace_convert` recognizes the input format, chooses the output format from
+its extension and can select an output version. See
+[conversion options](diptrace_convert/README.md).
 
 ```sh
 python -m apps.diptrace_convert input.dch output.dchxml
@@ -60,6 +62,17 @@ CSV, accepting the library's supported schematic inputs. See [BOM details](diptr
 python -m apps.diptrace_bom.build_bom input.dch output.csv
 ```
 
+## Round-trip and drift checks
+
+`diptrace_check` repeatedly saves and reopens one design. It separates small
+initial rounding from larger data changes and changes that continue across
+saves. The input stays untouched. See [checking a design](diptrace_check/README.md)
+for results, thresholds and limits.
+
+```sh
+python -m apps.diptrace_check design.dch --json check.json
+```
+
 ## Command output
 
 Every command accepts `--help`. Progress and completion use `Info:` on stdout;
@@ -71,10 +84,10 @@ are available at `info`; warnings alone do not make a command fail.
 | Exit code | Meaning |
 | --- | --- |
 | 0 | Completed successfully |
-| 1 | Processing failed, or a batch skipped files |
+| 1 | Processing failed, a batch skipped files, or a check needs review |
 | 2 | Invalid arguments or configuration |
 
 Git's own command output and exit status pass through when `git diptrace commit`
-runs Git. `rules list` prints the selection rules without message prefixes.
+runs Git. `selection` prints the ordered pathspec decisions without message prefixes.
 Application helpers live in `apps/common`; the library itself does not print
 terminal progress or choose an application's output policy.

@@ -4,7 +4,7 @@ Flat footprint drawing siblings become owned drawing records. Compatibility
 coordinates remain typed facts; current physical points remain authoritative.
 """
 from ....common.asc_footprints import unpack_model, unpack_terminals, unpack_pattern_shapes
-from ...model.pad_data import (mask_state)
+from ....common.pad_masks import mask_state
 
 
 def unpack_symbol_shape(shape):

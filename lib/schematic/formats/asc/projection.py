@@ -9,10 +9,11 @@ import math
 
 from ....common.model import (Element, Value)
 from ....common.asc_model_body import project_model_body
-from .policy import (model3d_arguments, number_text, component_orientation)
+from .policy import (number_text, component_orientation)
+from ....common.asc_footprints import model3d_arguments, project_terminals
 from ....common.numbers import (calculation_number as _calculation)
 from .pad_geometry import (PadContour, legacy_pad_contour, requires_modern_points)
-from ...model.pad_data import (MASK_FIELDS, mask_state, compatibility_mask)
+from ....common.pad_masks import MASK_FIELDS, mask_state
 from ...model.simulation import ARGUMENT_SCHEMAS, argument_values
 
 
@@ -206,19 +207,6 @@ def project_model3d(model, *, variable_fallback=True):
     return result
 
 
-def _project_terminals(parent):
-    terminals = parent.children('PadTerminal')
-    container = Element('PadTerminalCount', len(terminals))
-    for terminal in terminals:
-        projected = _ordered(terminal, '''Type X Y Angle ShapeWidth ShapeHeight
-                              ShapeCorner ShapePoints'''.split())
-        projected.set_values()
-        points = projected.child('ShapePoints')
-        points.set_values(len(points.children('pt')))
-        container.append(projected)
-    return container
-
-
 def project_pad(pad):
     """Project a complete pad from modern editable geometry into both ASC views.
 
@@ -274,7 +262,7 @@ def project_pad(pad):
                     for point in modern_points.children('pt'):
                         geometry.append(_plain(point))
         elif name == 'PadTerminalCount':
-            result.append(_project_terminals(pad))
+            result.append(project_terminals(pad, convert=_value))
         elif name == 'PadTerminal':
             continue  # ASC nests these in the preceding count record.
         else:
@@ -371,7 +359,7 @@ def project_pattern(pattern, *, line_width=None, text_bounds=None):
     for name in PATTERN_FIELDS:
         field = _scalar_field(pattern, name)
         if name == 'PadTerminalCount':
-            result.append(_project_terminals(pattern))
+            result.append(project_terminals(pattern, convert=_value))
         elif name == 'Model3D':
             result.append(project_model3d(field))
         elif name == 'UserFields':
@@ -555,3 +543,8 @@ def project_suppliers(suppliers):
         else:
             result.append(_plain(fields[0]))
     return result
+
+
+def compatibility_mask(state):
+    """Generate the legacy ASC tuple from one current mask choice."""
+    return (True, 2) if state == 2 else (False, state if state < 3 else 0, state)

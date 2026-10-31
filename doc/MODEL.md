@@ -5,10 +5,10 @@ document family. Documents, records, fields, ownership, queries and identity-bas
 relationships use the common model. A family defines its record types, units,
 relationships and format adapters.
 
-Schematics are the currently supported family. The first part of this guide
-describes the shared model; [Schematic documents](#schematic-documents) describes
-how schematics use it. Other families can use the same infrastructure without
-adopting schematic-specific collections or rules.
+Schematics and PCB layouts use this infrastructure with their own records and
+constraints. The first part of this guide describes the common model; the
+[schematic](#schematic-documents) and [PCB](#pcb-documents) sections describe each
+family's organization. Component and pattern libraries remain experimental.
 
 - [Documents and records](#documents-and-records)
 - [Field access](#field-access)
@@ -17,6 +17,7 @@ adopting schematic-specific collections or rules.
 - [Editing and consistency](#editing-and-consistency)
 - [Import and export](#import-and-export)
 - [Schematic documents](#schematic-documents)
+- [PCB documents](#pcb-documents)
 
 ## Documents and records
 
@@ -177,7 +178,7 @@ model to match the weakest format.
 Unavailable optional/calculated data is absent, or explicitly `None` where
 the schema permits it. There is no need for a second availability flag.
 An authored choice and a missing calculated result can coexist. For example,
-a future PCB model can retain a requested filled pour without calculated fill
+a PCB model can retain a requested filled pour without calculated fill
 geometry; a writer that requires geometry for that state must adapt on export.
 
 Information notices describe equivalent normalization or reconstructable
@@ -285,3 +286,43 @@ Routing, wire following and pour calculation require a higher-level toolkit
 above the data model. They are not currently provided. The
 [API reference](API.md) describes the available data operations and conversion
 limits.
+
+## PCB documents
+
+DIP, PCB ASC and DIPXML import into one board model, with
+`representation == "pcb"`. Its document class extends the same common tree and
+reference graph as the schematic class; it adds PCB schemas and relationships.
+
+| Collection | Meaning |
+| --- | --- |
+| `/Board/Components/Component` | Placed components and standalone physical objects |
+| `Component/Pattern` | The instance's current pads, holes, drawings and dimensions |
+| `/Board/Nets/Net` | Electrical membership and owned trace geometry |
+| `/Board/Layers/Layer` | The copper layer stack |
+| `/Board/ViaStyles/ViaStyle` | Via dimensions and copper spans |
+| `/Board/CopperPours/CopperPour` | Boundaries, settings and any supplied calculated fill |
+| `/Board/CacheLib` | Separate unplaced component and footprint definitions |
+
+Use [PCB.md](PCB.md) for every record, field, type, unit and cardinality, and
+[the PCB guide](PCB_GUIDE.md) for workflows and constructors.
+
+A component owns its placed physical pattern. Its cached definition is a
+separate editable object: changing a library path does not import or replace a
+footprint. Pads relate to nets; nets own trace geometry. Endpoint references,
+layer selections and other declared relationships use object identities, with
+serialized selectors derived from current order. A static via's selected style
+controls its copper size, drill and layer span.
+
+Displayed RefDes labels do not establish schematic or hierarchy identity.
+`HiddenId` and `HierarchyPath` carry that association. Imported duplicate labels
+remain representable; renaming rejects newly introduced collisions. The shared
+RefDes family helpers apply to both document families.
+
+PCB lengths use three shared units per millimetre. Component placement angles
+use radians and permit continuous rotation. Other angle domains remain explicit
+in their field definitions; schematic quarter-turn rules do not apply to them.
+
+These data operations do not route traces, follow moved components, recalculate
+pour fill or rerun design checks. Supplied results remain explicit data; missing
+calculated geometry remains absent. Export adapts unavailable results to its
+destination without changing the design being edited.

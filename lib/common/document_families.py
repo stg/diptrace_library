@@ -16,6 +16,10 @@ FORMAT_FAMILIES = {
     'eli': 'component', 'elixml': 'component',
     'lib': 'pattern', 'libxml': 'pattern',
 }
+_NATIVE_FORMATS = {family: format for format, family in FORMAT_FAMILIES.items()
+                   if not format.endswith('xml')}
+_XML_FORMATS = {family: format for format, family in FORMAT_FAMILIES.items()
+                if format.endswith('xml')}
 _NATIVE = {b'DTSCHEM': 'schematic', b'DTBOARD': 'pcb',
            b'DTELIB': 'component', b'DTCLIB': 'pattern'}
 _LEGACY = {b'DTSCHEM2.2': ('schematic', 27),
@@ -37,6 +41,7 @@ _ASC_TOKENS = re.compile(r'\(|\)|"[^"]*"|[^\s()"]+', re.DOTALL)
 class DocumentIdentity:
     family: str | None = None
     version: int | str | None = None
+    format: str | None = None
 
 
 def family_name(family):
@@ -64,7 +69,8 @@ def _asc_identity(text):
                 version = values[1] if len(values) > 1 else None
                 if version is not None and version.isascii() and version.isdecimal():
                     version = int(version)
-                return DocumentIdentity(_ASC_TYPES.get(values[0]) if values else None, version)
+                return DocumentIdentity(_ASC_TYPES.get(values[0]) if values else None,
+                                        version, 'asc')
             depth -= 1
         elif depth == 1:
             header.append(token)
@@ -79,8 +85,9 @@ def _xml_identity(data):
 
     def start(name, attributes):
         nonlocal identity
-        identity = DocumentIdentity(_XML_TYPES.get((name, attributes.get('Type'))),
-                                    attributes.get('Version'))
+        family = _XML_TYPES.get((name, attributes.get('Type')))
+        identity = DocumentIdentity(family, attributes.get('Version'),
+                                    _XML_FORMATS.get(family))
         raise RootFound
 
     parser = expat.ParserCreate()
@@ -100,11 +107,13 @@ def input_identity(data):
             end = data[0] + 1
             signature = data[1:end]
             if signature in _LEGACY:
-                return DocumentIdentity(*_LEGACY[signature])
+                family, version = _LEGACY[signature]
+                return DocumentIdentity(family, version, _NATIVE_FORMATS[family])
             if signature in _NATIVE:
                 version = (int.from_bytes(data[end:end+3], 'big') - 1_000_000
                            if len(data) >= end+3 else None)
-                return DocumentIdentity(_NATIVE[signature], version)
+                family = _NATIVE[signature]
+                return DocumentIdentity(family, version, _NATIVE_FORMATS[family])
         stripped = data.lstrip(b'\xef\xbb\xbf \t\r\n')
         if stripped.startswith(b'<') or data.startswith((b'\xff\xfe', b'\xfe\xff')):
             return _xml_identity(data)

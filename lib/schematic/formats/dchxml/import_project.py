@@ -1,24 +1,13 @@
 """Public paths and string-valued simulator configuration into shared data."""
-from .import_library_values import (read_path)
-from .import_values import (enum_value, replace_rows)
+from ....common.xml_library_values import (read_project_libraries)
+from ....common.xml_records import (enum_value, replace_rows)
 from ...model.simulation import (SIMULATION_TYPES, SIMULATION_FIELDS)
 from ....common.model import (Element)
 from ...model.new import (fields)
 
 
 def read_project(record, schematic):
-    libraries = record.take('ProjectLibs')
-    if libraries is not None:
-        for own, public, kind in (('ProjectLibs_Folders', 'Folders', 'Folder'), ('ProjectLibs_Libs', 'Libs', 'Lib')):
-            rows = []
-            for item in libraries.rows(public, kind):
-                actual, variable = read_path(item)
-                path = Element(kind, actual)
-                path.add('VariablePath', variable)
-                rows.append(path)
-            replace_rows(schematic, own, rows)
-        schematic.set_field('ProjectLibs_Sorted', libraries.boolean('Sorted', False))
-        libraries.finish()
+    read_project_libraries(record.take('ProjectLibs'), schematic)
     simulator = record.take('Simulator')
     if simulator is None:
         return

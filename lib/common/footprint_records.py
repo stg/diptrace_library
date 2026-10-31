@@ -1,6 +1,12 @@
 """Shared footprint and related record definitions for design documents."""
 from .schema import Child, Field, Record
 from .drawing_records import POINT, POINTS
+from .supplier_records import SUPPLIERS, definition as supplier_definition
+from .user_fields import USER_FIELD, USER_FIELDS
+
+
+_PAD_SHAPE_DESCRIPTION = ('Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, '
+                          '4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit.')
 
 
 TERMINAL_COUNT = Field('PadTerminalCount', 'integer',
@@ -47,8 +53,8 @@ PATTERN = Record('Pattern', {
     'PadShape_Y': Field('PadShape_Y', 'number', required=True),
     'PadWidth': Field('PadWidth', 'number', required=True),
     'PadHeight': Field('PadHeight', 'number', required=True),
-    'PadShape': Field('PadShape', 'integer|text', required=True,
-        description='Shape code or public XML shape label, including empty text.'),
+    'PadShape': Field('PadShape', 'integer', required=True,
+        description=_PAD_SHAPE_DESCRIPTION),
     'SurfacePad': Field('SurfacePad', 'boolean', required=True),
     'PadHole': Field('PadHole', 'number', required=True),
     'PadHoleH': Field('PadHoleH', 'number', required=True),
@@ -63,7 +69,7 @@ PATTERN = Record('Pattern', {
     'PadMask_Percent': Field('PadMask_Percent', 'number', required=True),
     'PadMask_EdgeGap': Field('PadMask_EdgeGap', 'number', required=True),
     'PadMask_SegmentGap': Field('PadMask_SegmentGap', 'number', required=True),
-    'PadMask_SegmentSide': Field('PadMask_SegmentSide', 'integer', required=True),
+    'PadMask_SegmentSide': Field('PadMask_SegmentSide', 'number', required=True, unit='shared length'),
     'OriginX': Field('OriginX', 'number', required=True),
     'OriginY': Field('OriginY', 'number', required=True),
     'Mounting': Field('Mounting', 'integer', required=True),
@@ -106,8 +112,8 @@ PAD = Record('Pad', {
     'PadHoleH': Field('PadHoleH', 'number', required=True),
     'PadHoleType': Field('PadHoleType', 'integer', required=True),
     'SurfacePad': Field('SurfacePad', 'boolean', required=True),
-    'PadShape_New': Field('PadShape_New', 'integer|text', required=True,
-        description='Current shape code or public XML label, including empty text.'),
+    'PadShape_New': Field('PadShape_New', 'integer', required=True,
+        description=_PAD_SHAPE_DESCRIPTION),
     'PadAngle': Field('PadAngle', 'number', required=True),
     'PadShape_X': Field('PadShape_X', 'number', required=True),
     'PadShape_Y': Field('PadShape_Y', 'number', required=True),
@@ -120,7 +126,7 @@ PAD = Record('Pad', {
     'PadMask_Percent': Field('PadMask_Percent', 'number', required=True),
     'PadMask_EdgeGap': Field('PadMask_EdgeGap', 'number', required=True),
     'PadMask_SegmentGap': Field('PadMask_SegmentGap', 'number', required=True),
-    'PadMask_SegmentSide': Field('PadMask_SegmentSide', 'integer', required=True),
+    'PadMask_SegmentSide': Field('PadMask_SegmentSide', 'number', required=True, unit='shared length'),
     'Index': Field('Index', 'integer', required=True, default=0, getter=lambda node: node._ordinal(),
         ordinal_dependencies=lambda node: (node,)),
     'StringNumber': Field('StringNumber', 'text', required=True, default=''),
@@ -145,8 +151,8 @@ PAD_STYLE = Record('PadStyle', {
     'PadHoleType': Field('PadHoleType', 'integer', required=True),
     'PadHole': Field('PadHole', 'number', required=True),
     'PadHoleH': Field('PadHoleH', 'number', required=True),
-    'PadShape': Field('PadShape', 'integer|text', required=True,
-        description='Shape code or public XML label, including empty text.'),
+    'PadShape': Field('PadShape', 'integer', required=True,
+        description=_PAD_SHAPE_DESCRIPTION),
     'PadWidth': Field('PadWidth', 'number', required=True),
     'PadHeight': Field('PadHeight', 'number', required=True),
     'PadCorner': Field('PadCorner', 'number', required=True),
@@ -162,7 +168,7 @@ PAD_STYLE = Record('PadStyle', {
     'PadMask_Percent': Field('PadMask_Percent', 'number', required=True),
     'PadMask_EdgeGap': Field('PadMask_EdgeGap', 'number', required=True),
     'PadMask_SegmentGap': Field('PadMask_SegmentGap', 'number', required=True),
-    'PadMask_SegmentSide': Field('PadMask_SegmentSide', 'integer', required=True),
+    'PadMask_SegmentSide': Field('PadMask_SegmentSide', 'number', required=True, unit='shared length'),
     'Name': Field('Name', 'text', required=True, default=''),
 }, parameters=('Name',),
    children={
@@ -279,20 +285,6 @@ HOLE = Record('Hole', {
    })
 
 
-SUPPLIERS = Record('Suppliers', {
-    'PartNumber': Field('PartNumber', 'text', default=''),
-    'Manufacturer': Field('Manufacturer', 'text', default=''),
-    'Pattern': Field('Pattern', 'text', default=''),
-    'Supplier': Field('Supplier', 'text', default=''),
-    'SourceLocator': Field('SourceLocator', 'text', default=''),
-    'Currency': Field('Currency', 'text', default=''),
-    'MainSupplier': Field('MainSupplier', 'boolean'),
-}, parameters=(),
-   children={
-       'Prices': Child('Prices', 'Prices'),
-   })
-
-
 MODEL3D = Record('Model3D', {
     'Model3DFile': Field('Model3DFile', 'text', default=''),
     'Model3DFile_Variable': Field('Model3DFile_Variable', 'text', default=''),
@@ -380,8 +372,13 @@ def nested_definition(node):
     parent = node.parent
     if parent is None:
         return None
-    if node.kind == 'Suppliers' and parent.kind in ('Component', 'Part', 'Pattern'):
-        return SUPPLIERS
+    if (supplier := supplier_definition(node)) is not None:
+        return supplier
+    if node.kind == 'UserFields' and parent.kind == 'Pattern':
+        return USER_FIELDS
+    if (node.kind == 'UserField' and parent.kind == 'UserFields'
+            and parent.parent is not None and parent.parent.kind == 'Pattern'):
+        return USER_FIELD
     if node.kind == 'Model3D' and parent.kind == 'Pattern':
         return MODEL3D
     if parent.kind == 'Model3D':

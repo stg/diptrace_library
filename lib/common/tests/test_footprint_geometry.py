@@ -31,6 +31,15 @@ class FootprintGeometryTests(unittest.TestCase):
         self.assertEqual(expand_normalized_drawing(3, ((0, 0), (1, 1)), (), (4, 4)),
                          (3, ((0., 0.), (4., 4.))))
 
+    def test_mirrored_text_selects_opposite_horizontal_corner_at_each_quarter_turn(self):
+        for orientation, expected in enumerate(((9., 4.), (9., 16.), (1., 16.), (1., 4.))):
+            with self.subTest(orientation=orientation):
+                self.assertEqual(expand_normalized_drawing(7, self.controls, (), (10, 20),
+                    text_orientation=orientation, text_mirrored=True), (7, (expected,)))
+        # Mirroring selects a text anchor; it does not reflect other drawings.
+        self.assertEqual(expand_normalized_drawing(2, self.controls, (), (10, 20),
+            text_mirrored=True), (2, ((1., 4.), (9., 16.))))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,7 +2,7 @@
 import unittest
 
 from lib import ExportReport,parse,parse_asc
-from lib.schematic.model.pad_data import (MASK_FIELDS)
+from lib.common.pad_masks import MASK_FIELDS
 from lib.tests.test_pad_orientation import sample,placed_pad
 
 

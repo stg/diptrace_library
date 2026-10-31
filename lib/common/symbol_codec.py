@@ -1,6 +1,6 @@
 """Symbol pins and drawings stored in shared library definitions."""
 from .model import SourceSpan
-from .drawing_codec import read_angle, read_groups, read_text_properties
+from .drawing_codec import read_angle, read_groups, read_text_properties, write_text_properties
 
 
 PIN_FONT = (('NameFontSize', 'integer'), ('NameFontWidth', 'number'), ('NameFontScale', 'number'))
@@ -62,3 +62,53 @@ def read_symbol_extensions(reader, part, *, placed=False, angle_reader=read_angl
             reader.fields(shape, (('ShowPart', 'boolean'), ('MarkingGenerated', 'boolean')), replace=True)
     if not placed:
         read_groups(reader, part, 'Groups')
+
+
+def write_cached_pins(writer, part):
+    pins = part.select('Pins/Pin')
+    writer.integer(len(pins))
+    for pin in pins:
+        writer.field(pin, 'Enabled', 'boolean')
+        writer.fields(pin, 'integer', 'Type Orientation Number')
+        writer.fields(pin, 'number', 'X Y Length')
+        writer.fields(pin, 'text', 'Name StringNumber')
+        writer.field(pin, 'ShowName', 'boolean')
+        writer.fields(pin, 'number', 'PinNumXShift PinNumYShift PinNameXShift PinNameYShift')
+        writer.field(pin, 'ElectricType', 'integer')
+        writer.field(pin, 'Locked', 'boolean')
+        writer.field(pin, 'ModelSig', 'text')
+        for name, codec in PIN_FONT:
+            writer.field(pin, name, codec)
+
+
+def write_symbol_drawings(writer, part, *, orientation, placed=False):
+    """Write physical symbol geometry; the family supplies its angle policy."""
+    shapes = part.select('Shapes/Shape')
+    writer.integer(len(shapes))
+    for shape in shapes:
+        writer.field(shape, 'Enabled', 'boolean')
+        writer.integer(orientation(shape['TextAngle']))
+        kind = shape['Type']
+        writer.integer(700 if placed and kind == 10 and shape['MarkingGenerated'] else kind)
+        writer.field(shape, 'FontSize', 'integer')
+        writer.field(shape, 'FontColor', 'color')
+        writer.field(shape, 'FontType', 'integer')
+        writer.field(shape, 'FontName', 'text')
+        lines = shape.select('TextLine/pt')
+        writer.text(lines[0]['Text'] if lines else '')
+        writer.field(shape, 'PenWidth', 'number')
+        writer.rows(shape.child('Points_New'), 'pt', 'number number')
+        writer.fields(shape, 'boolean', 'Locked VectorFont')
+        writer.fields(shape, 'number', 'FontWidth FontScale')
+
+
+def write_symbol_extensions(writer, part, *, placed=False):
+    for pin in part.select('Pins/Pin'):
+        writer.field(pin, 'Group', 'integer')
+    for shape in part.select('Shapes/Shape'):
+        write_text_properties(writer, shape)
+        writer.field(shape, 'Group', 'integer')
+        if placed:
+            writer.fields(shape, 'boolean', 'ShowPart MarkingGenerated')
+    if not placed:
+        writer.rows(part.child('Groups'), 'pt', 'boolean integer number number')

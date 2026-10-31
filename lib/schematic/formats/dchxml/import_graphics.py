@@ -1,11 +1,11 @@
 """Schematic drawings read directly into own named physical drawing data."""
 from .components import (HORZ, VERT)
 from .graphics import (DRAWING_TYPES)
-from .import_library_values import (read_path)
-from .import_values import (enum_value, length, point, replace_rows)
+from ....common.xml_library_values import (read_path)
+from ....common.xml_records import (enum_value, length, point, replace_rows)
 from ....common.model import (Element)
 from ...model.new import (fields)
-from .fonts import (read_font, read_text_extent)
+from ....common.xml_font_import import (read_font, read_text_extent)
 
 
 def read_drawings(record, schematic, *, units, sheets):

@@ -1,5 +1,6 @@
 """Legacy sheet pictures as editable file-backed drawings."""
 from ...common.numbers import (calculation_number)
+from ...common.picture_sources import prepare_picture_sources
 
 
 def upgrade_legacy_pictures(version,schematic):
@@ -41,25 +42,5 @@ def prepare_pictures(schematic, *, destination, filenames=None, report=None):
     """
     if destination not in ('dch', 'asc', 'dchxml'):
         raise ValueError('unsupported picture destination')
-    unresolved = []
-    for shape in schematic.select('Shapes/Shape'):
-        if shape.scalar('Type')!=11:
-            continue
-        index=shape.scalar('BitmapIndex',-1)
-        if isinstance(index,bool) or not isinstance(index,int):
-            raise TypeError(f'{shape.path}: BitmapIndex requires an integer')
-        if index>=0 and not (shape.scalar('Picture_File','') or shape.scalar('Picture_File_Variable','')):
-            if filenames is not None and index<len(filenames) and filenames[index]:
-                shape.set_field('Picture_File',filenames[index])
-            else:
-                unresolved.append(shape)
-                if destination == 'asc':
-                    continue
-        shape.set_field('BitmapIndex',-1)
-    if unresolved:
-        from ...common.conversion import (warn)
-        message = ('unresolved picture indices are retained; current application readers require picture filenames'
-                   if destination == 'asc' else
-                   'unresolved companion picture references become unassigned picture sources')
-        warn(report, 'unresolved-picture-reference', destination, message, unresolved,
-             recoverability='supply a current Picture_File or an explicit legacy_picture_files table; authoring references remain intact')
+    prepare_picture_sources((shape for shape in schematic.select('Shapes/Shape') if shape.scalar('Type') == 11),
+        destination=destination, keep_legacy_indices=destination == 'asc', filenames=filenames, report=report)

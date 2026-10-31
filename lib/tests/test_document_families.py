@@ -21,6 +21,13 @@ FAMILIES = (
 
 
 class DocumentFamilyTests(unittest.TestCase):
+    def setUp(self):
+        # Test unavailable-family behavior explicitly as implementations grow.
+        selected = patch.dict(lib._FAMILY_ADAPTERS,
+                              {'schematic': lib._FAMILY_ADAPTERS['schematic']}, clear=True)
+        selected.start()
+        self.addCleanup(selected.stop)
+
     def test_placeholders_expose_scoped_conversion_api_and_collect_failures(self):
         document = lib.new_schematic()
         for family, native, xml, *_ in FAMILIES:

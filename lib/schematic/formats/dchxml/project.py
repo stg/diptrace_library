@@ -1,6 +1,6 @@
 """Public XML project paths and simulator settings."""
 from .syntax import (set_attribute)
-from .settings import (enum_text, field)
+from ....common.xml_output import enum_text, field
 from ....common.model import (Element)
 from ...model.simulation import (SIMULATION_TYPES, SIMULATION_FIELDS, argument_values)
 

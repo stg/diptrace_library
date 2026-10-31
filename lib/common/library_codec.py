@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .model import Element, SourceSpan
-from .catalog_codec import read_category_types, read_possible_names
-from .symbol_codec import read_cached_pins
+from .catalog_codec import read_category_types, read_possible_names, write_category_types
+from .symbol_codec import read_cached_pins, write_cached_pins
 
 
 @dataclass(frozen=True)
@@ -143,3 +143,82 @@ def read_library_cache(r, owner, codecs):
         slot.set_values(slot.values[0], r.argument('text'))
     cache.annotations["incomplete"] = "later cache extensions and ASC projection remain"
     return tuple(inputs)
+
+
+def write_definition(writer, definition, codecs):
+    """Shared definition envelope with family-owned physical/symbol codecs."""
+    part, pattern = definition.one('Part'), definition.one('Pattern')
+    writer.field(part, 'Enabled', 'boolean')
+    writer.field(part, 'PartType', 'integer')
+    writer.field(part, 'PartName', 'text')
+    writer.fields(part, 'integer', 'ShowNumbers Type Number1 Number2')
+    writer.fields(part, 'number', 'Width Height')
+    writer.fields(part, 'text', 'Name RefDes Value')
+    writer.field(part, 'LockProperties', 'boolean')
+    writer.rows(pattern.child('InternalConnections'), 'IntCon', 'integer integer')
+    codecs.pattern_parameters(writer, pattern)
+    writer.fields(part, 'number', 'Origin_X Origin_Y')
+    writer.rows(pattern.child('PadPoints'), 'pt', 'number number')
+    codecs.pattern_pads(writer, pattern)
+    codecs.pattern_graphics(writer, pattern)
+    writer.integer(0)  # Current groups have their own later extension.
+    writer.rows(pattern.child('UserFields'), 'UserField', 'text text integer')
+    codecs.pattern_model(writer, pattern)
+    writer.field(pattern.one('Model3D'), 'Units', 'integer')
+    writer.field(pattern, 'Mounting', 'integer')
+    writer.field(pattern, 'Pattern_CategoryName', 'text')
+    writer.field(pattern, 'Pattern_CategoryIndex', 'integer')
+    write_category_types(writer, pattern, 'Pattern_CategoryTypes')
+    writer.rows(pattern.child('PossibleNames'), 'PossibleName', 'text')
+    write_cached_pins(writer, part)
+    codecs.symbol_graphics(writer, part)
+    writer.integer(0)
+    writer.rows(part.child('UserFields'), 'UserField', 'text text integer', trailing=7)
+    writer.field(part, 'ModelType', 'integer')
+    writer.field(part, 'ModelString', 'text')
+    writer.rows(part.child('ModelBody'), 'Line', 'text')
+    writer.field(part, 'SubfolderIndex', 'integer')
+    writer.integer(7)
+    for flag in part['Verification']:
+        writer.boolean(flag)
+    writer.text(part.get(codecs.definition_text, ''))
+    writer.field(part, 'Manufacturer', 'text')
+    writer.field(part, 'Component_CategoryName', 'text')
+    writer.field(part, 'Component_CategoryIndex', 'integer')
+    write_category_types(writer, part, 'Component_CategoryTypes')
+
+
+def write_library_cache(writer, owner, definition_writer):
+    writer.field(owner, 'ProjectLibs_Name', 'text')
+    writer.fields(owner, 'integer', 'ProjectLibs_Type ProjectLibs_Content')
+    writer.rows(owner.child('ProjectLibs_Folders'), 'Folder', 'text')
+    writer.rows(owner.child('ProjectLibs_Libs'), 'Lib', 'text')
+    writer.field(owner, 'ProjectLibs_Sorted', 'boolean')
+    writer.field(owner, 'DesignCache_Count', 'integer')
+    writer.rows(owner.child('DesignCache_Links'), 'Link', 'integer')
+    write_cache_library(writer, owner.child('CacheLib'), definition_writer)
+
+
+def write_cache_library(writer, cache, definition_writer):
+    """Catalogues and definitions following the caller's project settings."""
+    categories = cache.select('Categories/Category') if cache is not None else ()
+    writer.integer(len(categories))
+    for category in categories:
+        writer.field(category, 'Name', 'text')
+        writer.field(category, 'Index', 'integer')
+        types = category.children('Type')
+        writer.integer(len(types))
+        for kind in types:
+            writer.field(kind, 'Name', 'text')
+            writer.field(kind, 'Index', 'integer')
+            writer.rows(kind, 'Subtype', 'text integer')
+    writer.rows(cache.child('Subfolders') if cache is not None else None, 'Folder', 'text')
+    slots = cache.select('Slots/Slot') if cache is not None else ()
+    writer.integer(len(slots))
+    for slot in slots:
+        definitions = slot.children('Definition')
+        writer.integer(len(definitions))
+        for definition in definitions:
+            definition_writer(writer, definition)
+    for slot in slots:
+        writer.field(slot, 'LibPath', 'text')

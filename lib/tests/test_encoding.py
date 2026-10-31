@@ -98,7 +98,7 @@ class EncodingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             path=Path(folder)/'controls.asc'
             path.write_bytes(raw)
-            document=read(path, family='schematic')
+            document=read(path, format='asc', family='schematic')
             self.assertEqual(document.to_asc_bytes(),raw)
             name=document.one('/Name')
             name.set_values(name.values[0]+' edited')

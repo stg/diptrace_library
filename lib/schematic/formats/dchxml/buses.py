@@ -1,6 +1,6 @@
 """Public XML bus topology and bus connector data."""
 from .syntax import (set_attribute)
-from .settings import (enum_text, field, numeric)
+from ....common.xml_output import enum_text, field, numeric
 from ....common.model import (Element)
 
 

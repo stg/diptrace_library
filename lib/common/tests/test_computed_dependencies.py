@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from lib import Document, Element, Guard, Index, Key, Property, ReferenceError
 from lib.common.schema import Field, Record
+from lib.common.structural_edits import preview_structure, assembly
 
 
 def selection(node):
@@ -23,6 +24,65 @@ SELECTION = Record('Selection', {
 
 
 class ComputedDependencyTests(unittest.TestCase):
+    def test_removing_an_optional_owned_record_reprojects_calculated_consumers(self):
+        doc = Document()
+        schema = Record('OptionalRecord', {'Value': Field('Value', 'integer',
+            getter=lambda node: node.one('Supplied')['Amount'] if node.child('Supplied') is not None else -1,
+            value_dependencies=lambda node: ((node.one('Supplied'), 'Amount'),)
+                if node.child('Supplied') is not None else (),
+            collection_dependencies=lambda node: ((node, 'Supplied'),))})
+        state = doc.root.add('State').bind_schema(schema)
+        supplied = state.add('Supplied')
+        supplied.add('Amount', 99)
+        copy = doc.root.add('Copy', 0)
+        doc.references.bind(copy, state, Property(copy, 'Value'))
+        with patch.object(doc.root, 'walk', side_effect=AssertionError('whole tree scan')), \
+                patch.object(type(doc.references), '__iter__', side_effect=AssertionError('whole graph scan')):
+            doc.remove(supplied)
+        self.assertEqual(copy.values, (-1,))
+        self.assertIsNone(state.child('Supplied'))
+        doc.validate()
+
+    def test_optional_calculated_input_can_be_removed_with_a_prepared_projection(self):
+        doc = Document()
+        schema = Record('OptionalSource', {'Value': Field('Value', 'integer',
+            getter=lambda node: node.get('Override', -1),
+            value_dependencies=lambda node: ((node, 'Override'),) if node.child('Override') is not None else (),
+            collection_dependencies=lambda node: ((node, 'Override'),))})
+        state = doc.root.add('State').bind_schema(schema)
+        supplied = state.add('Override', 99)
+        copy = doc.root.add('Copy', 0)
+        doc.references.bind(copy, state, Property(copy, 'Value'))
+        graph = doc.references
+        with self.assertRaises(ReferenceError):
+            graph.check_removal(supplied)
+        children = {state: ()}
+        with preview_structure(children, {supplied: None}, {}):
+            graph.check_removal(supplied, projected=True)
+            plan = graph.plan_collections(children, parents={supplied: None})
+        self.assertEqual(copy.values, (99,))  # Preflight has no visible effects.
+        with assembly(doc):
+            supplied.detach()
+            graph.apply_value_change(plan)
+        self.assertEqual(copy.values, (-1,))
+        doc.validate()
+
+    def test_projected_removal_still_rejects_a_direct_target(self):
+        doc = Document()
+        supplied = doc.root.add('Supplied', 99)
+        copy = doc.root.add('Copy', 0)
+        doc.references.bind(copy, supplied, Property(copy))
+        children = {doc.root: (copy,)}
+        with preview_structure(children, {supplied: None}, {}):
+            with self.assertRaises(ReferenceError):
+                doc.references.check_removal(supplied, projected=True)
+        self.assertIs(supplied.parent, doc.root)
+        self.assertEqual(copy.values, (99,))
+        with self.assertRaises(ReferenceError):
+            doc.remove(supplied)
+        self.assertIs(supplied.parent, doc.root)
+        self.assertEqual(copy.values, (99,))
+
     def design(self):
         doc = Document()
         rows = doc.root.add('Rows')

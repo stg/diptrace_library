@@ -74,13 +74,15 @@ def copy_record(document, node, *, parent=None, index=None, fields=None):
         specifications, copied_issues = document._copy_specifications(copied, specifications, copied_issues)
         additions = graph._prepare_additions(specifications, structure=structure)
         graph._validate_requested_values(requested, additions.projections, additions=additions.bindings)
-        for issue in copied_issues:
-            graph._validate_reference_guards(issue, additions.projections.values)
+        with preview_references(graph, {binding.reference.uid: binding.reference for binding in additions.bindings}):
+            for issue in copied_issues:
+                graph._validate_reference_guards(issue, additions.projections.values)
     with assembly(document):
         parent.insert(copied, index)
         graph._apply_additions(additions)
         for issue in copied_issues:
-            graph.note(issue.source, issue.message, *issue.indices, collections=issue.collections, guards=issue.guards)
+            graph.note(issue.source, issue.message, *issue.indices, collections=issue.collections,
+                       guards=issue.guards, severity=issue.severity)
     graph.finish_structure((parent,))
     return copied
 
@@ -93,7 +95,6 @@ def remove_record(document, node):
     references = tuple(link for link in graph._content_references(nodes) if _owned(link, nodes))
     issues = tuple(issue for issue in graph._content_issues(nodes) if _owned(issue, nodes))
     excluded = {link.uid for link in references}
-    removed = graph.check_removal(node, excluding=excluded | set(issues))
     children = tuple(child for child in parent._child_sequence() if child is not node)
     validate_child_change(parent, children, node.kind)
     changes = dict.fromkeys(excluded)
@@ -102,6 +103,7 @@ def remove_record(document, node):
             document._validate_reference_removal(link)
         structure = graph.plan_collections({parent: children}, parents={node: None}, excluded=excluded, excluded_issues=issues)
         with preview_structure({parent: children}, {node: None}, {}):
+            removed = graph.check_removal(node, excluding=excluded | set(issues), projected=True)
             plan = graph._plan_reference_changes(changes, structure=structure, excluded_issues=issues)
     with assembly(document):
         graph._discard_bindings(references)

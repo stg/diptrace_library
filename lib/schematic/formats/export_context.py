@@ -5,7 +5,7 @@ from typing import Callable
 from ..layout.markings import MarkingStyle, resolve_marking_style
 from ...common.text.layout import TextLayout, default_layout
 from .export_defaults import default_line_width, display_units
-from .path_variables import PathVariables
+from ...common.path_variables import PathVariables
 
 
 @dataclass(frozen=True)

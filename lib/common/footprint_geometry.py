@@ -1,13 +1,15 @@
 """Physical geometry from the older normalized footprint drawing vocabulary."""
 import math
-from .geometry import ellipse_points
+from .geometry import ellipse_points, unequal_extents
 
 
-def expand_normalized_drawing(kind, controls, outline, size, *, text_orientation=0):
+def expand_normalized_drawing(kind, controls, outline, size, *, text_orientation=0,
+                              text_mirrored=False):
     """Return the current type and physical points for one footprint drawing.
 
     Primitive controls and polygon outlines are normalized to the footprint's
-    width and height. Text uses the corner selected by its quarter-turn value.
+    width and height. Text uses the corner selected by its quarter-turn value;
+    a mirrored text box selects the opposite horizontal corner.
     Noncircular ellipses become polygonal outlines in the current representation.
     Version policy and text style defaults belong to the document adapters.
     """
@@ -15,17 +17,20 @@ def expand_normalized_drawing(kind, controls, outline, size, *, text_orientation
         points = ()
     elif kind == 7:
         (left, top), (right, bottom) = controls[:2]
+        if text_mirrored:
+            left, right = right, left
         corners = ((left, top), (left, bottom), (right, bottom), (right, top))
         points = (corners[text_orientation],) if 0 <= text_orientation < 4 else ()
     elif kind < 8:
         points = controls[:3 if kind == 6 else 2]
     else:
         points = outline
+    size = tuple(size)
     width, height = map(float, size)
     physical = tuple((float(x)*width, float(y)*height) for x, y in points)
     if kind in (3, 5) and len(physical) == 2:
         first, opposite = physical
-        if abs(abs(opposite[0]-first[0])-abs(opposite[1]-first[1])) > .3:
+        if unequal_extents(points[0], points[1], scale=size, tolerance='.3'):
             physical = ellipse_points(first, opposite, segments=30, closed=kind == 3)
             kind = 8 if kind == 3 else 9
     return kind, physical

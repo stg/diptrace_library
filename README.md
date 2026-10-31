@@ -139,7 +139,21 @@ part["X"] += 30  # Move 10 mm; connected wire geometry stays in place.
 
 ## PCB layouts
 
-Unpublished, experimental, and not ready for use.
+DIP, PCB ASC and DIPXML all read into the same searchable, editable board model,
+and all three can be written. The shared API supports inspection, data editing,
+format conversion and version conversion, with automatic reference maintenance.
+
+| Format | Input | Output |
+| --- | --- | --- |
+| Binary PCB (`.dip`) | Schemas 31–62 | Schemas 54–62; default 62 |
+| ASCII PCB (`.asc`) | PCB dialect 53 | PCB dialect 53 |
+| XML PCB (`.dipxml`) | DipTrace 4.3, 4.9, 5.2 and 5.3 | Schema targets 54, 58, 60 and 62; default 62 |
+
+Start with [the PCB guide](doc/PCB_GUIDE.md) or the
+[PCB examples](examples/pcb/README.md). The generated [PCB catalogue](doc/PCB.md)
+describes every record and field. As with schematics, these are data operations;
+moving components does not route their traces, and editing a pour does not
+calculate its fill.
 
 ## Components
 
@@ -166,13 +180,20 @@ The private reference corpus contains:
 | PCB layouts (schema 31–58) | 714 |
 | Source timestamps | 2011–2026 |
 
-The schematic readers have been checked against the original schematics and
-their XML companions. Automated checks include 20 end-to-end writer/reopen
-fixtures and 648 portable library tests covering model behavior, adapters and
-edge cases.
+The schematic and PCB readers have been checked against original designs and
+their canonical exports. Automated checks cover format and version conversion,
+repeated writer/reopen cycles, model behavior and edge cases.
 
 These files remain private because they contain professional, client, and personal
 projects and library collections.
+
+## Known problems
+
+### Speed and memory
+
+Large designs can be slow to read and convert, with high memory use. The current
+model creates many small objects and makes repeated passes through them.
+A larger refactoring is planned to improve both speed and memory use.
 
 ## Accuracy and responsibility
 
@@ -199,11 +220,11 @@ but show only a small part of what the library can do:
 - **[BOM generator](apps/diptrace_bom/README.md):** group components and their reference designators into a CSV.
 - **[Format converter](apps/diptrace_convert/README.md):** convert between formats or output versions.
 
-The [three schematic examples](examples/schematic/README.md) cover creation,
-inspection/editing and conversion. For your own scripts, start with
+The [schematic](examples/schematic/README.md) and [PCB examples](examples/pcb/README.md)
+cover creation, inspection/editing and conversion. For your own scripts, start with
 [Getting started](doc/GETTING_STARTED.md) and [the model guide](doc/MODEL.md).
 The [API reference](doc/API.md) covers the supported operations with focused examples;
-the [schematic catalogue](doc/SCHEMATIC.md) lists every declared record and field.
+the [schematic](doc/SCHEMATIC.md) and [PCB catalogues](doc/PCB.md) list every declared record and field.
 
 ## Bugs and contributions
 

@@ -1,4 +1,5 @@
 """Unresolved public references are current facts, distinct from assignments."""
+from ...common.local_keys import map_key
 
 
 _FIELDS = dict(Pin=('Group', 'PadId'), Pad=('Group',), Shape=('Group', 'PadId'),
@@ -36,14 +37,6 @@ def validate_keys(document):
 
 def missing_key(owner, name):
     return next((row for row in _rows(owner) if row.values[0] == name), None)
-
-
-def map_key(owner, name, key, mapping):
-    if key < 0 or key in mapping:
-        return mapping.get(key, key)
-    keys = owner.child('UnresolvedKeys') or owner.add('UnresolvedKeys')
-    keys.add('Key', name, key)
-    return -1
 
 
 def copy_missing_keys(source, target):

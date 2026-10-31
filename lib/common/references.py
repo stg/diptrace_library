@@ -16,6 +16,7 @@ from .model import (Element, Value)
 from .structural_edits import preview_structure, validate_child_change
 from .computed_dependencies import ComputedDependencies
 from .reference_edits import pending_changes, preview_references
+from .field_edits import named_field
 
 
 class ReferenceError(ValueError):
@@ -94,6 +95,11 @@ class UnresolvedReference:
     indices: tuple[Index | Key | Property, ...]
     collections: tuple[Element, ...] | None = None
     guards: tuple[Guard | OrdinalGuard, ...] = ()
+    severity: str = 'warning'
+
+    def __post_init__(self):
+        if self.severity not in ('info', 'warning'):
+            raise ValueError('unresolved reference severity must be info or warning')
 
 
 @dataclass
@@ -110,6 +116,8 @@ class _ProjectionPlan:
     updates: tuple
     values: dict
     calculations: tuple = ()
+    replacements: tuple = ()
+    outputs: tuple = ()
 
     def __iter__(self):
         return iter(self.updates)
@@ -366,6 +374,7 @@ class References:
             for owner, definition in self._calculated_parameters(guard.field):
                 yield from self._calculated_value_fields(owner, definition)
         if isinstance(reference, UnresolvedReference):
+            yield from self.document._unresolved_reference_fields(reference)
             return
         for item in reference.indices:
             if not isinstance(item, (Property, Key)):
@@ -496,8 +505,7 @@ class References:
         for issue in issues.difference(excluded_issues):
             self._validate_reference_guards(issue, overrides)
 
-    @staticmethod
-    def _validate_reference_guards(reference, overrides):
+    def _validate_reference_guards(self, reference, overrides):
         for guard in reference.guards:
             if not _within(guard.field, reference.source):
                 raise ReferenceError('reference guard is detached from its source')
@@ -512,6 +520,8 @@ class References:
             if values != guard.values or any(isinstance(new, bool) != isinstance(old, bool)
                                             for new, old in zip(values, guard.values)):
                 raise ReferenceError('reference mode is in use; discard or replace its relationship before editing')
+        if isinstance(reference, UnresolvedReference):
+            self.document._validate_unresolved_reference(reference)
 
     @staticmethod
     def _same_value(first, second):
@@ -521,6 +531,8 @@ class References:
     def _projected_value(item, position, domain, *, source=None):
         kind, unit = (domain[-2], domain[-1]) if isinstance(item, Property) else (
             'string' if isinstance(position, str) else 'number', '')
+        if isinstance(item, Property) and position is None:
+            kind = 'null'
         return Value(position, kind, unit, source=source)
 
     def _validate_projected_values(self, overrides):
@@ -550,7 +562,7 @@ class References:
         """Preflight roots and all dependent copies without changing data."""
         return self._plan_value_changes(changes)
 
-    def _plan_value_changes(self, changes, *, structure=None):
+    def _plan_value_changes(self, changes, *, structure=None, extra=None):
         overrides = {}
         for field, values in changes:
             if field is None:
@@ -567,12 +579,13 @@ class References:
             overrides = {**structure.values, **overrides}
             selections = {binding.reference.uid: selected for binding, _, selected in structure}
             seeds = selections
-        plan = self._plan_value_overrides(overrides, index_selection=selections, seeds=seeds)
+        plan = self._plan_value_overrides(overrides, extra=extra, index_selection=selections, seeds=seeds)
         if structure is not None:
             plan.calculations = tuple({**dict(structure.calculations), **dict(plan.calculations)}.items())
+            plan.outputs = structure.outputs
         # Calculated roots must agree with managed copies after the complete
         # dependency graph has settled, including intermediate copies.
-        self._validate_requested_values(requested, plan)
+        self._validate_requested_values(requested, plan, additions=extra or ())
         return plan
 
     def _validate_requested_values(self, requested, plan, *, additions=()):
@@ -714,6 +727,10 @@ class References:
         return plan
 
     def _plan_reference_changes(self, changes, *, extra=None, structure=None, excluded_issues=()):
+        replacements = structure.replacements if structure is not None else ()
+        if replacements:
+            changes = {**{binding.reference.uid: binding.reference for binding in replacements}, **changes}
+            extra = (*replacements, *((extra,) if isinstance(extra, _Binding) else extra or ()))
         users = set()
         for uid, replacement in changes.items():
             if uid in self._bindings:
@@ -737,15 +754,76 @@ class References:
                                               index_selection=selections, excluded_issues=excluded_issues)
             if structure is not None:
                 plan.calculations = tuple({**dict(structure.calculations), **dict(plan.calculations)}.items())
+                plan.outputs = structure.outputs
             self._validate_managed_values(plan)
+            plan.replacements = replacements
+            affected = tuple(self._bindings[uid].reference for uid in changes if uid in self._bindings)
+            self._plan_outputs(plan, (*affected, *(item for item in changes.values() if item is not None)))
         return plan
 
+    def _plan_outputs(self, plan, references):
+        if self.document._automatic_structure:
+            from .field_edits import preview_slots
+            with preview_slots(plan.values):
+                outputs = self.document._plan_reference_outputs(references)
+            plan.outputs = tuple({**dict(plan.outputs), **dict(outputs)}.items())
+
     def apply_value_change(self, plan):
+        self._apply_reprojections(plan)
         for binding, positions, selected in plan:
             self._write(binding, positions, selected=selected)
             self._refresh_computed(binding.reference)
+        if isinstance(plan, _ProjectionPlan):
+            for _, output in plan.outputs:
+                output.apply()
         if isinstance(plan, _ProjectionPlan) and plan.calculations:
             self.document._apply_calculations(tuple(value for _, value in plan.calculations))
+
+    def _prepare_reprojections(self, references, *, structure):
+        """Preflight changed projection metadata alongside a pending value edit."""
+        changes = {reference.uid: reference for reference in references}
+        bindings = []
+        from .field_edits import preview_slots
+        with preview_references(self, changes), preview_slots(structure.values):
+            for reference in references:
+                previous = self._bindings[reference.uid]
+                old = previous.reference
+                if (reference.source is not old.source or reference.target is not old.target
+                        or reference.role != old.role):
+                    raise ReferenceError('projection updates cannot replace relationship identities')
+                slots = [item.field._argument_owner(item.argument) for item in reference.indices]
+                if len(set(slots)) != len(slots) or any(
+                        slot in self._slots and self._slots[slot] != reference.uid for slot in slots):
+                    raise ReferenceError('an index slot already has a reference')
+                self._check(reference)
+                self.document._validate_reference_change(reference, reference.target)
+                self._validate_copy_cycles(reference)
+                positions, domains = self._positions(reference, {}, check_keys=False)
+                values = tuple(item.field.arguments[item.argument] for item in reference.indices)
+                bindings.append(_Binding(reference, values, positions, domains, previous.sequence))
+            plan = self._plan_value_changes((), structure=structure, extra=bindings)
+            self._plan_outputs(plan, references)
+        plan.replacements = tuple(bindings)
+        return plan
+
+    def _apply_reprojections(self, plan):
+        if not isinstance(plan, _ProjectionPlan):
+            return
+        for binding in plan.replacements:
+            old = self._bindings[binding.reference.uid].reference
+            self._unindex_values(old)
+            self._unindex_guards(old)
+            self._untrack_collections(old)
+            for item in old.indices:
+                del self._slots[item.field._argument_owner(item.argument)]
+            reference = binding.reference
+            self._bindings[reference.uid] = binding
+            self._index_values(reference)
+            self._index_guards(reference)
+            self._track_collections(reference)
+            for item in reference.indices:
+                self._slots[item.field._argument_owner(item.argument)] = reference.uid
+        plan.replacements = ()
 
     def manages(self, field, argument=0):
         return field._argument_owner(argument) in self._slots
@@ -753,12 +831,12 @@ class References:
     def unresolved_slot(self, field, argument=0):
         return field._argument_owner(argument) in self._unresolved_values
 
-    def note(self, source, message, *indices, collections=None, guards=()):
+    def note(self, source, message, *indices, collections=None, guards=(), severity='warning'):
         if collections is not None:
             collections = tuple(dict.fromkeys(collections))
             if any(not isinstance(parent, Element) or not _within(parent, self.document.root) for parent in collections):
                 raise ReferenceError('unresolved reference scope is outside this document')
-        issue = UnresolvedReference(source, message, tuple(indices), collections, tuple(guards))
+        issue = UnresolvedReference(source, message, tuple(indices), collections, tuple(guards), severity)
         if any(not _within(guard.field, source) for guard in issue.guards):
             raise ReferenceError('unresolved reference guard is outside its source')
         self._validate_reference_guards(issue, {})
@@ -833,11 +911,37 @@ class References:
         return bool(self.issues or self._collection_users.get(collection) or
                     self._computed.collection_users(*collection) or self._key_collection_users.get(collection))
 
-    def check_removal(self, node, *, excluding=()):
-        """Refuse dangling links, including fields owned by a broader source."""
+    def check_removal(self, node, *, excluding=(), projected=False):
+        """Refuse dangling links, including fields owned by a broader source.
+
+        projected=True is for a prepared edit inside preview_structure: refresh
+        optional calculated inputs against that tree before checking consumers.
+        The caller must still preflight and apply the corresponding projections.
+        """
         removed = set(node.walk(include_self=True))
-        if any(set(self._content_users.get(child, ())).difference(excluding) or
-               set(self._computed.node_users(child)).difference(excluding) for child in removed):
+        users = {uid for child in removed for uid in self._content_users.get(child, ())}
+        users.update(uid for child in removed for uid in self._computed.node_users(child))
+        users.difference_update(excluding)
+        if projected:
+            # A prepared edit may remove an optional input while retaining its
+            # calculated consumers. Re-evaluate those narrow dependencies in
+            # the prospective tree instead of treating the old cache as truth.
+            dependencies = ComputedDependencies()
+            retained = set()
+            for uid in users:
+                if isinstance(uid, UnresolvedReference):
+                    retained.add(uid)
+                    continue
+                reference = self._bindings[uid].reference
+                content = {reference.source, *self._targets(reference),
+                    *(item.field for item in reference.indices), *(guard.field for guard in reference.guards),
+                    *(owner for owner, _ in self._dependency_slots(reference))}
+                dependencies.update(uid, self._calculated_fields(reference),
+                    ordinals=(guard.member for guard in reference.guards if isinstance(guard, OrdinalGuard)))
+                if content.intersection(removed) or any(dependencies.node_users(child) for child in removed):
+                    retained.add(uid)
+            users = retained
+        if users:
             raise ReferenceError('referenced content cannot be removed; discard or retarget its relationships first')
         if any(issue.source in removed or any(item.field in removed for item in issue.indices) or
                 any(guard.field in removed for guard in issue.guards) or
@@ -876,6 +980,7 @@ class References:
         users = set()
         for node in moved:
             users.update(self._content_users.get(node, ()))
+        users.update(self._content_issues(moved))
         users.update(reference.uid for reference in self.document._structural_dependents(moved))
         moved_users = set(users)
         for collection in changed:
@@ -909,6 +1014,7 @@ class References:
             plan = self._plan_value_overrides(inputs, index_selection=selections, seeds=users,
                                              excluded=excluded, excluded_issues=excluded_issues)
             self._validate_managed_values(plan)
+            self._plan_outputs(plan, tuple(self._bindings[uid].reference for uid in users))
             return plan
 
     def refresh_structure(self, nodes):
@@ -984,10 +1090,30 @@ class References:
                 except TypeError:
                     raise ReferenceError(f'{reference.role}: target property must be a scalar') from None
                 current = item.field.arguments[item.argument]
-                if value.kind not in ('number', 'string', 'symbol', 'boolean') or (current.kind, current.unit) != (value.kind, value.unit):
+                domain_kind = value.kind
+                if current.kind == 'null' or value.kind == 'null':
+                    selected = named_field(item.field, item.argument)
+                    definition = selected[0].schema.fields[selected[1]] if selected else None
+                    expected = ({'number': 'number', 'integer': 'number', 'text': 'string', 'boolean': 'boolean'}
+                                .get(definition.kind) if definition is not None else None)
+                    compatible = (definition is not None and definition.nullable and expected is not None
+                                  and current.kind in (expected, 'null') and value.kind in (expected, 'null')
+                                  and current.unit == value.unit)
+                    if compatible:
+                        try:
+                            definition.validate(value.value)
+                        except (TypeError, ValueError):
+                            compatible = False
+                        else:
+                            # The declared scalar domain remains stable while
+                            # a nullable property temporarily has no value.
+                            domain_kind = expected
+                else:
+                    compatible = (current.kind, current.unit) == (value.kind, value.unit)
+                if value.kind not in ('number', 'string', 'symbol', 'boolean', 'null') or not compatible:
                     raise ReferenceError(f'{reference.role}: property types/units disagree')
                 result.append(value.value)
-                domains.append(('property', target.kind, parent.kind, item.name, item.target_argument, value.kind, value.unit))
+                domains.append(('property', target.kind, parent.kind, item.name, item.target_argument, domain_kind, value.unit))
                 continue
             if isinstance(item, Key):
                 owner, argument = key_source(target, item.name)
@@ -1040,7 +1166,9 @@ class References:
     def _prepare_binding(self, source, target, indices, *, role, guards, preserve, structure=None):
         if self._binding_orders is not None and not preserve:
             raise ReferenceError('binding batches require preserve=True')
-        reference = Reference(uuid4().hex, source, target, role, tuple(indices), tuple(guards))
+        reference = self.document._prepare_reference_binding(
+            Reference(uuid4().hex, source, target, role, tuple(indices), tuple(guards)))
+        indices = reference.indices
         slots = [item.field._argument_owner(item.argument) for item in indices]
         if len(set(slots)) != len(slots) or any(slot in self._slots for slot in slots):
             raise ReferenceError('an index slot already has a reference')
@@ -1114,10 +1242,13 @@ class References:
         self._discard_bindings(old)
         self._apply_additions(additions)
 
-    def _prepare_additions(self, specifications, *, structure=None):
+    def _prepare_additions(self, specifications, *, structure=None, excluded_issues=()):
         """Preflight a related group of new links against one prospective graph."""
         references, reserved = [], set()
         for source, target, role, indices, guards in specifications:
+            reference = self.document._prepare_reference_binding(
+                Reference(uuid4().hex, source, target, role, tuple(indices), tuple(guards)))
+            indices, guards = reference.indices, reference.guards
             if any(item is None for item in indices):
                 continue
             slots = {item.field._argument_owner(item.argument) for item in indices}
@@ -1132,7 +1263,7 @@ class References:
             if not slots and any(reference.role == role for reference in self.outgoing(source)):
                 raise ReferenceError('source already has this identity relationship')
             reserved.update(slots)
-            references.append(Reference(uuid4().hex, source, target, role, tuple(indices), tuple(guards)))
+            references.append(reference)
         changes = {reference.uid: reference for reference in references}
         bindings = []
         with preview_references(self, changes):
@@ -1144,7 +1275,8 @@ class References:
                 bindings.append(_Binding(reference, values, positions, domains, self._next_sequence+len(bindings)))
             if references:
                 self._validate_copy_cycles(references[0], companions=references[1:])
-            plan = self._plan_reference_changes(changes, extra=bindings, structure=structure)
+            plan = self._plan_reference_changes(changes, extra=bindings, structure=structure,
+                                                excluded_issues=excluded_issues)
         return _Additions(tuple(bindings), plan)
 
     def _record_references(self, record):
@@ -1154,8 +1286,17 @@ class References:
         return tuple(self._bindings[uid].reference for uid in users)
 
     def _content_references(self, nodes):
+        """Affected content and planned links, omitting planned removals."""
+        nodes = set(nodes)
         users = {uid for node in nodes for uid in self._content_users.get(node, ())}
-        return tuple(sorted((self._bindings[uid].reference for uid in users), key=self._sequence))
+        references = self._visible(users)
+        if pending_changes(self) is not None:
+            references = (reference for reference in references
+                if reference.uid in users or reference.source in nodes
+                or any(target in nodes for target in self._targets(reference))
+                or any(item.field in nodes for item in reference.indices)
+                or any(guard.field in nodes for guard in reference.guards))
+        return tuple(sorted(references, key=self._sequence))
 
     def _content_issues(self, nodes):
         issues = {issue for node in nodes for issue in self._issues_by_node.get(node, ())}
@@ -1163,6 +1304,7 @@ class References:
 
     def _apply_additions(self, additions):
         """Register a preflighted topology before evaluating calculated inputs."""
+        self._apply_reprojections(additions.projections)
         for binding in additions.bindings:
             reference = binding.reference
             self._bindings[reference.uid] = binding
@@ -1222,7 +1364,7 @@ class References:
 
     def retarget(self, reference, target):
         binding = self._bindings[reference.uid]
-        replacement = replace(binding.reference, target=target)
+        replacement = self.document._prepare_reference_binding(replace(binding.reference, target=target))
         self._check(replacement)
         positions, domains = self._positions(replacement, {}, check_keys=False)
         if domains != binding.domains:
@@ -1241,8 +1383,8 @@ class References:
             self._incoming.setdefault(new_target, {})[reference.uid] = None
         self._index_values(replacement)
         self._track_collections(replacement)
-        plan = _ProjectionPlan(tuple((binding if entry is prospective else entry, positions, selected)
-                                     for entry, positions, selected in plan), plan.values, plan.calculations)
+        plan = replace(plan, updates=tuple((binding if entry is prospective else entry, positions, selected)
+                                          for entry, positions, selected in plan))
         self.apply_value_change(plan)
         self._pending_index_collections.update(self._index_collections(replacement))
         return replacement
@@ -1406,7 +1548,8 @@ class References:
             indices = tuple(replace(i, field=mapped(i.field)) for i in issue.indices)
             collections = None if issue.collections is None else tuple(mapped(parent) for parent in issue.collections)
             guards = tuple(copied_guard(guard) for guard in issue.guards)
-            graph.note(mapped(issue.source), issue.message, *indices, collections=collections, guards=guards)
+            graph.note(mapped(issue.source), issue.message, *indices, collections=collections, guards=guards,
+                       severity=issue.severity)
         if self.issues:
             required = (set(self._watched) if any(issue.collections is None for issue in self.issues)
                         else {parent for issue in self.issues for parent in issue.collections})

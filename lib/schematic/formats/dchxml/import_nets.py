@@ -1,6 +1,6 @@
 """Public net/bus topology into the shared identity-binding vocabulary."""
 from .buses import (BUS_CONNECTIONS)
-from .import_values import (enum_value, point, replace_rows)
+from ....common.xml_records import (enum_value, point, replace_rows)
 from .nets import (WIRE_CONNECTIONS, ARROWS)
 from ....common.model import (Element)
 from ...model.new import (fields)

@@ -18,7 +18,7 @@ NetClass NetId NumOrientation NumXShift NumYShift Number Object1 Object2
 Orientation PadId Part PartNumber Phase Phase_ErrorLength PictureHeight
 PictureTransparent PictureWidth Pin Point1 Point2 PointerMode PosNet Scale
 Segment_EdgeGap Segment_Gap Segment_Percent Segment_Side Sheet SignalDelay Size
-SubObject1 SubObject2 Tolerance UpdateId Width X X1 X2 XD XOff Y Y1 Y2 YD YOff Z
+SubObject1 SubObject2 SubFolderIndex Tolerance UpdateId Width X X1 X2 XD XOff Y Y1 Y2 YD YOff Z
 WireColor ConnectionNumber CellWidth CellHeight FieldId GndNetId
 """.split())
 _BOOLEAN_ATTRIBUTES = set("""

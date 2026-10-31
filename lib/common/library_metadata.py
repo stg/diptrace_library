@@ -47,6 +47,14 @@ SUBFOLDERS = _collection('Subfolders', 'Folder', SUBFOLDER.name)
 MODEL_BODY = _collection('ModelBody', 'Line', MODEL_LINE.name)
 
 
+def modernize_classifications(root):
+    """Use one row kind for cached, placed and public text classifications."""
+    for node in root.walk(include_self=True):
+        if (node.kind in ('Type', 'Component_Type', 'Pattern_Type') and node.parent is not None and
+                node.parent.kind in ('Component_CategoryTypes', 'Pattern_CategoryTypes')):
+            node.kind = 'CategoryType'
+
+
 def definition(node):
     parent = node.parent
     if parent is None:

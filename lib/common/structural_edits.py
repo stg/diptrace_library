@@ -28,7 +28,7 @@ def children_override(node, kind):
 
 @contextmanager
 def preview_ordinals(values):
-    token = _ordinals.set(values)
+    token = _ordinals.set({**(_ordinals.get() or {}), **values})
     try:
         yield
     finally:
@@ -37,7 +37,8 @@ def preview_ordinals(values):
 
 @contextmanager
 def preview_structure(children, parents, ordinals):
-    token = _structure.set((children, parents))
+    previous = _structure.get() or ({}, {})
+    token = _structure.set(({**previous[0], **children}, {**previous[1], **parents}))
     try:
         with preview_ordinals(ordinals):
             yield

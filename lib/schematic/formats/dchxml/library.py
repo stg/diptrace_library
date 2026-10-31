@@ -3,8 +3,9 @@ from dataclasses import dataclass
 
 from ...model.cache import (symbol_definition)
 from .syntax import (set_attribute)
-from .catalog import (CategoryCatalog, StyleTable, record_key)
-from .pads import (project_pad_style)
+from ....common.xml_catalog import CategoryCatalog, StyleTable, record_key
+from ....common.xml_pad_output import project_pad_style
+from ....common.xml_library_output import project_subfolders, report_slot_omissions
 from .patterns import (project_pattern)
 from .symbols import (project_symbol)
 from ....common.model import (Element)
@@ -120,11 +121,11 @@ class _Builder:
     def build(self, schematic):
         cache = schematic.one('CacheLib')
         from ...model.traversal import (footprints, symbols)
-        from .components import (_category)
+        from ....common.xml_library_output import project_category
         self.component_categories.seed(cache.child('Categories'))
         self.pattern_categories.seed(cache.child('PatternCategories'))
-        self.component_categories.reserve(_category(part) for part in symbols(schematic))
-        self.pattern_categories.reserve(_category(pattern) for pattern in footprints(schematic) if pattern is not None)
+        self.component_categories.reserve(project_category(part) for part in symbols(schematic))
+        self.pattern_categories.reserve(project_category(pattern) for pattern in footprints(schematic) if pattern is not None)
         for style in cache.select('PadStyles/PadStyle'):
             self.pad_styles.include(project_pad_style(style, name='', units=self.units))
         for pattern in cache.select('Patterns/Pattern'):
@@ -141,6 +142,8 @@ class _Builder:
         result = self.header('Component')
         if self.component_categories.element.children():
             result.append(self.component_categories.element)
+        if (folders := project_subfolders(cache)) is not None:
+            result.append(folders)
         patterns = self.header('Pattern')
         if self.pattern_categories.element.children():
             patterns.append(self.pattern_categories.element)
@@ -166,12 +169,12 @@ class _Builder:
 def project_library(schematic, *, units, version=46, report=None):
     """Build cached and placed public definitions without modifying the source.
 
-    Rebuild the shared document's references before calling after data edits.
     Sharing uses complete projected records, not names or format cache heuristics.
     """
     from ...model.traversal import (footprints, cached_definitions)
     from ....common.conversion import (warn)
     from ..compatibility import (report_omitted_records)
+    report_slot_omissions(schematic.select('CacheLib/Slots/Slot'), destination='dchxml', report=report)
     inactive, states = [], []
     for definition in cached_definitions(schematic):
         part = definition.one('Part')

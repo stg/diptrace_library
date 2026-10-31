@@ -1,10 +1,10 @@
 """Public sheet, global display and net-class data into shared records."""
-from .import_values import (XmlRecord, enum_value, length, point, replace_rows)
+from ....common.xml_records import (XmlRecord, enum_value, length, point, replace_rows)
 from .settings import (SHOW, ALIGN)
 from ...layout.markings import (MarkingStyle)
 from ....common.model import (Element)
 from ...model.new import (new_page)
-from .fonts import (read_size)
+from ....common.xml_font_import import (read_size)
 
 
 def read_sheets(record, schematic, *, units):
@@ -42,7 +42,7 @@ def read_sheets(record, schematic, *, units):
             width = zones.number('FontLineWidth', -1)
             page.set_field('FontLineWidth', width if width.value < 0 else length(width, units))
             zones.finish()
-        from .import_tables import (read_title_blocks)
+        from ....common.xml_cells import read_title_blocks
         read_title_blocks(item, page, units=units)
         item.finish()
         pages.append(page)

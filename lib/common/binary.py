@@ -4,11 +4,28 @@ Document signatures, supported revisions and record layouts belong to their
 adapters. A reader receives the text mode selected by that adapter; schema
 numbers have different meanings in different document families.
 """
-from decimal import Decimal
-import math
+from decimal import Context, Decimal, ROUND_HALF_EVEN
 
 
 NUMBER_LIMIT = 100_000
+_NUMBER_QUANTUM = Decimal('.0001')
+
+
+def _number_units(value, format_name):
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise TypeError(f'{format_name} number requires a numeric value')
+    value = value if isinstance(value, Decimal) else Decimal(str(value))
+    if not value.is_finite() or not -NUMBER_LIMIT <= value <= NUMBER_LIMIT:
+        raise ValueError(f'{format_name} number requires a finite value in -100000..100000')
+    # Round once, independently of callers. Ten digits cover the full wire
+    # range and its four fractional places without an intermediate float tie.
+    context = Context(prec=10, rounding=ROUND_HALF_EVEN)
+    return int(value.quantize(_NUMBER_QUANTUM, context=context).scaleb(4, context=context))
+
+
+def quantized_number(value, *, format_name='binary'):
+    """Project a value with exactly the scalar writer's precision and range."""
+    return Decimal(f'{_number_units(value, format_name)}e-4')
 
 
 class BinaryReader:
@@ -86,12 +103,8 @@ class BinaryWriter:
         self.buffer.extend((int(value)+1_000_000).to_bytes(3, 'big'))
 
     def number(self, value):
-        if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
-            raise TypeError(f'{self.format_name} number requires a numeric value')
-        value = float(value)
-        if not math.isfinite(value) or not -NUMBER_LIMIT <= value <= NUMBER_LIMIT:
-            raise ValueError(f'{self.format_name} number requires a finite value in -100000..100000')
-        self.buffer.extend((round(value*10_000)+1_000_000_000).to_bytes(4, 'big'))
+        units = _number_units(value, self.format_name)
+        self.buffer.extend((units+1_000_000_000).to_bytes(4, 'big'))
 
     def boolean(self, value):
         if type(value) is not bool:

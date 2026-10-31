@@ -4,7 +4,7 @@ Connection numbers are current model facts. Rebuild identity references at the
 document boundary before projecting a modified schematic.
 """
 from .syntax import (set_attribute)
-from .settings import (enum_text, field, numeric)
+from ....common.xml_output import enum_text, field, numeric
 from ....common.model import (Element)
 
 

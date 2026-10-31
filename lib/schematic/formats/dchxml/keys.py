@@ -51,7 +51,7 @@ def keyspaces(document):
     settings = schematic.child('SheetSettings')
     if settings is not None and settings.child('Sheets') is not None:
         yield settings.one('Sheets'), 'Sheet', 'Id'
-    from .tables import (TITLE_BLOCKS)
+    from ....common.title_records import TITLE_BLOCKS
     for sheet in _rows(settings, 'Sheets', 'Sheet'):
         for name in TITLE_BLOCKS:
             for block in sheet.children(name):

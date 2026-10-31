@@ -10,6 +10,17 @@ into the same model, using shared infrastructure across families.
 Public ASC/DCHXML vocabulary guides names. The current design is the authority.
 Import consumes one supplied design file. It does not discover companion files;
 unavailable external resources remain explicit unresolved references.
+Built-in imports identify both format and family from the supplied content:
+native signatures, ASC Source declarations and XML root/type declarations.
+Filenames and extensions do not select built-in input adapters. Explicit format
+and family arguments remain caller overrides; headerless inspection fragments
+need both. Output format selection follows the requested format or extension.
+Custom file-reader registrations retain their documented explicit dispatch.
+The generic entry point selects an available family adapter; that adapter owns
+its contexts, model import, source inspection and output policy. Generic I/O must
+not validate another family's context or use import metadata to select a writer.
+One file read supplies the detected parser with the same buffer and source label.
+Version queries and actual adapters use their family's same support declarations.
 
 Named editing and consistency
 -----------------------------
@@ -51,6 +62,11 @@ calculated fact. First net assignment attaches its member and identity link only
 after the combined tree/reference plan passes. A failed disconnection retains
 the existing member and link. Cloning registers the complete copied topology
 before evaluating calculated properties, independently of graph insertion order.
+Domain-owned collection projections use the same prospective edit boundary:
+prepare their rows and links before committing the controlling relationship.
+Retain surviving row identities, reject removal of referenced rows, and leave
+current data independent when its controller is released. Nested structural
+previews compose with the enclosing tree/order proposal and restore it on exit.
 validate() audits required fields, stored types, ownership and references without
 projecting field values. It checks declared constraints without requiring callers
 to read unresolved calculated getters. Writers also enforce destination requirements.
@@ -115,6 +131,10 @@ reference identifies its target; an unresolved reference explicitly retains the
 missing key and relevant domain. Positional file indices are codec concerns.
 Actual persistent identities remain normal design properties.
 
+Unresolved-reference diagnostics default to warning. Expected unavailable
+targets may be informational; that classification does not relax their edit
+guards or invent a resolved target. Cloning and record copying retain it.
+
 Import must not narrow a design to the capabilities of a future destination.
 Modernization is distinct from destination adaptation.
 
@@ -159,11 +179,15 @@ a property or user-field selector instead binds its text to that current value.
 Import and detached export preparation refresh bound text without replacing the
 drawing. Editing its cached text cannot override the selected component property.
 
-Future pour example: filled=True with fill_geometry=None expresses a filled
-state whose calculated geometry is unavailable. A destination permitting that
-combination can retain it. A destination requiring geometry for filled state
-exports it unfilled. The source model remains unchanged. This illustrates the
-contract; exact PCB format rules require their own implementation and evidence.
+The unpublished PCB model applies this to copper pours: Poured=True with absent
+Fill retains the filled choice without calculated geometry. A destination that
+requires geometry for that choice exports it unfilled on a detached view.
+Optional Fill/Regions separately owns calculated classification groups. Its
+absence means unavailable classification; a present empty collection means no
+assigned groups. Primitives reference group identities or None, with numerical
+labels derived from the target Number. Unassigned members are valid within an
+available classification. Neither representation invokes copper calculation.
+See FORMAT_CAPABILITIES.txt for destination rules and diagnostics.
 
 Numbers and source inspection
 -----------------------------
@@ -247,3 +271,16 @@ Cleanup must not blindly delete meaningful data. Determine its role from public
 format semantics and verified behavior, retaining research evidence privately.
 The capability register must distinguish present behavior, cleanup work and
 actual destination limits; existing retention behavior is not a model precedent.
+
+Shared XML output infrastructure
+-------------------------------
+Typed XML values, physical pad styles/terminals, font compatibility fields,
+physical drawing/dimension data, 3D placement, catalogues and key allocation are
+shared where their meanings agree. Family adapters own version decisions,
+placement semantics and identity-to-output-key projection. Keys are allocated
+on the detached output view, reserving declared and unresolved keys before new
+ones; allocation never adds serializer bookkeeping to the current model.
+Each nested library header owns its import units and compatibility conventions.
+Sheet title grids, styled content and column-major table layout also share their
+records and XML helpers. Document adapters choose placement and font/version
+conventions; shared helpers do not impose one family's rules on another.

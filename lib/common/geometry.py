@@ -5,15 +5,44 @@ Circular arcs pass through their three points in order. A repeated first/last
 point denotes a circle whose second point is the opposite end of a diameter.
 """
 from dataclasses import dataclass
+from decimal import Decimal, localcontext
+from fractions import Fraction
 import math
+
+
+_TURN = Decimal(str(math.tau))
+_HALF_TURN = Decimal(str(math.pi))
+_CARDINALS = {Decimal(str(angle)): components for angle, components in (
+    (0, (1, 0)), (math.pi/2, (0, 1)), (math.pi, (-1, 0)), (3*math.pi/2, (0, -1)))}
+
+
+def decimal_precision(values):
+    """Precision for exact coordinate sums plus binary64 angular factors."""
+    numbers = [value if isinstance(value, Decimal) else Decimal(str(value))
+               for value in values if value is not None and value != 0]
+    if any(not value.is_finite() for value in numbers):
+        raise ValueError('geometry coordinates must be finite')
+    return (max(50, max(value.adjusted() for value in numbers)
+                - min(value.as_tuple().exponent for value in numbers)+34)
+            if numbers else 50)
+
+
+def _extent(first, last, *, midpoint=False):
+    if not isinstance(first, Decimal) and not isinstance(last, Decimal):
+        return (first+last)/2 if midpoint else last-first
+    first, last = (value if isinstance(value, Decimal) else Decimal(str(value))
+                   for value in (first,last))
+    with localcontext() as context:
+        context.prec = decimal_precision((first,last))
+        return (first+last)/2 if midpoint else last-first
 
 
 @dataclass(frozen=True)
 class Bounds:
-    left: float
-    top: float
-    right: float
-    bottom: float
+    left: float | Decimal
+    top: float | Decimal
+    right: float | Decimal
+    bottom: float | Decimal
 
     @classmethod
     def from_points(cls, points):
@@ -27,15 +56,16 @@ class Bounds:
 
     @property
     def width(self):
-        return self.right - self.left
+        return _extent(self.left,self.right)
 
     @property
     def height(self):
-        return self.bottom - self.top
+        return _extent(self.top,self.bottom)
 
     @property
     def center(self):
-        return (self.left + self.right)/2, (self.top + self.bottom)/2
+        return (_extent(self.left,self.right,midpoint=True),
+                _extent(self.top,self.bottom,midpoint=True))
 
     def union(self, other):
         return Bounds(min(self.left, other.left), min(self.top, other.top),
@@ -75,6 +105,22 @@ def circular_arc_bounds(start, middle, end):
     return bounds.union(Bounds.from_points(extrema)) if extrema else bounds
 
 
+def unequal_extents(first, opposite, *, tolerance, scale=(1, 1)):
+    """Compare scaled box spans using authored decimal values exactly.
+
+    Floating subtraction near a cutoff must not make translation select a
+    different representation. Contour sampling can still use floating math.
+    """
+    limit = Fraction(str(tolerance))
+    if limit < 0:
+        raise ValueError('extent tolerance must be nonnegative')
+    left, top = (Fraction(str(value)) for value in first)
+    right, bottom = (Fraction(str(value)) for value in opposite)
+    sx, sy = (Fraction(str(value)) for value in scale)
+    width, height = abs((right-left)*sx), abs((bottom-top)*sy)
+    return abs(width-height) > limit
+
+
 def ellipse_points(first, opposite, *, segments=30, closed=False):
     """Sample an axis-aligned ellipse from its opposite bounding corners."""
     if not isinstance(segments, int) or segments < 3:
@@ -87,6 +133,50 @@ def ellipse_points(first, opposite, *, segments=30, closed=False):
     return points+(points[0],) if closed else points
 
 
+def rotation_components(angle):
+    """Return cosine/sine with exact cardinal and reflection symmetries.
+
+    Reduce the decimal angle before evaluating binary64 trigonometry. In
+    particular, theta and turn-theta use the same magnitude; a float modulo
+    followed by an independent cosine would introduce unequal reflected bounds.
+    """
+    value = angle if isinstance(angle, Decimal) else Decimal(str(angle))
+    if not value.is_finite():
+        raise ValueError('rotation requires a finite angle')
+    with localcontext() as context:
+        context.prec = decimal_precision((value, _TURN))
+        magnitude, sign = value.copy_abs() % _TURN, -1 if value < 0 else 1
+        if magnitude in _CARDINALS:
+            cosine, sine = _CARDINALS[magnitude]
+        else:
+            if magnitude > _HALF_TURN:
+                magnitude, sign = _TURN-magnitude, -sign
+            if magnitude in _CARDINALS:
+                cosine, sine = _CARDINALS[magnitude]
+            else:
+                radians = float(magnitude)
+                cosine, sine = math.cos(radians), math.sin(radians)
+    return cosine, sign*sine
+
+
+def reflected_angle(angle):
+    """Reflect an angle into one positive turn without quantizing its value."""
+    value = angle if isinstance(angle, Decimal) else Decimal(str(angle))
+    if not value.is_finite():
+        raise ValueError('reflection requires a finite angle')
+    with localcontext() as context:
+        context.prec = decimal_precision((value, _TURN))
+        turn = value % _TURN
+        if turn < 0:
+            turn += _TURN
+        # Their canonical binary64 spellings are not all exact multiples of
+        # the decimal period. Reflect known quarter turns by their matrices.
+        cardinals = tuple(_CARDINALS)
+        if turn in _CARDINALS:
+            return cardinals[-cardinals.index(turn) % 4]
+        return _TURN-turn if turn else turn
+
+
 def transform_point(point, *, origin=(0, 0), angle=0):
     """Rotate in stored coordinates, then translate; angles are radians.
 
@@ -96,12 +186,9 @@ def transform_point(point, *, origin=(0, 0), angle=0):
     """
     x, y = map(float, point)
     ox, oy = map(float, origin)
-    angle = float(angle)
-    if not all(math.isfinite(value) for value in (x, y, ox, oy, angle)):
+    if not all(math.isfinite(value) for value in (x, y, ox, oy)):
         raise ValueError('point transforms require finite coordinates and angles')
-    turn = angle % math.tau
-    exact = {0.: (1, 0), math.pi/2: (0, 1), math.pi: (-1, 0), 3*math.pi/2: (0, -1)}
-    cosine, sine = exact[turn] if turn in exact else (math.cos(turn), math.sin(turn))
+    cosine, sine = rotation_components(angle)
     return ox+x*cosine+y*sine, oy+y*cosine-x*sine
 
 

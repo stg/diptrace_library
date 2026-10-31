@@ -8,7 +8,7 @@ import sys
 from tempfile import TemporaryDirectory
 import unittest
 
-from lib import ConversionReport, UnsupportedFileError, format_capabilities, new_schematic, new_symbol, read, serialize
+from lib import ConversionReport, UnsupportedFileError, format_capabilities, new_schematic, new_symbol, parse, read, serialize
 from apps.diptrace_convert.convert import convert, main
 from apps.diptrace_convert.context import load_context
 
@@ -61,6 +61,24 @@ class ConvertTests(unittest.TestCase):
                 self.assertEqual(status, 0)
                 expected = serialize(read(source), format=format, version=version)
                 self.assertEqual(target.read_bytes(), expected)
+
+    def test_cli_and_conversion_accept_content_without_matching_extensions(self):
+        document = new_schematic()
+        with TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            target = Path(folder) / 'output.dch'
+            for format, filename in (('dchxml', 'input.xml'), ('asc', 'input'),
+                                      ('dch', 'input.asc'), ('asc', 'input.unknown')):
+                source = Path(folder) / filename
+                data = serialize(document, format=format)
+                source.write_bytes(data)
+                expected = serialize(parse(data, format=format), format='dch')
+                with self.subTest(format=format, filename=filename):
+                    convert(source, target)
+                    self.assertEqual(target.read_bytes(), expected)
+                    target.unlink()
+                    with redirect_stdout(io.StringIO()):
+                        self.assertEqual(main([str(source), str(target)]), 0)
+                    self.assertEqual(target.read_bytes(), expected)
 
     def test_unsupported_output_version_is_usage_error_and_keeps_existing_output(self):
         with TemporaryDirectory(dir=Path(__file__).parent) as folder:
@@ -135,17 +153,17 @@ class ConvertTests(unittest.TestCase):
             path = Path(folder) / "context.json"
             path.write_text('{"units": "mil"}')
             for format in ("dch", "asc", "dchxml"):
-                context = load_context(path, format=format)
+                context = load_context(path, family='schematic', format=format)
                 self.assertEqual(context.units, "mil")
             path.write_text('{"active_sheet": 1}')
-            self.assertEqual(load_context(path, format="dchxml").active_sheet, 1)
+            self.assertEqual(load_context(path, family='schematic', format="dchxml").active_sheet, 1)
             with self.assertRaises(TypeError):
-                load_context(path, format="asc")
+                load_context(path, family='schematic', format="asc")
             path.write_text('{"text_layout": {"unknown": 1}}')
             with self.assertRaisesRegex(ValueError, "unknown text layout"):
-                load_context(path, format="asc")
+                load_context(path, family='schematic', format="asc")
             path.write_text('{"line_widths": {"1": 0.3}, "default_line_width": 0.2}')
-            context = load_context(path, format="asc")
+            context = load_context(path, family='schematic', format="asc")
             self.assertEqual(context.line_width(1), 0.3)
             self.assertEqual(context.line_width(9), 0.2)
 

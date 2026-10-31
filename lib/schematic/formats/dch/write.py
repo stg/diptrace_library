@@ -1,9 +1,17 @@
 """Binary output through schema 52 by named traversal, without source replay."""
-from ....common.binary import BinaryWriter, NUMBER_LIMIT
+from ....common.binary import NUMBER_LIMIT
+from ....common.binary_records import RecordWriter
+from ....common.footprint_codec import (write_parameters, write_pad_geometry,
+                                        write_holes, write_model)
+from ....common.dimension_codec import write_dimension_properties
+from ....common.title_block_codec import write_title_block, write_text_content
+from ....common.catalog_codec import write_category_types
+from ....common.library_codec import LibraryCodecs, write_definition, write_library_cache
+from ....common.symbol_codec import write_symbol_drawings
 from .records import (COMPONENT_PLACEMENT, PIN_FONT)
 from ..capabilities import DCH
 from ....common.conversion import (export_diagnostics)
-from ...model.pad_data import (MASK_FIELDS, mask_state)
+from ....common.pad_masks import MASK_FIELDS, mask_state
 from decimal import Decimal
 import math
 
@@ -14,7 +22,7 @@ def legacy_pad_orientation(angle):
     return abs(angle-math.pi/2)<.001 or abs(angle-3*math.pi/2)<.001
 
 
-class Writer(BinaryWriter):
+class Writer(RecordWriter):
     format_name = 'DCH'
 
     def __init__(self,version=DCH.default_write_version,*,compatibility_changes=None):
@@ -35,69 +43,19 @@ class Writer(BinaryWriter):
                     self.compatibility_changes.append(node)
             self.number(value)
 
-    def value(self,codec,value):
-        getattr(self,codec)(value)
-
-    def field(self,parent,name,codec):
-        field=parent.one(name)
-        if len(field.arguments) != 1:
-            raise ValueError(f'{field.path}: expected one scalar binary value')
-        try:
-            value = field.values[0]
-            if codec == 'integer' and name in ('FontSize', 'NameFontSize', 'MarkingFontSize',
-                    'DefFontSize', 'PartFontSize', 'PinNumberFont', 'BusConnectionFont', 'ZoneFontSize'):
-                from ...model.fonts import (compatibility_size)
-                value = compatibility_size(value)
-            self.value(codec,value)
-        except ValueError as error:
-            raise ValueError(f'{field.path}: {error}') from error
-
-    def fields(self,parent,codec,names,**options):
-        for name in names.split():
-            self.field(parent,name,codec,**options)
-
-    def values(self,node,codecs,*,start=0,trailing=0):
-        codecs=codecs.split()
-        width = start+len(codecs)+trailing
-        if len(node.arguments) != width:
-            raise ValueError(f'{node.path}: expected {width} binary tuple values, found {len(node.arguments)}')
-        for codec,value in zip(codecs,node.values[start:]):
-            self.value(codec,value)
-
-    def rows(self,container,kind,codecs,*,start=0,trailing=0):
-        records=container.children() if container is not None else []
-        if container is not None and container.schema is not None:
-            records = [record for record in records if record.kind not in container.schema.parameters]
-        width = start+len(codecs.split())+trailing
-        for record in records:
-            if record.kind != kind:
-                raise ValueError(f'{record.path}: expected {kind} binary row')
-            if len(record.arguments) != width:
-                raise ValueError(f'{record.path}: expected {width} row values, found {len(record.arguments)}')
-        self.integer(len(records))
-        for record in records:
-            self.values(record,codecs,start=start,trailing=trailing)
+    def field_value(self,parent,name,codec,value):
+        if codec == 'integer' and name in ('FontSize', 'NameFontSize', 'MarkingFontSize',
+                'DefFontSize', 'PartFontSize', 'PinNumberFont', 'BusConnectionFont', 'ZoneFontSize'):
+            from ....common.font_codec import compatibility_size
+            return compatibility_size(value)
+        return super().field_value(parent, name, codec, value)
 
     def first_text_line(self,shape):
         lines=shape.one('TextLine').children('pt')
         self.text(lines[0].values[0] if lines else '')
 
     def pattern_parameters(self,pattern):
-        self.field(pattern,'Type','integer')
-        self.fields(pattern,'boolean','VariableParameter1 VariableParameter2 VariableParameter3 VariableParameter4')
-        self.fields(pattern,'integer','Number1 Number2')
-        self.fields(pattern,'number','Spacing1 Spacing2')
-        self.field(pattern,'VariableParameter5','boolean')
-        self.field(pattern,'Spacing3','number')
-        self.field(pattern,'LockProperties','boolean')
-        self.field(pattern,'PatternOrientation','integer')
-        self.fields(pattern,'number','Width Height PadWidth PadHeight')
-        self.field(pattern,'PadShape','integer')
-        self.field(pattern,'SurfacePad','boolean')
-        self.fields(pattern,'number','PadHole PadHoleH')
-        self.field(pattern,'PadHoleType','integer')
-        self.text(pattern.values[0])
-        self.fields(pattern,'number','OriginX OriginY')
+        write_parameters(self,pattern)
 
     def pads(self,pattern):
         pads=pattern.one('Pads').children('Pad')
@@ -109,12 +67,7 @@ class Writer(BinaryWriter):
             self.number(pad.values[4])
             self.text(pad.values[1])
             self.text(pad.values[2])
-            self.fields(pad,'number','PadWidth_New PadHeight_New PadHole PadHoleH')
-            self.field(pad,'PadHoleType','integer')
-            self.field(pad,'SurfacePad','boolean')
-            self.field(pad,'PadShape_New','integer')
-            self.field(pad,'Standard','boolean')
-            self.rows(pad.child('PadPoints_New'),'pt','number number')
+            write_pad_geometry(self,pad)
             self.fields(pad,'boolean','Locked Sided')
             for name in MASK_FIELDS:
                 self.boolean(mask_state(pad,name)==2)
@@ -157,53 +110,21 @@ class Writer(BinaryWriter):
             self.integer(len(normalized))
             for point,values in zip(geometry.children(),normalized):
                 self.compatibility_values(point,values)
-        holes=pattern.one('Holes').children('Hole')
-        self.integer(len(holes))
-        for hole in holes:
-            self.boolean(hole.values[0])
-            self.values(hole,'number '*4,start=2,trailing=1)
-            self.boolean(hole.values[1])
+        write_holes(self,pattern.one('Holes').children('Hole'))
         dimensions=pattern.one('Dimensions').children('Dimension')
         self.integer(len(dimensions))
         for dimension in dimensions:
             self.fields(dimension,'boolean','Enabled Locked')
-            self.fields(dimension,'integer','Type Connected1 Object1 SubObject1 Point1 Connected2 Object2 SubObject2 Point2 Layer')
-            self.fields(dimension,'number','X1 Y1 X2 Y2 XD YD ArrowSize')
-            self.field(dimension,'Units','integer')
-            self.field(dimension,'VectorFont','boolean')
-            self.field(dimension,'FontName','text')
-            self.field(dimension,'FontSize','integer')
-            self.fields(dimension,'number','FontScale FontWidth')
-            self.field(dimension,'ShowUnits','boolean')
-            self.field(dimension,'Angle','number')
-            self.fields(dimension,'integer','ExternalRadius PointerMode')
-            self.field(dimension,'PointerText','text')
+            write_dimension_properties(self,dimension)
 
     def model3d(self,pattern):
-        model=pattern.one('Model3D')
-        self.field(model,'Model3DFile','text')
-        for name in ('Offset','Rotate','Zoom'):
-            self.fields(model.one(name),'number','X Y Z')
-        self.fields(model,'boolean','Mirror NoSearch')
+        write_model(self,pattern)
 
-    def symbol_shapes(self,part):
-        shapes=part.one('Shapes').children('Shape')
-        self.integer(len(shapes))
-        for shape in shapes:
-            self.field(shape,'Enabled','boolean')
-            from ...model.angles import (quarter_turns)
-            self.integer(quarter_turns(shape.scalar('TextAngle'), full_turn=math.tau))
-            generated = part.parent.kind == 'Components' and shape.scalar('MarkingGenerated')
-            self.integer(700 if generated else shape.scalar('Type'))
-            self.field(shape,'FontSize','integer')
-            self.field(shape,'FontColor','color')
-            self.field(shape,'FontType','integer')
-            self.field(shape,'FontName','text')
-            self.first_text_line(shape)
-            self.field(shape,'PenWidth','number')
-            self.rows(shape.one('Points_New'),'pt','number number')
-            self.fields(shape,'boolean','Locked VectorFont')
-            self.fields(shape,'number','FontWidth FontScale')
+    def symbol_shapes(self, part):
+        from ...model.angles import quarter_turns
+        write_symbol_drawings(self, part,
+            orientation=lambda angle: quarter_turns(angle, full_turn=math.tau),
+            placed=part.parent.kind == 'Components')
 
     def placed_pins(self,part):
         pins=part.one('Pins').children('Pin')
@@ -348,40 +269,6 @@ class Writer(BinaryWriter):
             self.fields(group,'boolean','Enabled Selected')
             self.values(group,'integer number number')
 
-    def cell_style(self,cell):
-        self.field(cell,'FOrientation','boolean')
-        self.fields(cell,'integer','FontSize FontType Align')
-        self.field(cell,'FontColor','color')
-        from ....common.cell_text import (cell_text)
-        self.text(cell_text(cell))
-        self.field(cell,'FontName','text')
-
-    def cell_font(self,cell):
-        self.field(cell,'VectorFont','boolean')
-        self.fields(cell,'number','FontWidth FontScale')
-
-    def title_grid(self,grid):
-        self.text(grid.values[1])
-        self.fields(grid,'number','Width Height')
-        columns=grid.select('ColWidths/pt')
-        rows=grid.select('RowHeights/pt')
-        self.integer(len(columns))
-        self.integer(len(rows))
-        for size in columns+rows:
-            self.values(size,'number')
-        cells=grid.select('Cells/Cell')
-        if len(cells)!=len(columns)*len(rows):
-            raise ValueError(f'{grid.path}: title cells do not form a rectangle')
-        for cell in cells:
-            self.integer(cell.values[2])
-            self.values(cell.one('Edges'),'boolean '*4)
-        contents=grid.select('Contents/Content')
-        self.integer(len(contents))
-        for cell in contents:
-            self.cell_style(cell)
-            self.values(cell.one('Placement'),'number '*4)
-            self.cell_font(cell)
-
     def pages(self,schematic):
         self.integer(len(schematic.select('Pages/Page')))
         for page in schematic.select('Pages/Page'):
@@ -390,7 +277,7 @@ class Writer(BinaryWriter):
             if len(grids)!=6:
                 raise ValueError(f'{page.path}: DCH requires six title grids')
             for grid in grids:
-                self.title_grid(grid)
+                write_title_block(self,grid)
             self.values(page.one('Zones'),'boolean')
             self.fields(page,'integer','HorzZones VertZones ZoneStandard')
             self.field(page,'ZoneFontName','text')
@@ -419,9 +306,7 @@ class Writer(BinaryWriter):
             if len(cells)!=len(table.select('ColWidths/pt'))*len(table.select('RowHeights/pt')):
                 raise ValueError(f'{table.path}: table cells do not form a rectangle')
             for cell in cells:
-                self.cell_style(cell)
-                self.values(cell,'number '*4)
-                self.cell_font(cell)
+                write_text_content(self,cell)
             self.fields(table,'boolean','Locked DefVectorFont')
             self.fields(table,'number','DefFontWidth DefFontScale')
             self.field(table,'HideBorder','boolean')
@@ -438,11 +323,8 @@ class Writer(BinaryWriter):
         self.fields(settings,'text','ERC_VCCTemplate ERC_GNDTemplate')
         self.field(settings,'ERC_PinSuperimpose','boolean')
 
-    def category_types(self,parent,name):
-        records=parent.one(name).children()
-        self.integer(len(records))
-        for record in records:
-            self.values(record,'text text integer integer')
+    def category_types(self, parent, name):
+        write_category_types(self, parent, name)
 
     def early_extensions(self,schematic):
         parts=schematic.select('Components/Part')
@@ -466,99 +348,25 @@ class Writer(BinaryWriter):
         for part in parts:
             self.field(part,'PageHiddenId','integer')
 
-    def cached_pins(self,part):
-        pins=part.select('Pins/Pin')
-        self.integer(len(pins))
-        for pin in pins:
-            self.field(pin,'Enabled','boolean')
-            self.fields(pin,'integer','Type Orientation Number')
-            self.values(pin,'number number',start=1)
-            self.field(pin,'Length','number')
-            self.fields(pin,'text','Name StringNumber')
-            self.field(pin,'ShowName','boolean')
-            self.fields(pin,'number','PinNumXShift PinNumYShift PinNameXShift PinNameYShift')
-            self.field(pin,'ElectricType','integer')
-            self.field(pin,'Locked','boolean')
-            self.field(pin,'ModelSig','text')
-            for name,codec in PIN_FONT:
-                self.field(pin,name,codec)
-
-    def definition(self,definition):
-        part,pattern=definition.one('Part'),definition.one('Pattern')
-        self.field(part,'Enabled','boolean')
-        self.field(part,'PartType','integer')
-        self.field(part,'PartName','text')
-        self.fields(part,'integer','ShowNumbers Type Number1 Number2')
-        self.fields(part,'number','Width Height')
-        self.values(part,'text text')
-        self.field(part,'Value','text')
-        self.field(part,'LockProperties','boolean')
-        self.rows(pattern.one('InternalConnections'),'IntCon','integer integer')
-        self.pattern_parameters(pattern)
-        self.fields(part,'number','Origin_X Origin_Y')
-        self.rows(pattern.one('PadPoints'),'pt','number number')
-        self.pads(pattern)
-        self.pattern_graphics(pattern)
-        self.integer(0)  # Obsolete cached footprint group-member lists.
-        self.rows(pattern.one('UserFields'),'UserField','text text integer')
-        self.model3d(pattern)
-        self.field(pattern.one('Model3D'),'Units','integer')
-        self.field(pattern,'Mounting','integer')
-        self.field(pattern,'Pattern_CategoryName','text')
-        self.field(pattern,'Pattern_CategoryIndex','integer')
-        self.category_types(pattern,'Pattern_CategoryTypes')
-        self.rows(pattern.one('PossibleNames'),'PossibleName','text')
-        self.cached_pins(part)
-        self.symbol_shapes(part)
-        self.integer(0)  # Obsolete cached symbol group-member lists.
-        self.rows(part.one('UserFields'),'UserField','text text integer',trailing=7)
-        self.field(part,'ModelType','integer')
-        self.field(part,'ModelString','text')
-        self.rows(part.one('ModelBody'),'Line','text')
-        self.field(part,'SubfolderIndex','integer')
-        verification=part.one('Verification')
-        self.integer(7)
-        self.values(verification,'boolean '*7)
-        self.field(part,'ModelNote','text')
-        self.field(part,'Manufacturer','text')
-        self.field(part,'Component_CategoryName','text')
-        self.field(part,'Component_CategoryIndex','integer')
-        self.category_types(part,'Component_CategoryTypes')
-
-    def cache(self,schematic):
-        self.field(schematic,'ProjectLibs_Name','text')
-        self.fields(schematic,'integer','ProjectLibs_Type ProjectLibs_Content')
-        self.rows(schematic.one('ProjectLibs_Folders'),'Folder','text')
-        self.rows(schematic.one('ProjectLibs_Libs'),'Lib','text')
-        self.field(schematic,'ProjectLibs_Sorted','boolean')
-        self.field(schematic,'DesignCache_Count','integer')
-        self.rows(schematic.one('DesignCache_Links'),'Link','integer')
-        cache=schematic.one('CacheLib')
-        categories=cache.select('Categories/Category')
-        self.integer(len(categories))
-        for category in categories:
-            self.values(category,'text integer')
-            types=category.children('Type')
-            self.integer(len(types))
-            for kind in types:
-                self.values(kind,'text integer')
-                self.rows(kind,'Subtype','text integer')
-        self.rows(cache.one('Subfolders'),'Folder','text')
-        slots=cache.select('Slots/Slot')
-        self.integer(len(slots))
-        for slot in slots:
-            definitions=slot.children('Definition')
-            self.integer(len(definitions))
-            for definition in definitions:
-                self.definition(definition)
-        for slot in slots:
-            self.text(slot.values[1])
+    def cache(self, schematic):
+        for slot in schematic.select('CacheLib/Slots/Slot'):
+            if not slot.children('Definition'):
+                raise ValueError(f'{slot.path}: DCH output requires at least one definition '
+                                 'per library slot; add a definition or remove the unused slot')
+        codecs = LibraryCodecs(write_parameters, Writer.pads, Writer.pattern_graphics,
+                               write_model, Writer.symbol_shapes, definition_text='ModelNote')
+        write_library_cache(self, schematic,
+                            lambda writer, definition: write_definition(writer, definition, codecs))
 
     def header(self,document):
         self.buffer.extend(b'\x07DTSCHEM')
         self.integer(self.version)
         scale=document.one('/Scale')
-        self.number(float(scale.values[0])/100)
+        factor = Decimal(str(scale.values[0]))
+        if factor.is_finite():
+            sign, digits, exponent = factor.as_tuple()
+            factor = Decimal((sign, digits, exponent-2))
+        self.number(factor)
         for name in ('Xpos','Ypos'):
             field=document.one('/'+name)
             self.integer(round(float(field.values[0])))

@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib import Element, ExportReport, new_schematic, parse
 from lib.schematic.formats.dchxml.syntax import (set_attribute)
-from lib.schematic.formats.dchxml.catalog import (CategoryCatalog, StyleTable)
+from lib.common.xml_catalog import CategoryCatalog, StyleTable
 
 
 def category(name, type_name, subtype, foreign=99):

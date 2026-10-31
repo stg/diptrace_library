@@ -6,6 +6,7 @@ the quoted-text sanitizer. Applying these rules never mutates the document.
 """
 from decimal import Decimal
 import math
+from ....common.asc_text import quoted_text, project_text as _project_text
 
 
 
@@ -22,11 +23,6 @@ def number_text(value: int | float | Decimal) -> str:
     if fraction:
         rendered += '.' + f'{fraction:04d}'.rstrip('0')
     return ('-' if scaled < 0 else '') + rendered
-
-
-def quoted_text(value: str) -> str:
-    """Quoted text."""
-    return '"' + value.replace('"', '!').replace('\r', '!').replace('\n', '!') + '"'
 
 
 def _redundant_cell_text(node):
@@ -72,46 +68,8 @@ def project_text(document, *, encoding='cp1252', report=None):
     Intermediate record projections retain literal text. This single boundary
     makes restrictions observable without guessing which source fields export.
     """
-    from ....common.conversion import (info, warn)
-    from ....common.model import (Value)
-    from ....common.text.windows_1252 import (project as ansi_text)
-    import codecs
-    encoding = codecs.lookup(encoding).name
-    sanitized, encoded, compatibility, receiver_text = [], [], [], []
-    for node in document.root.walk():
-        redundant = _redundant_cell_text(node)
-        sanitize_changed = encode_changed = receiver_changed = False
-        for index, value in enumerate(node.arguments):
-            if value.kind != 'string':
-                continue
-            receiver_changed |= '!' in value.value and _receiver_normalized_text(node, index)
-            text = quoted_text(value.value)[1:-1]
-            projected = ansi_text(text) if encoding == 'cp1252' else text.encode(encoding).decode(encoding)
-            sanitize_changed |= text != value.value
-            encode_changed |= projected != text
-            if projected != value.value:
-                node.set_argument(index, Value(projected, value.kind, value.unit, source=value.source))
-        if redundant and (sanitize_changed or encode_changed):
-            compatibility.append(node)
-        elif sanitize_changed:
-            sanitized.append(node)
-        if encode_changed and not redundant:
-            encoded.append(node)
-        if receiver_changed and not redundant:
-            receiver_text.append(node)
-    if compatibility:
-        info(report, 'asc-cell-text-compatibility', 'asc', 'the redundant legacy cell text representation is normalized', compatibility,
-             recoverability='TextLine supplies the current cell text; restrictions of those line values are reported separately')
-    if sanitized:
-        warn(report, 'asc-text-sanitization', 'asc', 'quotes and line breaks in ASC strings become exclamation marks', sanitized,
-             recoverability='original characters cannot be recovered from ASC; authoring text remains intact')
-    if encoded:
-        warn(report, 'asc-text-encoding', 'asc', f'ASC strings use {encoding} character substitutions', encoded,
-             recoverability='original characters cannot be recovered from ASC; authoring Unicode remains intact')
-    if receiver_text:
-        warn(report, 'asc-reader-text-normalization', 'asc',
-             'the receiving application replaces literal ! with spaces in these text fields', receiver_text,
-             recoverability='literal ! remains in the ASC file and this library preserves it; DCH/XML avoid this receiver conversion')
+    return _project_text(document, encoding=encoding, report=report,
+                         receiver_normalizes=_receiver_normalized_text, redundant_text=_redundant_cell_text)
 
 
 def component_orientation(part) -> int:
@@ -121,25 +79,3 @@ def component_orientation(part) -> int:
         raise ValueError('a component requires one angle to project orientation')
     from ...model.angles import (quarter_turns)
     return quarter_turns(angle.values[0])
-
-
-def model3d_arguments(model) -> tuple:
-    """Read the public ASC Model3D/pt tuple from named editable model data.
-
-    XML supplies the names; ASC supplies the argument order. No private format
-    record or source buffer is needed. Existing flat ASC records are also views.
-    """
-    flat = model.child('pt') or model.child('cl_pt')
-    if flat is not None:
-        return flat.arguments
-    fields = []
-    for name in ('Rotate', 'Offset', 'Zoom'):
-        vector = model.child(name)
-        if vector is None:
-            raise ValueError(f'{model.path}: missing {name}')
-        fields.extend(vector.child(axis) for axis in ('X', 'Y', 'Z'))
-    fields.extend(model.child(name) for name in ('Mirror', 'NoSearch', 'Units',
-        'IPC_XOff', 'IPC_YOff', 'AutoHeight', 'AutoColor', 'Type', 'KeepPins'))
-    if any(field is None or len(field.arguments) != 1 or field.children() for field in fields):
-        raise ValueError(f'{model.path}: incomplete 3D placement data')
-    return tuple(field.arguments[0] for field in fields)

@@ -1,4 +1,5 @@
 """Shared ASC library catalogues and explicit project path pairs."""
+from .model import Element, Value
 
 
 def unprefix(cache):
@@ -65,3 +66,59 @@ def unpack_project_paths(owner):
                 raise ValueError(f'{container.path}: expected {kind}/{kind}_Variable siblings')
             variable.kind = 'VariablePath'
             variable.move_to(actual)
+
+
+def _children(node):
+    parameters = node.schema.parameters if node.schema is not None else ()
+    return [child for child in node.children() if child.kind not in parameters]
+
+
+def project_library_paths(container, kind, *, convert=lambda value: value,
+                          visible=_children, variable_fallback=False):
+    """Flatten owned path pairs; the caller chooses any dialect fallback."""
+    records = visible(container)
+    if any(record.kind != kind for record in records):
+        raise ValueError(f'{container.path}: expected only {kind} records')
+    output = Element(container.kind, len(records))
+    for record in records:
+        if (len(record.arguments) != 1 or record.arguments[0].kind != 'string' or
+                any(child.kind != 'VariablePath' for child in visible(record))):
+            raise ValueError(f'{record.path}: expected a path and optional VariablePath')
+        path, variable = record.arguments[0], record.scalar('VariablePath', '')
+        if variable_fallback and not variable.replace(' ', ''):
+            variable = path.value
+        output.add(kind, convert(path))
+        output.add(kind+'_Variable', convert(Value.of(variable)))
+    return output
+
+
+def project_catalogs(cache, *, convert=lambda value: value, visible=_children):
+    """Generate catalogue counts, retaining declared names, keys and row order."""
+    def project(parent, kind, public, child_kind=None):
+        members = visible(parent)
+        if any(member.kind != kind for member in members):
+            raise ValueError(f'{parent.path}: expected only {kind} records')
+        for member in members:
+            expected = 1 if kind == 'Folder' else 2
+            if len(member.arguments) != expected:
+                raise ValueError(f'{member.path}: invalid catalogue row')
+            row = Element(public, *(convert(value) for value in member.arguments))
+            if child_kind is not None:
+                children = tuple(project(member, child_kind,
+                    'cl_Type' if child_kind == 'Type' else 'cl_SubType',
+                    'Subtype' if child_kind == 'Type' else None))
+                row.set_values(*row.arguments, len(children))
+                for child in children:
+                    row.append(child)
+            elif visible(member):
+                raise ValueError(f'{member.path}: unexpected catalogue children')
+            yield row
+    output = Element('CacheLib')
+    for name, kind, public, child in (('Categories','Category','cl_Category','Type'),
+                                     ('Subfolders','Folder','cl_Subfolder',None)):
+        source = cache.child(name)
+        members = () if source is None else tuple(project(source, kind, public, child))
+        target = output.add('cl_'+name, len(members))
+        for row in members:
+            target.append(row)
+    return output

@@ -1,5 +1,6 @@
 """Shared binary title-block cells, borders and content records."""
 from .model import SourceSpan
+from .cell_text import cell_text
 
 
 def read_text_content(reader, cell):
@@ -42,3 +43,37 @@ def read_title_block(r, parent, index):
         read_text_content(r, contents.add("Content", index))
     grid.source = SourceSpan(r.source_format, start, r.pos, r.source)
     return grid
+
+
+def write_text_content(writer, cell):
+    """Write the shared styled text and its authored placement rectangle."""
+    writer.field(cell, 'FOrientation', 'boolean')
+    writer.fields(cell, 'integer', 'FontSize FontType Align')
+    writer.field(cell, 'FontColor', 'color')
+    writer.text(cell_text(cell))
+    writer.field(cell, 'FontName', 'text')
+    placement = cell.child('Placement')
+    writer.values(placement if placement is not None else cell, 'number '*4)
+    writer.field(cell, 'VectorFont', 'boolean')
+    writer.fields(cell, 'number', 'FontWidth FontScale')
+
+
+def write_title_block(writer, grid):
+    """Write one grid in column-major order using current content selectors."""
+    writer.text(grid.values[1])
+    writer.fields(grid, 'number', 'Width Height')
+    columns, rows = grid.select('ColWidths/pt'), grid.select('RowHeights/pt')
+    writer.integer(len(columns))
+    writer.integer(len(rows))
+    for size in columns+rows:
+        writer.values(size, 'number')
+    cells = grid.select('Cells/Cell')
+    if len(cells) != len(columns)*len(rows):
+        raise ValueError(f'{grid.path}: title cells do not form a rectangle')
+    for cell in cells:
+        writer.field(cell, 'FieldId', 'integer')
+        writer.values(cell.one('Edges'), 'boolean '*4)
+    contents = grid.select('Contents/Content')
+    writer.integer(len(contents))
+    for content in contents:
+        write_text_content(writer, content)

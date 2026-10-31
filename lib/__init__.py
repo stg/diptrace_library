@@ -1,6 +1,7 @@
 """Public document API. Format adapters populate our own ordered editable model."""
 from pathlib import Path
 from functools import wraps
+from importlib import import_module
 from .common.capabilities import FormatCapabilities
 from .common.errors import UnsupportedFileError
 from .common.document_families import (
@@ -8,7 +9,6 @@ from .common.document_families import (
     input_identity, model_identity,
 )
 from .common.refdes import RefDesFamily, split_refdes
-from .schematic.formats.capabilities import format_capabilities as _schematic_capabilities
 
 from .schematic.model.document import (Document)
 from .common.model import (Element, IncompleteDocumentError, SourceSpan, Value)
@@ -19,34 +19,63 @@ from .common.geometry import (Bounds, circular_arc_bounds, ellipse_points)
 from .schematic.layout.geometry import (symbol_bounds, pattern_bounds)
 from .schematic.editing.edit import (coalesce_routes, RemovedRoutePoint)
 from .schematic.formats.export_context import (ExportContext, AscExportContext, DchExportContext, DchXmlExportContext)
-from .schematic.formats.path_variables import (PathVariables)
+from .common.path_variables import PathVariables
 from .schematic.model.new import (new_schematic)
 from .schematic.model.objects import (new_symbol, new_pin, new_schematic_shape, new_net, new_wire)
 from .schematic.model.catalogue import (schematic_schema)
-from .common.conversion import (ConversionNotice, ConversionWarning, ConversionReport, ImportReport, ExportReport, import_diagnostics, export_diagnostics)
-from .schematic.formats.import_context import (ImportContext, resolve_import_context)
+from .common.conversion import (ConversionNotice, ConversionWarning, ConversionReport, ImportReport, ExportReport, import_diagnostics, export_diagnostics, _set_import_format)
+from .schematic.formats.import_context import ImportContext
+
+
+# Availability is separate from content recognition and adapter version policy.
+# Unpublished families remain absent until their implementation is ready.
+_FAMILY_ADAPTERS = {
+    'schematic': __name__+'.schematic.formats.io',
+    'pcb': __name__+'.pcb.formats.io',
+}
 
 
 def _unsupported(format, identity, *, version=None):
     raise UnsupportedFileError(format=format, family=identity.family,
                                version=identity.version if version is None else version,
-                               reason='family' if identity.family not in (None, 'schematic') else 'format')
+                               reason='family' if identity.family is not None
+                                   and identity.family not in _FAMILY_ADAPTERS else 'format')
 
 
-def _input_family(data, format, family):
+def _adapter(format, identity, *, version=None):
+    selected = _FAMILY_ADAPTERS.get(identity.family)
+    if selected is None:
+        _unsupported(format, identity, version=version)
+    return import_module(selected) if isinstance(selected, str) else selected
+
+
+def _input_adapter(data, format, family):
+    """Use explicit selection or declarations without preferring a family."""
     selected = family_name(family) if family is not None else None
     detected = input_identity(data)
+    key = format.lower().lstrip('.') if format is not None else detected.format
+    _set_import_format(key)
     identity = detected if selected is None else DocumentIdentity(selected, detected.version)
-    if identity.family != 'schematic' or format not in ('asc', 'dch', 'dchxml'):
-        _unsupported(format, identity)
-    return identity.family
+    adapter = _adapter(key, identity)
+    if key is None:
+        _unsupported(key, identity)
+    try:
+        adapter.format_capabilities(key)
+    except UnsupportedFileError as error:
+        if error.reason != 'format':
+            raise
+        _unsupported(key, identity)
+    return key, adapter
 
 
-def _output_family(document, format, family, *, version=None):
-    identity = model_identity(document) if family is None else DocumentIdentity(family_name(family))
-    if identity.family != 'schematic':
-        _unsupported(format, identity, version=version)
-    return identity.family
+def _output_adapter(document, format, family, *, version=None):
+    actual = model_identity(document)
+    identity = actual if family is None else DocumentIdentity(family_name(family))
+    adapter = _adapter(format, identity, version=version)
+    if actual.family is not None and identity.family != actual.family:
+        raise UnsupportedFileError(format=format, family=actual.family,
+                                   version=version, reason='family')
+    return adapter
 
 
 def format_capabilities(format, *, family=None):
@@ -55,9 +84,7 @@ def format_capabilities(format, *, family=None):
     if family is None and key == 'asc':
         raise ValueError('ASC capabilities require an explicit document family')
     selected = family_name(family) if family is not None else FORMAT_FAMILIES.get(key)
-    if selected != 'schematic' or key not in ('asc', 'dch', 'dchxml'):
-        _unsupported(key, DocumentIdentity(selected))
-    return _schematic_capabilities(key)
+    return _adapter(key, DocumentIdentity(selected)).format_capabilities(key)
 
 
 def _for_family(operation, family):
@@ -68,11 +95,6 @@ def _for_family(operation, family):
     return run
 
 
-def _read_dch(path, **options):
-    from .schematic.formats.dch.read import (read as read_dch)
-    return read_dch(path, **options)
-
-
 @import_diagnostics('dch')
 def parse_dch(data, *, report=None, label=None, **options) -> Document:
     """Decode a binary buffer; label attributes its report diagnostics."""
@@ -81,41 +103,32 @@ def parse_dch(data, *, report=None, label=None, **options) -> Document:
 
 
 @import_diagnostics()
-def parse_source(data, *, format: str, family: str | None = None, report=None, label=None, **options) -> Document:
+def parse_source(data, *, format: str | None = None, family: str | None = None, report=None, label=None, **options) -> Document:
     """Parse a source view for explicit format-level investigation."""
-    key = format.lower().lstrip('.')
-    _input_family(data, key, family)
-    return _load_source(data, key, **options)
-
-
-def _load_source(data, key, **options):
-    if key == 'dch':
-        return parse_dch(data, **options)
-    if key == 'dchxml':
-        return parse_dchxml(data, **options)
-    if key == 'asc':
-        if isinstance(data, str):
-            return parse_asc(data, **options)
-        from .schematic.formats.asc.syntax import (loads_bytes)
-        return loads_bytes(data, **options)
+    key, adapter = _input_adapter(data, format, family)
+    return adapter.parse_source(data, format=key, **options)
 
 
 @import_diagnostics()
-def parse(data, *, format: str, family: str | None = None, context=None, report=None, label=None, **options) -> Document:
+def parse(data, *, format: str | None = None, family: str | None = None, context=None, report=None, label=None, **options) -> Document:
     """Import an in-memory design into the common searchable/editable model."""
-    key = format.lower().lstrip('.')
-    _input_family(data, key, family)
-    context = resolve_import_context(context)
-    document = _load_source(data, key, **options, **({'context': context} if key == 'dch' else {}))
-    return document.as_schematic() if key in ('asc', 'dchxml') else document
+    key, adapter = _input_adapter(data, format, family)
+    return adapter.parse(data, format=key, context=context, **options)
 
 
-_READERS = {"asc": read_asc, "dch": _read_dch, "dchxml": read_dchxml}
-_WRITERS = {"asc": lambda doc, path, **options: doc.save_asc(path, **options),
-            "dch": lambda doc, path, **options: doc.save_dch(path, **options),
-            "dchxml": lambda doc, path, **options: doc.save_dchxml(path, **options)}
-_BUILTIN_READERS = _READERS.copy()
-_BUILTIN_WRITERS = _WRITERS.copy()
+_READERS = {}
+_WRITERS = {}
+
+
+def _builtin_format(key):
+    for family in _FAMILY_ADAPTERS:
+        adapter = _adapter(key, DocumentIdentity(family))
+        try:
+            adapter.format_capabilities(key)
+        except UnsupportedFileError:
+            continue
+        return True
+    return False
 
 
 def register_reader(format: str, reader):
@@ -123,7 +136,7 @@ def register_reader(format: str, reader):
     key = format.lower().lstrip(".")
     if not key or not callable(reader):
         raise ValueError("reader registration needs a format name and callable")
-    if key in _READERS:
+    if key in _READERS or _builtin_format(key):
         raise ValueError(f"reader already registered: {key}")
     _READERS[key] = reader
 
@@ -132,7 +145,7 @@ def register_writer(format: str, writer):
     key = format.lower().lstrip(".")
     if not key or not callable(writer):
         raise ValueError("writer registration needs a format name and callable")
-    if key in _WRITERS:
+    if key in _WRITERS or _builtin_format(key):
         raise ValueError(f"writer already registered: {key}")
     _WRITERS[key] = writer
 
@@ -144,59 +157,51 @@ def read_source(path, *, format: str | None = None, family: str | None = None, r
     DCH already uses the shared model. ASC/XML retain their public syntax tree;
     use read() for ordinary format-independent schematic work.
     """
-    key = (format or Path(path).suffix).lower().lstrip(".")
-    return _read_file(path, key, family, options)
+    return _read_file(path, format, family, options)
 
 
-def _read_file(path, key, family, options, *, normalize=False, context=None):
+def _read_file(path, format, family, options, *, normalize=False, context=None):
+    hint = Path(path).suffix.lower().lstrip('.')
+    key = format.lower().lstrip('.') if format is not None else hint
     reader = _READERS.get(key)
-    if reader is not None and reader is not _BUILTIN_READERS.get(key):
+    if reader is not None:
         if family is not None:
             family_name(family)
-        if normalize:
-            resolved = resolve_import_context(context)
-            if key == 'dch':
-                options['context'] = resolved
+        if normalize and context is not None:
+            options['context'] = context
         return reader(path, **options)
     data = Path(path).read_bytes()
-    _input_family(data, key, family)
+    key, adapter = _input_adapter(data, format, family)
     if normalize:
-        resolved = resolve_import_context(context)
-        if key == 'dch':
-            options['context'] = resolved
-    return _load_source(data, key, source=str(path), **options)
+        return adapter.parse(data, format=key, source=str(path), context=context, **options)
+    return adapter.parse_source(data, format=key, source=str(path), **options)
 
 
 @import_diagnostics()
 def read(path, *, format: str | None = None, family: str | None = None, context=None, report=None, label=None, **options) -> Document:
-    """Import a schematic into the same searchable, editable model in every format.
+    """Detect a document's format and import its searchable, editable model.
 
     Unsupported semantic data fails explicitly; read_source() remains available
     for inspecting it without normalization. Registered adapters which already
     return their own document representation pass through unchanged.
     """
-    key = (format or Path(path).suffix).lower().lstrip('.')
-    document = _read_file(path, key, family, options, normalize=True, context=context)
-    if key in ('asc', 'dchxml'):
-        return document.as_schematic()
-    return document
+    return _read_file(path, format, family, options, normalize=True, context=context)
 
 
 @export_diagnostics()
 def write(document: Document, path, *, format: str | None = None, family: str | None = None, context=None, report=None, label=None, **options):
     key = (format or Path(path).suffix).lower().lstrip(".")
     writer = _WRITERS.get(key)
-    if writer is None or writer is _BUILTIN_WRITERS.get(key):
-        selected = _output_family(document, key, family, version=options.get('version'))
-    else:
-        selected = family_name(family) if family is not None else None
-    if key not in _WRITERS:
-        _unsupported(key, DocumentIdentity(selected), version=options.get('version'))
+    if writer is None:
+        adapter = _output_adapter(document, key, family, version=options.get('version'))
+        return adapter.write(document, path, format=key, context=context, report=report, **options)
+    if family is not None:
+        family_name(family)
     if context is not None:
         options['context'] = context
     if report is not None:
         options['report'] = report
-    return _WRITERS[key](document, path, **options)
+    return writer(document, path, **options)
 
 
 @export_diagnostics()
@@ -206,10 +211,8 @@ def serialize(document: Document, *, format: str, family: str | None = None, con
     Uses the same adapters, options and report contract as write().
     """
     key = format.lower().lstrip('.')
-    selected = _output_family(document, key, family, version=options.get('version'))
-    if key not in ('dch', 'asc', 'dchxml'):
-        _unsupported(key, DocumentIdentity(selected), version=options.get('version'))
-    return getattr(document, 'to_'+key+'_bytes')(context=context, report=report, **options)
+    adapter = _output_adapter(document, key, family, version=options.get('version'))
+    return adapter.serialize(document, format=key, context=context, report=report, **options)
 
 
 __all__ = ["FormatCapabilities", "format_capabilities", "document_family", "UnsupportedFileError", "RefDesFamily", "split_refdes",

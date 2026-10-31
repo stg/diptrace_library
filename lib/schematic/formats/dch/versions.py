@@ -1,8 +1,9 @@
 """Recent schematic revisions mapped directly to editable public facts."""
-from ...model.fonts import (binary_fonts, complete_fonts, compatibility_size)
+from ...model.fonts import binary_fonts, complete_fonts
+from ....common.font_codec import compatibility_size
 from ...model.simulation import (OPTION_FIELDS, complete_options)
 from ..capabilities import DCHXML, XML_APPLICATION_VERSIONS
-from ....common.font_codec import read_font_properties
+from ....common.font_codec import read_font_properties, write_font_properties
 
 
 def xml_application_version(version):
@@ -46,7 +47,4 @@ def write_extensions(writer, schematic):
         for shape in schematic.select('Shapes/Shape'):
             writer.boolean(shape.scalar('PictureFlipped', False))
     if writer.version >= 52:
-        for node, size, mono in binary_fonts(schematic):
-            if mono:
-                writer.boolean(node.scalar(mono, False))
-            writer.field(node, size, 'number')
+        write_font_properties(writer, binary_fonts(schematic))

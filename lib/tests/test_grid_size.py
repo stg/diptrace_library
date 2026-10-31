@@ -1,5 +1,6 @@
 """One editable grid spacing, with generated destination precision fields."""
-from decimal import Decimal
+from decimal import Decimal, localcontext
+from fractions import Fraction
 import unittest
 
 from lib import new_schematic, parse
@@ -20,15 +21,25 @@ class GridSizeTests(unittest.TestCase):
         document = new_schematic()
         document.one('/Schematic/Settings/GridSize').set_values(Decimal(1)/3)
         encoded = document.to_dch_bytes()
+        original = document.one('/Schematic/Settings').scalar('GridSize')
+        imported = []
+        for precision in (2, 8, 28, 50):
+            with localcontext() as context:
+                context.prec = precision
+                imported.append(parse(encoded, format='dch').one('/Schematic/Settings').scalar('GridSize'))
+        self.assertTrue(all(value == imported[0] for value in imported))
         for _ in range(3):
             loaded = parse(encoded, format='dch')
-            self.assertEqual(loaded.one('/Schematic/Settings').scalar('GridSize'), Decimal(1)/3)
+            # The file contains an exact numerator/divisor ratio. Verify the
+            # mathematical value and stable bytes, not ambient Decimal precision.
+            actual = loaded.one('/Schematic/Settings').scalar('GridSize')
+            self.assertLess(abs(Fraction(actual)-Fraction(1, 3)), Fraction(1, 10**33))
             self.assertEqual(loaded.to_dch_bytes(), encoded)
             encoded = loaded.to_dch_bytes()
         loaded.one('/Schematic/Settings/GridSize').set_values(Decimal('.125'))
         edited = parse(loaded.to_dch_bytes(), format='dch')
         self.assertEqual(edited.one('/Schematic/Settings').scalar('GridSize'), Decimal('.125'))
-        self.assertEqual(document.one('/Schematic/Settings').scalar('GridSize'), Decimal(1)/3)
+        self.assertEqual(document.one('/Schematic/Settings').scalar('GridSize'), original)
 
     def test_binary_fraction_keeps_spacing_below_the_scalar_quantum(self):
         document = new_schematic()

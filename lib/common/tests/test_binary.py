@@ -1,8 +1,12 @@
 """Wire values are independent of document-family version numbering."""
 from decimal import Decimal, localcontext
+import re
 import unittest
 
 from lib.common.binary import BinaryReader, BinaryWriter
+from lib.common.binary_records import RecordWriter, grid_step_value, write_grid_step
+from lib.common.model import Element
+from lib.common.conversion import ConversionReport
 
 
 class BinaryTests(unittest.TestCase):
@@ -29,6 +33,26 @@ class BinaryTests(unittest.TestCase):
         with localcontext() as context:
             context.prec = 2
             self.assertEqual(BinaryReader(bytes.fromhex('3b9afa39')).number(), Decimal('1.2345'))
+
+    def test_fixed_point_rounding_uses_exact_decimal_ties_and_ignores_caller_context(self):
+        for value, expected in (('.00015', '.0002'), ('-.00015', '-.0002'),
+                                 ('1.50005', '1.5000'), ('-1.50005', '-1.5000'),
+                                 ('.00014999999999999999999999', '.0001'),
+                                 ('.00015000000000000000000001', '.0002')):
+            for precision in (2, 28):
+                with self.subTest(value=value, precision=precision), localcontext() as context:
+                    context.prec = precision
+                    writer = BinaryWriter()
+                    writer.number(Decimal(value))
+                    self.assertEqual(BinaryReader(bytes(writer.buffer)).number(), Decimal(expected))
+
+    def test_float_and_decimal_spellings_use_the_same_number_projection(self):
+        for value in (.00015, -.00015, 1.50005, -1.50005):
+            with self.subTest(value=value):
+                first, second = BinaryWriter(), BinaryWriter()
+                first.number(value)
+                second.number(Decimal(str(value)))
+                self.assertEqual(first.buffer, second.buffer)
 
     def test_text_mode_and_offset_are_explicit(self):
         data = bytes.fromhex('ff 0f4243 41819f')
@@ -65,7 +89,8 @@ class BinaryTests(unittest.TestCase):
 
     def test_writer_rejects_values_outside_wire_domain(self):
         for method, value in (('number', float('inf')), ('number', True),
-                              ('number', 100001), ('integer', 1.5),
+                              ('number', 100001), ('number', Decimal('100000.00000000000000001')),
+                              ('integer', 1.5),
                               ('integer', 1000001), ('color', -1),
                               ('boolean', 1), ('text', 'a'*65536)):
             with self.subTest(method=method, value_type=type(value).__name__):
@@ -73,6 +98,47 @@ class BinaryTests(unittest.TestCase):
                 with self.assertRaises((ValueError, TypeError)):
                     getattr(writer, method)(value)
                 self.assertEqual(writer.buffer, b'')
+
+    def test_record_writer_errors_identify_the_field_without_partial_scalar_output(self):
+        root = Element('')
+        group = root.add('Group')
+        group.add('Width', 1, 2)
+        group.add('Size', 100001)
+        group.add('Flag', 1)
+        for name, codec, location, message in (
+                ('Missing', 'number', '/Group[1]/Missing', 'scalar binary value is missing'),
+                ('Width', 'number', '/Group[1]/Width[1]', 'expected one scalar binary value'),
+                ('Size', 'number', '/Group[1]/Size[1]', ''),
+                ('Flag', 'boolean', '/Group[1]/Flag[1]', '')):
+            with self.subTest(field=name):
+                writer = RecordWriter()
+                with self.assertRaisesRegex((TypeError, ValueError), re.escape(location)+': '+message):
+                    writer.field(group, name, codec)
+                self.assertEqual(writer.buffer, b'')
+
+    def test_named_extended_colors_use_rgb_bytes_and_report_projection(self):
+        writer = RecordWriter()
+        writer.report = ConversionReport()
+        shape = Element('Shape')
+        shape.add('Color', -1)
+        shape.add('FontColor', 0x12345678)
+        writer.fields(shape, 'color', 'Color FontColor')
+        self.assertEqual(writer.buffer, bytes.fromhex('000000 785634'))
+        self.assertEqual((shape['Color'], shape['FontColor']), (-1, 0x12345678))
+        self.assertEqual([row.rule for row in writer.report.warnings], ['color-rgb-range']*2)
+
+    def test_scaled_grid_keeps_small_steps_and_is_independent_of_decimal_context(self):
+        for step in (Decimal('.3'), Decimal('.000012345'), Decimal('.0000005')):
+            writer = BinaryWriter()
+            write_grid_step(writer, step)
+            reader = BinaryReader(bytes(writer.buffer))
+            numerator, divisor = reader.number(), reader.integer()
+            with localcontext() as context:
+                context.prec = 2
+                result = grid_step_value(numerator, divisor)
+            self.assertEqual(result, step)
+            self.assertEqual(reader.pos, len(reader.data))
+        self.assertEqual(grid_step_value(Decimal('1.2345'), 0), Decimal('1.2345'))
 
 
 if __name__ == '__main__':

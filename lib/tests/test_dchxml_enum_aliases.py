@@ -83,7 +83,7 @@ class XmlEnumAliasTests(unittest.TestCase):
             self.assert_label_states(numeric, -1)
 
     def test_other_numeric_values_and_separate_enum_domains_remain_unchanged(self):
-        from lib.schematic.formats.dchxml.import_values import (enum_value)
+        from lib.common.xml_records import (enum_value)
         for value in (-3, -1, 0, 1, 3, 777):
             self.assertEqual(enum_value(value, ('Center', 'Right', 'Left'), negative='Left'), value)
         self.assertEqual(enum_value(2, ('Left', 'Center', 'Right')), 2)

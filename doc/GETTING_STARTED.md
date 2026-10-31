@@ -2,7 +2,9 @@
 
 This guide takes a schematic through a small read, inspect, edit and save
 workflow. You can start with a binary DCH file or an ASC/DCHXML export; the
-editing code is the same for all three.
+editing code is the same for all three. The shared workflow also applies to PCB
+layouts; use [the PCB guide](PCB_GUIDE.md) for their collections, relationships
+and constructors. This tutorial uses a schematic as its concrete example.
 
 If you want a command-line converter rather than a Python API, use the
 [format converter](../apps/diptrace_convert/README.md).
@@ -32,7 +34,7 @@ from lib import read, write
 design = read("design.dch")
 ```
 
-`read()` chooses the input format from the extension and returns a `Document`.
+`read()` recognizes the input format from its content and returns a `Document`.
 The document holds the editable design in memory. Reading does not change the
 input file, and edits stay in memory until you write them.
 
@@ -172,6 +174,7 @@ effective defaults and font measurement.
 | Understand ownership, identities and automatic consistency | [The model guide](MODEL.md) |
 | Look up a function, method, parameter or exception | [The API reference](API.md) |
 | Find a schematic record, field, type or unit | [The schematic catalogue](SCHEMATIC.md) |
+| Work with PCB data | [The PCB guide](PCB_GUIDE.md) and [catalogue](PCB.md) |
 | Start from a complete script | [Creation, editing and conversion examples](../examples/schematic/README.md) |
 | Have a look at functional applications | [Applications](../apps/README.md) |
 

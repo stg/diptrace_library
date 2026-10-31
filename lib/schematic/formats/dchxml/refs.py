@@ -55,7 +55,7 @@ def _specifications(document):
         target = _at(_children(settings, 'Sheets', 'Sheet'), active.values[0])
         yield settings, target, 'xml-active-sheet', (Index(active),), ()
 
-    from .tables import (TITLE_BLOCKS)
+    from ....common.title_records import TITLE_BLOCKS
     for sheet in sheets.values():
         if sheet is None:
             continue

@@ -2,6 +2,7 @@
 from ...common.schema import Field, Record
 from ...common.footprint_records import SUPPLIERS, MODEL3D, VECTORS
 from ...common.group_records import LOCAL_GROUP
+from ...common.local_keys import UNRESOLVED_KEY
 from .field_groups import group
 
 
@@ -18,8 +19,4 @@ BUS_NET = group('BusNet', (Field('NetIndex', 'integer', required=True, default=-
 UNRESOLVED_MEMBER = group('UnresolvedNetMember', (
     Field('PartIndex', 'integer', required=True, default=-1),
     Field('PinIndex', 'integer', required=True, default=-1),
-))
-UNRESOLVED_KEY = group('UnresolvedKey', (
-    Field('Field', 'text', required=True, default='', description='Name of the unresolved relationship field.'),
-    Field('Id', 'integer', required=True, default=0, description='Unresolved public target key.'),
 ))

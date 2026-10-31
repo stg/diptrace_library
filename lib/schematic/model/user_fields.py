@@ -1,24 +1,5 @@
 """Public user-field lookup keys, independent of application UI state."""
-from functools import lru_cache
-import json
-from pathlib import Path
-
-
-@lru_cache(maxsize=1)
-def _lowercase_mapping():
-    data=json.loads(Path(__file__).with_name('windows_lowercase.json').read_text(encoding='utf-8'))
-    return {int(key):chr(value) for key,value in data['mapping'].items()}
-
-
-def label_lowercase(text):
-    """Measured Windows lowercase plus the format label helper's ending rule."""
-    mapping=_lowercase_mapping()
-    result=''.join(mapping.get(ord(character),character) for character in text)
-    raw=result.encode('utf-16-le',errors='surrogatepass')
-    if len(raw)>2 and raw[-2:] in (b'\r\x00',b'\n\x00'):
-        raw=raw[:-4]+raw[-2:]
-    return raw.decode('utf-16-le',errors='surrogatepass')
-
+from ...common.text.case import label_lowercase
 
 def user_field_key(name):
     """Lookup normalization removes literal spaces before lowercasing."""

@@ -3,12 +3,12 @@
 The public entry point is `lib`. This page describes call signatures, arguments,
 results and failure behavior. For a first workflow, use
 [Getting started](GETTING_STARTED.md); for ownership and design meaning, use
-[The data model](MODEL.md). Schematic record and field definitions are in
-[SCHEMATIC.md](SCHEMATIC.md).
+[The data model](MODEL.md). Record and field definitions are in the
+[schematic](SCHEMATIC.md) and [PCB](PCB.md) catalogues.
 
 `Document`, `Element` and the relationship/schema infrastructure provide the
-shared editing API. The published readers, writers, constructors and contexts
-currently support schematic documents.
+shared editing API. Schematics and PCB layouts have their own document classes,
+constructors, contexts and adapters. Generic I/O selects their family from content.
 
 | Area | Entries |
 | --- | --- |
@@ -30,7 +30,8 @@ currently support schematic documents.
 **Example conventions.** Examples are independent, not a script to run from top
 to bottom. Unless an example creates its own input, `design` is a loaded
 schematic, `part` is a placed component, `pin` is one of its pins and `net`
-is a net in that document. Filenames are illustrative. Arguments after `*`
+is a net in that document. PCB sections use `layout`, `component`, `pad` and
+`trace` for their corresponding records. Filenames are illustrative. Arguments after `*`
 are keyword-only.
 
 ## Reading and writing
@@ -42,13 +43,13 @@ read(path, *, format=None, family=None, context=None, report=None, label=None, *
     -> Document
 ```
 
-Read one file into the family's editable model. For DCH, ASC and DCHXML,
-the result has `representation == "schematic"`.
+Read one file into the family's editable model. DCH, schematic ASC and DCHXML
+return `representation == "schematic"`; DIP, PCB ASC and DIPXML return `"pcb"`.
 
 | Argument | Meaning |
 | --- | --- |
 | `path` | Input filename as `str` or `pathlib.Path` |
-| `format` | Format name; `None` infers it from the extension |
+| `format` | Optional format override; otherwise content identifies the adapter |
 | `family` | Optional document family; see [family selection](#document-families) |
 | `context` | Optional [ImportContext](#importcontext) |
 | `report`, `label` | Optional [diagnostic collection](#reports) and caller label |
@@ -69,14 +70,14 @@ design = read("design.dch")
 ### `parse()`
 
 ```text
-parse(data, *, format, family=None, context=None, report=None, label=None, **options)
+parse(data, *, format=None, family=None, context=None, report=None, label=None, **options)
     -> Document
 ```
 
 Import an in-memory buffer with the same model and options as `read()`.
 
-- `data`: bytes for any supported format; ASC and DCHXML also accept `str`.
-- `format`: required, because there is no filename to infer it from.
+- `data`: bytes for any supported format; ASC and XML also accept `str`.
+- `format`: optional override; otherwise the buffer's declaration identifies it.
 - Other arguments: as for `read()`.
 
 **Returns:** a `Document`. Failures follow `read()`, excluding file I/O.
@@ -85,7 +86,7 @@ Import an in-memory buffer with the same model and options as `read()`.
 from pathlib import Path
 from lib import parse
 
-design = parse(Path("design.dchxml").read_bytes(), format="dchxml")
+design = parse(Path("design.dchxml").read_bytes())
 ```
 
 ### `write()`
@@ -144,20 +145,25 @@ xml_text = data.decode("utf-8")
 
 `family` accepts `"schematic"`, `"pcb"`, `"component"` or `"pattern"`, ignoring
 case. When omitted, input uses the binary signature, ASC `Source` declaration
-or XML root/type declaration to identify the family. Output uses the document's
-current representation or source-tree declaration. An explicit family overrides
-this detection. There is no preferred family for ASC. Headerless syntax fragments
-require an explicit family for source inspection.
+or XML root/type declaration to identify its format and family. A DCHXML file
+named `design.xml`, for example, imports normally. Input detection is independent
+of the filename and needs no extension.
+An explicit `format` selects the parser even when the content suggests another.
+Output uses the document's current representation or source-tree declaration.
+An explicit family selects an adapter for input or unidentified source syntax.
+It cannot reinterpret an identified output model as another family. There is no
+preferred family for ASC. Headerless syntax fragments
+require an explicit format and family for source inspection.
 
-Only schematic adapters are currently available. An unavailable family, unknown
+Schematic and PCB adapters are available. An unavailable family, unknown
 format or unrecognized input raises `UnsupportedFileError`, a `ValueError`
 subclass; import/export reports collect the failure as usual. Known unsupported
 versions use this same exception family. Ordinary parsing errors and file access
 failures retain their existing exception types.
 
-`lib.pcb`, `lib.component` and `lib.pattern` are placeholders exposing `read`,
-`parse`, `write`, `serialize` and `format_capabilities` with their family selected.
-They currently provide no conversion support, models or contexts.
+`lib.schematic` and `lib.pcb` expose the same conversion operations with their
+family selected, plus their own models, contexts and constructors. The
+`lib.component` and `lib.pattern` conversion facades remain unavailable placeholders.
 
 `document_family(document) -> str` returns the current family using the same
 model/declaration rules as export. It does not use provenance metadata. An
@@ -171,21 +177,22 @@ Format names are case insensitive and accept a leading dot.
 All outputs accept `version`, using the adapter's default if omitted.
 Input versions are detected from the file. Output does **not** automatically
 reuse the input version. See [Versions](#versions) for selection and
-[the support table](../README.md#schematics) for current ranges.
+[schematic](../README.md#schematics) and [PCB](../README.md#pcb-layouts) support tables for current ranges.
 
 | Input | Option | Default and behavior |
 | --- | --- | --- |
 | DCH | `ansi_encoding` | `"cp1252"`; decoding for pre-Unicode strings |
 | DCH | `allow_partial` | `False`; opt in to incomplete inspection data |
 | DCH | `component_limit` | `None`; optional limit for inspection |
+| DIP | `encoding` | `None`; Windows-1252 for older non-Unicode strings |
 | ASC | `encoding` | `None`; UTF-8 with BOM, otherwise Windows-1252 |
-| DCHXML | — | XML declaration controls byte decoding |
+| DCHXML / DIPXML | — | XML declaration controls byte decoding |
 
 | Output | Option | Default and behavior |
 | --- | --- | --- |
 | ASC | `encoding` | Context encoding, otherwise Windows-1252 |
-| ASC | `preserve` | `True`; syntax preservation on an explicit source view |
-| ASC | `allow_partial` | `False`; partial syntax output is an inspection escape hatch |
+| Schematic ASC | `preserve` | `True`; syntax preservation on an explicit source view |
+| Schematic ASC | `allow_partial` | `False`; partial syntax output is an inspection escape hatch |
 | DCHXML | `newline` | `"\n"`; `"\r\n"` is also accepted; byte output is UTF-8 |
 
 Partial/limited imports are not complete editable designs. Normal writers reject
@@ -211,15 +218,17 @@ The `version` default is the relevant adapter's default.
 ## Document
 
 Normally obtain a document from `read()`, `parse()` or `new_schematic()`.
-The low-level constructor is `Document(root=None, *, representation="tree")`;
-it does not populate schematic records or defaults.
+Use `lib.schematic.Document` or `lib.pcb.Document` for a low-level family class;
+neither constructor populates a design. `lib.Document` remains the schematic
+class for compatibility. Both extend `lib.common.model.Document`. Prefer
+`new_schematic()` or `lib.pcb.new_document()` for a populated starting document.
 
 ### State
 
 | Attribute | Meaning |
 | --- | --- |
 | `root` | Outer owning `Element` |
-| `representation` | Current API view; `"schematic"` for normal schematic imports |
+| `representation` | Current API view; `"schematic"` or `"pcb"` for normal design imports |
 | `references` | Identity-based `References` graph |
 | `complete` | Whether the import is complete |
 | `diagnostics` | Retained diagnostic strings |
@@ -530,6 +539,16 @@ part = design.one("/Schematic/Components").append(new_symbol("Resistor", "R1"))
 part["Value"] = "10k"
 ```
 
+### PCB constructors
+
+Import constructors from `lib.pcb`, including `new_document`, `new_component`,
+`new_pad`, `new_pattern_drawing`, `new_user_field`, `new_net`, `new_trace`,
+`new_point`, `new_layer`, `new_via_style`, `new_net_class`, `new_pair` and
+`new_removed_pair`. Their complete signatures and ownership are listed in
+[the PCB constructor reference](PCB_GUIDE.md#constructors). Attach detached
+records before assigning relationships; constructors do not load libraries or
+generate routing.
+
 ### Attach, move and detach
 
 | Signature | Result / behavior |
@@ -595,6 +614,19 @@ pin["Net"] = None
 This changes connectivity data, not attached wire geometry. Other relationship
 fields are identified in the [schematic catalogue](SCHEMATIC.md).
 
+### PCB membership and endpoints
+
+| Field | Target / behavior |
+| --- | --- |
+| `Pad.Net` | A net or `None`; maintains the net's pad membership |
+| `Trace.Target1`, `Trace.Target2` | Compatible pad/trace point or `None`; maintain endpoint references |
+| `Component.Via` | Via style or `None`; controls a static via's dimensions and copper span |
+
+A trace belongs to its owning net. Contradictory assignments and unsafe removals
+fail before mutation. Reassigning a pad while a trace contradicts that assignment
+fails; change dependent data explicitly. A sequence of calls is not an automatic
+transaction. These links do not route copper or follow moved components.
+
 ### `References`
 
 Use `document.references` rather than constructing a graph separately.
@@ -626,7 +658,7 @@ for link in links:
 | Type | Fields |
 | --- | --- |
 | `Reference` | `uid`, `source`, `target`, `role`, `indices`, `guards` |
-| `UnresolvedReference` | `source`, `message`, `indices`, `collections`, `guards` |
+| `UnresolvedReference` | `source`, `message`, `indices`, `collections`, `guards`, `severity` |
 | `Segment(start, end)` | Adjacent route-point pair used as a reference target |
 
 A resolved target is an element or a `Segment`. Unresolved scope protects
@@ -638,7 +670,7 @@ text stays independent.
 
 ```text
 graph.bind(source, target, *indices, role="", guards=(), preserve=False) -> Reference
-graph.note(source, message, *indices, collections=None, guards=()) -> UnresolvedReference
+graph.note(source, message, *indices, collections=None, guards=(), severity="warning") -> UnresolvedReference
 graph.discard_issue(issue) -> None
 graph.manages(field, argument=0) -> bool
 graph.unresolved_slot(field, argument=0) -> bool
@@ -647,7 +679,9 @@ graph.unresolved_slot(field, argument=0) -> bool
 These are adapter/custom-model operations. `bind()` creates an identity link
 and projects its target data. `preserve=True` instead requires the existing
 values to agree. `note()` registers unresolved data and its protected scope;
-`discard_issue()` explicitly removes it. Do not mutate `issues` directly.
+`discard_issue()` explicitly removes it. `severity` controls import reporting:
+the default is `"warning"`; `"info"` suits expected unavailable targets. It does
+not relax reference guards or invent a target. Do not mutate `issues` directly.
 
 | Projection / guard | Meaning |
 | --- | --- |
@@ -671,7 +705,9 @@ a modified copy. Ordinary input/output does not require a context.
 
 For export, precedence is **explicit override → stored setting → standard
 default**. Standard display/text choices are mm, vector text and font size 2.
-The contexts below currently belong to the schematic adapters.
+The `ImportContext`, `ExportContext` and destination subclasses immediately
+below are schematic classes (also re-exported by `lib`). PCB configuration is
+listed under [PCB contexts](#pcb-contexts). Context classes belong to their family.
 
 ### `ImportContext`
 
@@ -757,6 +793,48 @@ defaults = ExportContext().resolved(design, format="dchxml")
 custom = replace(defaults, units="mil")
 write(design, "custom.dchxml", context=custom)
 ```
+
+### PCB contexts
+
+Import these optional immutable classes from `lib.pcb`.
+
+```text
+ImportContext(units="mm", text_layout=None, background_color=0,
+              show_component_fiducials=True)
+ExportContext(units=None, project_dir=None, font_size=2, vector_font=True,
+              grid_size=Decimal(".3"), line_width=Decimal(".3"),
+              sheet_size=(891, 630), default_main_supplier=False,
+              legacy_picture_files=None, path_variables=None, text_layout=None)
+```
+
+| Import field | Meaning |
+| --- | --- |
+| `units` | Display-unit fallback; stored choices win |
+| `text_layout` | Optional common `TextLayout` service |
+| `background_color` | Default black canvas (`0`); `None` retains stored drawing colors |
+| `show_component_fiducials` | Fallback for including common fiducials in footprint bounds |
+
+The canvas choice participates in import's visible-color normalization, without
+affecting later color edits. Geometry always uses shared length units.
+
+| Export field | Meaning |
+| --- | --- |
+| `units` | Explicit display-unit override; otherwise stored units, then mm |
+| `project_dir` | Explicit path-text override; `None` retains the stored value |
+| `font_size`, `vector_font` | Fallback text choices when absent |
+| `grid_size`, `line_width` | Shared-length fallbacks; `.3` is 0.1 mm |
+| `sheet_size` | Shared-length fallback dimensions; `(891, 630)` is landscape A4 |
+| `default_main_supplier` | Fallback supplier-match choice for older data |
+| `legacy_picture_files` | Filename tuple for unresolved legacy bitmap indices; no files are opened |
+| `path_variables` | Optional common `PathVariables` policy |
+| `text_layout` | Optional common measurement service for calculated labels |
+
+Stored values win over fallbacks. Explicit unit/path overrides change only the
+detached output. `.layout` returns the supplied/default service on either
+context. `ExportContext.resolved(document, *, format=None)` returns an independent
+context with effective `units` and `project_dir`; other fields remain fallbacks.
+`format` may validate `dip`, `asc` or `dipxml`; there are no PCB destination
+subclasses. Use `dataclasses.replace()` to modify a resolved context.
 
 ### Font and layout services
 
@@ -969,14 +1047,15 @@ This operation does not snap components, route wires or follow moved pins.
 
 ```text
 read_source(path, *, format=None, family=None, report=None, label=None, **options) -> Document
-parse_source(data, *, format, family=None, report=None, label=None, **options) -> Document
+parse_source(data, *, format=None, family=None, report=None, label=None, **options) -> Document
 document.as_schematic(*, report=None, label=None) -> Document
+pcb_source.as_pcb(*, context=None, report=None, label=None) -> lib.pcb.Document
 ```
 
 `read_source()`/`parse_source()` expose ASC/XML syntax without normal
-semantic import. DCH already uses the shared model. `as_schematic()`
-normalizes a syntax view for semantic editing/conversion; on an existing shared
-model it returns an independent clone.
+semantic import. Binary DCH/DIP input already returns its family model.
+`as_schematic()` and `as_pcb()` import their family's syntax for editing; on an
+existing family model they return an independent clone.
 
 ```python
 from lib import read_source
@@ -1003,7 +1082,9 @@ context/report contract.
 `document.as_asc()` and `document.as_dchxml()` return independent output
 syntax documents. Both accept keyword `context=None`, `report=None`,
 `label=None` and `version` (the destination default when omitted).
-The resulting field structure is format-specific.
+PCB documents provide `as_asc()` and `as_dipxml()` with the same context/report/
+label/version conventions; PCB ASC also accepts `encoding`. The resulting field
+structure is format-specific.
 
 On an explicitly loaded ASC source view, `preserve=True` can retain syntax
 and whitespace. This is not binary-chunk preservation in the editable model.
@@ -1058,7 +1139,9 @@ register_writer(format, writer) -> None
 Duplicate names and invalid registrations raise `ValueError`.
 Registration extends file dispatch, not buffer parsing/serialization or
 capability declarations. Registered document representations pass through
-without schematic normalization.
+without schematic normalization. A custom file reader is selected directly by
+its registered extension or an explicit `format`; the library does not pre-read
+the file before calling it.
 
 ### Exceptions
 

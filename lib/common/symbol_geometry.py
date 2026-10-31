@@ -1,7 +1,7 @@
 """Modernize symbol drawings without coupling them to a document format."""
 import math
 
-from .geometry import ellipse_points
+from .geometry import ellipse_points, unequal_extents
 
 
 def expand_legacy_drawing(shape, *, orientation=0):
@@ -24,9 +24,8 @@ def expand_legacy_drawing(shape, *, orientation=0):
         for point in points[1:]:
             point.detach()
     elif kind in (6, 7) and len(points) >= 2:
-        first, last = (tuple(map(float, point.values)) for point in points[:2])
-        width, height = abs(last[0]-first[0]), abs(last[1]-first[1])
-        if abs(width-height) > .3:
+        first, last = (point.values for point in points[:2])
+        if unequal_extents(first, last, tolerance='.3'):
             for point in points:
                 point.detach()
             for point in ellipse_points(first, last, segments=30, closed=kind == 6):

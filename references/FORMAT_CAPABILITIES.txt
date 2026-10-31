@@ -141,7 +141,9 @@ Current classifications
 -----------------------
 route-modernization       info     Established route geometry/direction repair.
 bound-symbol-text         info     Materialized text follows its current field.
-unresolved-reference      warning  Identity remains unresolved and editable.
+unresolved-reference      info/warning Identity remains unresolved and editable;
+                                   expected unavailable targets are info, other
+                                   unresolved constraints remain warnings.
 route-normalization-deferred warning Unknown/inconsistent routing constraints;
                                    retained source geometry needs investigation.
 import-diagnostic         warning  Other retained input uncertainty.
@@ -151,7 +153,8 @@ schema-version            info     Selecting a supported earlier output schema;
 pad-public-ids            info     Resolved targets survive positional rekeying.
 schematic-angle-normalization info Angles normalize and round to quarter turns;
                                    current authoring angles remain unchanged.
-empty-pad-shape           info     Empty unspecified shape becomes numeric -1.
+empty-pad-shape           info     Import normalizes unnamed XML main/terminal
+                                   shapes to their current numeric meanings.
 dch-compatibility-range   info     Earlier normalized drawing coordinates use
                                    the binary writer's bounded numeric range;
                                    current physical geometry is retained.
@@ -184,12 +187,20 @@ metadata/resource rules   warning  Definition fields or unused resources omitted
                                    proof that every definition fact regenerates.
 supplier-source-locator   warning  Stored supplier source locator is omitted.
 supplier-quotes           warning  Saved quantity/price rows are omitted.
+empty-library-path        warning  XML omits paths on an empty library slot.
+unattached-model-path     warning  XML omits a slot's independent 3D model path.
 supplier-preference       info     XML omits a cached preferred-supplier match.
 supplier-preference-default info   A missing old match flag uses an export default.
 pad-standard-orientation  info     ASC derives its Standard value from angle
                                    and retains explicit pad geometry.
 pad-standard-style        info     XML reconstructs a differing standard-pad
                                    selection from explicit style geometry.
+static-via-style          info/warning PCB import resolves geometry from its
+                                   selected via style; export warns about
+                                   conflicting individual pad settings.
+xml-via-pad-initialization info    XML via pads instantiate from placement rows.
+xml-via-pad-data          warning  XML initialization replaces independent pad
+                                   labels, placement and template-only options.
 page-title-blocks         warning  ASC omits saved title-grid definitions.
 generated-marking-attributes warning XML currently omits individual generated
                                    label attributes differing from reconstruction.
@@ -355,6 +366,9 @@ Settings.GridSize is the sole current grid spacing. DCH import resolves the
 serialized numerator/divisor and discards that redundant pair. The writer derives
 a bounded denominator to retain small-grid precision, then quantizes its numerator.
 Unedited and edited grids follow the same output calculation.
+Grid division uses an independent Decimal context, so the caller's precision or
+rounding settings do not change the imported spacing. Repeating a binary save
+stabilizes the same serialized ratio; no earlier rounded value is retained.
 Older inputs also receive current supplier fields, variable-path properties and
 ProjectDir during import, using declared defaults where no value was stored.
 These properties are searchable and editable before any export. An absent
@@ -381,11 +395,34 @@ provided TextLayout or the lazy Windows measurement backend. Stored font setting
 take precedence over defaults. No previous dimensions, origins or pin positions
 are retained after modernization.
 
+LEGACY_CURVE_PRECISION
+Older symbol/footprint and PCB board ellipse modernization compares authored box spans
+against the existing .3 shared-unit difference tolerance before floating-point
+contour sampling. Exact
+boundary decisions are stable under translation and normalized footprint scale;
+binary floating noise does not decide whether a curve becomes a polygon. This
+keeps the existing units and version gates. Controlled corner/scale sweeps around
+the tolerance expose the rule; retaining exact boundary geometry avoids incidental
+floating arithmetic changes without accumulating conversion drift. PCB board
+curve decisions and imported picture dimensions also remain independent of the
+caller's Decimal precision; picture dimensions use exact differences between
+their sorted corners.
+
 SCHEMATIC_DRAWING_DUPLICATES
 TextLine is the current drawing text and TextAngle is its current orientation.
+Sheet text has one current anchor. Import discards surplus sheet-text points
+after older geometry has selected that anchor; its text bounds are calculated
+from the retained position, angle and font settings. Empty geometry stays empty.
+The normalization is quiet information and applies to DCH, ASC and DCHXML alike.
+Public sheet-text fixtures with distinct extra points expose the normalization
+through canonical import/reexport and subsequent stable point counts.
 Modernized imports discard redundant Name/Orientation fields and earlier first
 lines. Writers regenerate them. Generated-marking type tags are derived from
 current Type and MarkingGenerated, without an older competing Type occurrence.
+The placed DCH tag applies only to Type=10 with MarkingGenerated=true. Other
+drawing kinds keep their type even when that option is set; cached definitions
+use their ordinary type. Controlled public text fixtures varying those two fields
+and canonical binary saves expose this rule without source-history metadata.
 Default ASC compaction is the same for every import format; an explicit
 compact_inactive=False context retains representable inactive content.
 
@@ -440,13 +477,33 @@ Each quantity has one authoritative numeric value. The separate calculation
 value and source-biased binary arithmetic have been removed. Integers and
 decimal values remain supported; ordinary floating calculations use the current
 value. A uniform real-number type remains a separate simplification choice.
-DCH numbers have four decimal places; XML has
+DCH and DIP numbers have four decimal places; XML has
 explicit units and placement radians. Required quantization happens at output.
 Range/type errors fail. Decimal XML unit conversion preserves decimal precision,
-including half-grid coordinates. Component angles have one current degree value.
+including half-grid coordinates. Component angles use their family's domain:
+schematic placement degrees and PCB placement radians.
 Exact byte identity and numerical or text-layout agreement are separate checks;
 minor layout differences must not change identities, connections or accumulate
 through repeated conversions.
+
+The shared binary writer rounds once at the decimal 0.0001 step, using nearest
+ties to an even integer step. It does not convert decimal facts through a float
+before quantization. Python float inputs use their decimal spelling, consistent
+with model number construction. The caller's decimal precision and rounding
+mode do not select output. This is the library's rounding policy; storage
+precision is the format constraint. Half-step results can differ from a floating
+calculation by one stored step. Exact decimal projection avoids repeated bias
+when a half-step local frame is centered again after import. Source properties
+remain unchanged and no previous rounded value is kept.
+
+Decimal XML unit scaling uses a local nearest-even calculation with at least
+40 significant digits and 16 guard digits beyond the value's precision.
+Trailing zeros do not select another numeric policy. On import, a shorter scaled
+value is accepted only if converting it back exactly reproduces the incoming
+XML number. Otherwise the full scaled value remains. This removes recurring
+division tails without a tolerance, source history or a fixed precision cap on
+authored coordinates. Lengths, areas and axis reversal use the shared converter;
+ambient Decimal precision or rounding does not choose their interpretation.
 
 Footprint Points_New and current text angles are authoritative. Readers consume
 and discard redundant normalized coordinates and old text orientations after any
@@ -571,6 +628,101 @@ inherent inability of an ASC string to contain !. Other strings have separate
 reader rules; Datasheet does not receive this warning. The notice does not repeat
 asc-text-sanitization when a quote or line break has just become ! on that export.
 
+PCB_ASC_COMPONENT_HEADER
+PCB ASC Component.Name is a quoted string; the following RefDes is an unquoted
+text token. An empty RefDes omits that token. Numeric-looking names retain their
+exact spelling, including leading zeroes. Quote marks supplied at the RefDes
+position are literal name characters in the receiving application's import,
+rather than string delimiters to remove. This differs from the component name
+and from other document families' header rules.
+
+Output uses an unquoted RefDes. Parentheses, ordinary spaces, quote marks and
+line breaks cannot occupy that token literally: they become ! and produce an
+asc-token-sanitization warning. The editable source is unchanged. Explicit
+encoding applies to the token as well as quoted strings. A literal ! in either
+PCB component-header field produces asc-reader-text-normalization because the
+application reads it as a space. The library retains the literal !, consistent
+with the ASC receiver policy above. Positional component/pad connections remain
+independent of this name-spelling adaptation.
+
+An external derivation uses small ASC fixtures differing only in the Component
+header: an unquoted ordinary/numeric/empty RefDes, a quoted RefDes and literal
+delimiter characters. Import and export to DIPXML expose the resulting RefDes
+and distinguish its raw-token behavior from the quoted Name. Exporting a design
+with a parenthesized RefDes exposes the canonical ! substitution. These variants
+also distinguish preserved references from a change in displayed names. This
+procedure does not claim that every proposed variant has already been converted
+through the application.
+
+PCB_APPLICATION_PREFERENCES
+Settings.GridSnap, AssemblyWidth, CompOutlineWidth and CourtyardWidth are optional
+application-preference snapshots in PCB ASC and DIPXML. DIP does not serialize
+these four values. A DIP input therefore leaves them absent, without consulting
+the machine's installed preferences or inventing authored choices. Text output
+retains supplied values and leaves absent choices unspecified. Their absence in
+a library-generated text file can differ from a canonical application export,
+which may include that installation's current preferences.
+
+DIP output reports application-preferences as a warning when explicit choices
+are supplied, while retaining the authoring model. Reopening DIP uses the
+destination application's preferences. This boundary concerns default drawing
+widths and grid snapping, not existing geometry or its stored line widths.
+
+An external derivation changes each preference independently, saves DIP and text
+outputs, then reopens the DIP with different preferences or a clean installation.
+The changed text values, binary comparisons and receiving preferences distinguish
+an application setting from a stored design value. This procedure describes the
+observable route without claiming a new experiment was performed here.
+
+PCB_NET_ROUTING_PREFERENCES
+Net.Width and Net.Clearance are independent routing preferences retained by DIP
+and PCB ASC. DIPXML has no corresponding fields: its export reports
+net-route-preferences as a warning for supplied non-inherited values, and XML
+import uses the inherited -1 choice. Existing trace-point widths, coordinates,
+class rules and endpoint references are separate facts and remain represented.
+A large raw difference between a preference and -1 is not a changed trace width.
+
+XML also omits ActiveLine/ActivePoint routing UI selections, reported as
+active-route-selection information. These values are separate from committed
+trace geometry and its connections. Missing fields in one destination do not
+remove supplied values from the editable source.
+DIP stores these two integer choices in ActivePoint, ActiveLine order. ASC uses
+their named fields; the model exposes both by name, independently of wire order.
+An ordinary ASC fixture with distinct valid selections, saved as DIP and exported
+again as ASC, exposes the mapping. Changing one binary slot at a time and
+repeating that conversion distinguishes the import and export rules.
+
+An external derivation changes the net routing preferences while retaining
+explicit trace geometry, then compares DIP, ASC and DIPXML conversions. Inspect
+net attributes separately from each trace point's Width and coordinates. This
+distinguishes an omitted preference from changed copper. A routing selection
+can similarly be varied independently of the saved trace geometry. These are
+observable procedures, not claims of newly performed application experiments.
+
+PCB_ASC_LAYER_NAMES
+Copper-layer names in Board/Layers/Name are unquoted text tokens. An empty name
+has no token. The importer keeps numeric spelling, including leading zeroes,
+and treats quote marks as literal characters. Every ! in this position becomes
+a space, including ! inside quoted input. This rule is specific to copper-layer
+names; other Name records and the quoted Units selection keep their own rules.
+
+Export encodes ordinary spaces as ! without a loss notice because the layer
+reader reconstructs them. Literal authored ! produces layer-name-spelling:
+ASC cannot distinguish it from an encoded space. Parentheses, quotes and line
+breaks become ! and produce asc-token-sanitization. The selected encoding also
+applies to layer tokens. These changes affect the detached output spelling;
+the editable name and layer identity remain unchanged. Layer connections are
+written by identity and position, independently of this spelling adaptation.
+
+An external derivation compares small ASC files whose layer headers use Top,
+003, an empty token, Inner!!Layer!, and "Inner!!Layer!". Importing and converting
+them to DIPXML exposes the exact names, distinguishes literal quotes from
+delimiters and shows the ! substitution. A component/via linked to the renamed
+layer tests identity separately. Exporting layer names with ordinary spaces,
+literal ! and delimiters establishes the available output spellings. This is
+a reproducible procedure, not a claim that every variant was already converted
+through the application.
+
 TABLE_TEXT_VIEWS
 Cell.Text is the single authoritative editable string, including LF separators.
 ASC's modern line list takes precedence during import and becomes that string;
@@ -664,6 +816,9 @@ supplier, rather than an independently selected supplier. XML retains the chosen
 Supplier and omits this flag with supplier-preference information. The original
 cached bit is preserved in the shared model; reproducing it would require its
 earlier environment, but it is not needed to retain the supplier assignment.
+Cached ASC definitions also omit this match flag; placed ASC records retain it.
+The shared omission reporter applies the same warning/information distinction
+to each document family and destination, using affected field and quote paths.
 Before schema 44, no MainSupplier flag is saved. DCH/ASC export supplies
 False, or AscExportContext.default_main_supplier, for those absent flags and
 reports supplier-preference-default information. Existing explicit flags win.
@@ -686,7 +841,9 @@ ASC import/export. Embedded DCH footprints do not carry it.
 An owned Pattern may have an empty name; this does not remove its geometry,
 settings or pin-to-pad relationships. XML emits the complete definition under a
 generated style key, including an empty Name. Complete projected content controls
-sharing. Clearing a name does not detach pad identities or discard the record.
+sharing, including pad numbers and notes: equal physical geometry alone does not
+make these definitions interchangeable. Clearing a name does not detach pad
+identities or discard the record.
 When no real local pads exist, an ordinary Pin.Number remains a literal value;
 it does not create a missing link into an absent pad domain. Explicit unresolved
 public pad keys remain guarded references. A newly populated target domain needs
@@ -694,10 +851,20 @@ ordinary explicit binding before subsequent reference-driven output.
 
 EMPTY_PAD_SHAPE
 XML can contain an explicitly empty pad-shape label. The shared PadShape,
-PadShape_New or terminal Type retains that empty string. XML output preserves
-it. DCH and ASC require a number; export uses the established -1 fallback on a
-detached view and reports empty-pad-shape. An empty label does not identify an
-original numeric shape, so import does not invent that missing number.
+PadShape_New and terminal Type contain integers. Import normalizes an empty main
+stack label to5and an empty terminal label to-1, reporting empty-pad-shape as info.
+Fiducial means20;5is an unnamed main shape. XML output generates the corresponding
+empty labels naturally. Numeric aliases remain their supplied codes, including
+otherwise unnamed values; output may use a numeric spelling to retain them.
+An empty input does not reveal a previous numeric code, so none is reconstructed.
+No source label or export-only shape override is retained in the model.
+
+These conventions can be determined with small XML fixtures containing empty
+main/terminal labels, named Fiducial and numeric aliases. Import each with
+installed, licensed DipTrace and inspect the shape fields in its canonical ASC
+output. Repeat XML export/import to distinguish an unnamed current value from
+an earlier number omitted by an exporter. Numeric spellings also allow testing
+each code independently of its display name.
 
 PUBLIC_PAD_KEYS
 XML pad keys and positional pad numbers are distinct facts. Imported pad keys
@@ -814,6 +981,14 @@ remain errors. Export never repeats geometry migration, discovers companions or
 uses edit history to select a filename.
 
 REFERENCES_AND_INCOMPLETE_LINKS
+XML library groups accept an optional Enabled attribute, defaulting to true.
+Import removes inactive group records and clears membership in those known
+inactive groups, with local-group-normalization information. Active groups are
+compacted without changing their members or geometry. A key that never named
+a supplied group remains unresolved; it is not treated as an inactive group.
+PCB XML output also omits inactive, unreferenced local groups with that
+informational diagnostic on the detached export view.
+
 The graph owns identities and retains original literal keys and scoped unresolved
 values. Rebuild projects current indices and follows names by identity. Ambiguous
 or incompatible edits fail. StringNumber and RefDes express hierarchy connector
@@ -829,6 +1004,14 @@ unresolved-local-reference. This applies to library groups, drawing-to-pad links
 ordinary dimension targets, internal-connection pads and symbol pin assignments.
 There is one unresolved-key representation, including when copying an owned
 definition into a placed instance; keys are reference facts, not source history.
+
+XML_CACHED_SYMBOL_DRAWING_OPTIONS
+Schematic and PCB XML library definitions retain active symbol drawing geometry
+and text. XML has no cached ShowPart or MarkingGenerated field: non-default
+values produce a cached-drawing-flags warning and import with false defaults.
+Export leaves the current model unchanged. A cached drawing is not discarded
+because it has a generation flag. This differs from calculated markings on
+placed components, whose display geometry is regenerated from marking settings.
 Wire-to-wire joins
 resolve within their containing net. The redundant
 ConnectB occurrence can disagree with that identity; import preserves its saved
@@ -851,7 +1034,7 @@ Export with preserved one-point routes is not canonical topology repair or a
 promise of exact agreement with application output.
 
 DIMENSION_ATTACHMENT_SELECTORS
-Known XML Connected/Object/SubObject/Point fields are retained as typed facts.
+Footprint-local XML Connected/Object/SubObject/Point fields are typed facts.
 Ordinary pad, shape and hole attachments use SubObject; Object is unused and
 retained. XML public keys are mapped into the shared local identity graph.
 Polyline and polygon drawing anchors use zero-based point positions. Terminal
@@ -861,14 +1044,99 @@ selects the terminal center. Nonpolygon and nonpositive terminal anchors retain
 their literal anchor choice. These identities follow pad, terminal and point
 reordering across all three exports. Boundary pad/shape/hole slots are excluded.
 
-Invalid or unknown selectors retain their literal values and unresolved issues;
+Schematic invalid or unknown selectors retain literal values and unresolved issues;
 they do not make import fail. Known domains guard their own target collections,
 allowing unrelated structural edits. Missing XML object keys in an empty target
 collection remain unresolved; missing public keys in a nonempty local object
-space use the separate unresolved-key representation above. The syntax-level XML view
-binds ordinary targets and drawing points; terminal selectors remain unresolved
-there, scoped to their pad/style data. Unattached selectors retain their values
+space use the separate unresolved-key representation above. The schematic
+syntax-level XML view binds ordinary targets and drawing points; terminal selectors
+remain unresolved there, scoped to their pad/style data. Unattached selectors retain their values
 without target bindings. No coordinate repair or automatic detachment is applied.
+
+PCB import uses the same local selector conventions with its own verified
+attachment validation. Known invalid local targets become free coordinates,
+with dimension-attachment-normalization information; unusable radius dimensions
+can be removed by the validated loading rules. Unknown or unproved targets stay
+explicit, guarded issues. A board drawing with an unavailable vertex can retain
+its unresolved selector when no corresponding disconnection rule is established.
+Board dimensions have additional net, pour, outline, component-origin and panel
+domains; they do not reinterpret local terminal selectors as board attachments.
+Component, net, trace, board-drawing and pour selectors are resolved through
+their saved input keys before becoming current identities. They are not assumed
+to equal input collection positions. Footprint-local positions have their own
+boundary maps. Missing keys do not select unrelated objects at valid positions;
+removal or compaction of an earlier object cannot change a surviving target.
+The editable model exposes current selector views derived from its links, without
+retaining the consumed saved keys. XML maps its footprint-local public member
+keys into those local maps while retaining board object keys until binding.
+
+This mapping can be derived from complete fixtures with nonconsecutive object
+and trace keys, dimensions selecting each supported domain, and independently
+reordered records. Canonical conversion exposes whether targets follow keys or
+positions. Include a missing key equal to a valid collection position, an inactive
+object, and a removed short trace before a retained target to distinguish correct
+remapping from accidental rebinding. No source history is needed for these rules.
+For PCB XML output, ordinary local members use public object keys, while terminal
+owners still use real-pad ordinals. Reordering pads, terminals and polygon points
+updates those selectors by identity without replacing their authored geometry.
+
+PCB XML omits calculated marking text from placed physical drawing records.
+If a local or board dimension attaches to such a drawing, export retains its
+endpoint coordinates, writes an unattached endpoint and warns with
+dimension-marking-attachment. The source attachment and drawing remain editable.
+Only text with MarkingGenerated=true triggers this conversion; literal text and
+non-text drawings retain their attachments. DIP and ASC keep the saved drawing
+and dimension attachment. Generated-marking geometry omission itself remains
+information, separately from the loss of a dimension's attachment relationship.
+
+PCB_LEGACY_GENERATED_MARKING_IMPORT
+Before PCB schema47, placed drawings tagged as calculated marking placeholders
+are removed during import modernization. Current component/global marking
+settings provide their replacement; the old rendering is not ordinary authored
+text. The legacy-generated-marking diagnostic is information. Literal text,
+including identical captions, is retained. Cached definitions have no placed
+placeholder tag, and current representations retain their independent marking
+data. This is a format condition, without name or caption matching.
+
+An external derivation varies the generated tag independently of a literal text
+record in copied older supported designs, then compares canonical import and
+readable reexports. Controlled fixtures at the46/47 boundary distinguish the
+gate, while identical text distinguishes tag-based normalization from caption
+heuristics. Older binary fixtures can be read by current licensed software;
+producing these observations does not require an older application. This is a
+concrete derivation route, not a claim of a new canonical conversion experiment.
+
+PCB_CALCULATED_MARKING_GEOMETRY
+Placed components may have marking settings without calculated text drawings,
+notably after XML import. DIP and ASC export construct absent drawings on the
+detached output view. Visibility, side, explicit or automatic placement, named
+text and ordered custom fields come from current marking data. Supplied drawings
+and their dimension attachments retain their identities; literal bound text is
+independent. Unplaced library definitions are not given placement captions.
+XML continues to carry marking settings without these calculated drawings.
+
+Generation uses the shared text services and stored global or component font
+settings. ExportContext.text_layout can supply system-font measurements; vector
+layout is self-contained. When an optional drawing needs unavailable font
+measurements, export retains the settings and reports
+calculated-marking-font-resources as info, allowing the receiving editor to
+reconstruct it. Successful construction reports calculated-marking-geometry as
+info. Neither path changes the author's document or invents measurements.
+
+For absent global settings, library output defaults show only the silk RefDes
+and use automatic alignment. Stored choices, including zero-valued choices,
+take precedence. These are deterministic library fallbacks, not a claim about
+installation preferences. Visible empty values remain visible labels and can
+occupy an automatic placement slot.
+
+The behavior is externally derivable using named and custom-field text fixtures:
+vary visibility, alignment, body dimensions, side, angle and font, then compare
+calculated caption records in canonical ASC conversions. Distinct text reveals
+role priority and explicit/automatic ordering; blank visible fields reveal
+occupied slots. Coordinate differences expose edge anchors and stacking ratios.
+An angle sweep with a following automatic caption exposes edge-choice changes.
+Supplied literal/generated drawings and attached dimensions distinguish missing
+geometry reconstruction from replacing existing authored selections.
 
 SCHEMATIC_ANGLES
 The model accepts finite angles beyond a full turn. All schematic writers
@@ -891,19 +1159,77 @@ guards; their target semantics cannot be inferred. Unrecognized named XML enum
 labels and unsupported public fields still need an explicit mapping. Missing
 nonlocal styles or required resource definitions remain import errors.
 
-Future PCB candidate: POUR_FILL_PRESENCE
---------------------------------------
+XML_LIBRARY_FONT_STROKES
+-----------------------
+Library text and dimension strokes use physical lengths from application
+5.3.5.0 onward. Earlier positive strokes use the unscaled value; the standard
+negative presets remain -1/-2/-3. Other older negative choices normalize to a
+supported preset after unit conversion. Component and pattern library headers
+supply their respective versions and units, independently of the outer document.
+Import resolves these choices into one current stroke value; export applies the
+selected XML dialect. No source-era flag is stored in the model.
 
-Proposed model: filled state plus optional fill geometry. Missing calculated
-geometry uses None, without an extra availability flag. A known empty collection
-can differ from absent geometry where the domain requires that distinction.
-Same-format output should retain 'filled, fill data absent' where permitted.
-If another destination requires geometry for filled state, export as unfilled
-on a clone and report the conversion. Otherwise keep the original combination.
-Omitting reconstructible calculated fill is informational. Losing a pour
-definition or authored clearance settings is a warning, separate from its fill
-cache. Exact PCB adapter rules remain to be established; this is not a verified
-claim about current PCB/XML capacities.
+The distinction can be established with ordinary text/pin/dimension fixtures:
+choose a positive stroke and a negative preset, convert library data in mm, mil
+and inch, and compare the values before/after the version boundary. Nested
+libraries with different units distinguish the owning scale. Controlled copies
+that change only the library Version header let current licensed DipTrace expose
+the earlier loading convention through canonical ASC/XML conversions; this does
+not require installing each historical application. Portable fixtures
+exercise this boundary and old/current output against the same current values.
+
+POUR_FILL_PRESENCE
+-------------------------------------------
+
+CopperPour.Poured is the filled choice. Optional Fill owns supplied calculated
+geometry: absent Fill means unavailable, while an empty Fill is an available
+empty dataset. Neither state calculates copper or changes the authored boundary.
+ASC and DIPXML can retain Poured without Fill. DIP requires its saved filled
+choice to have a Fill dataset: export projects missing Fill as unfilled and
+reports pour-fill-unavailable as info. The source model remains unchanged.
+DIPXML omits supplied calculated Fill with info; boundary and settings remain.
+This reconstructable omission is separate from losing an authored pour definition
+or settings, which requires a warning.
+
+POUR_REGION_CLASSIFICATION
+--------------------------------------------------
+
+Fill/Regions is an optional calculated classification dataset. Its Region records
+own nonnegative Number labels unique within that Fill. Fill primitives reference
+these identities through nullable Region; read-only RegionId derives the current
+Number or -1. The groups do not reference individual polygon contours and do not
+calculate or validate copper geometry.
+
+Absent Regions means classification is unavailable. Present, empty Regions means
+classification is available with no assigned groups. Present Regions can also
+contain groups alongside unassigned primitives. Thus a primitive's Region=None
+does not by itself imply unavailable classification. Editing a group Number
+updates every member's output label. Cross-fill references and duplicate labels
+are rejected atomically. Referenced groups require explicit disconnection before
+removal, following the ordinary relationship-removal policy.
+
+DIP and ASC import consume their saved classification-validity indication.
+Valid classification becomes Regions and member references; negative labels
+become unassigned members. Invalid classification becomes absent Regions, without
+keeping stale positive labels. Existing binary import gates apply, including
+classification invalidation before schema 38. Geometry, settings and Poured
+remain; pour-regions-unavailable is info, since a geometric editor can reconstruct
+classification. The library does not perform that calculation.
+
+DIP/ASC output derives validity from Regions presence, independently of whether
+every primitive is assigned. It writes each member's current Number or -1.
+Available empty and available partly unassigned classifications remain distinct
+from unavailable classification. Unused Region labels have no independent record
+in these formats: unused-pour-regions warns when omitting them. DIPXML has no Fill
+classification records; its calculated-fill omission covers the whole dataset.
+
+External derivation: small filled-pour fixtures exported to ASC expose primitive
+group labels and Regions_Counted together. Controlled ASC copies can vary only
+the validity indication or labels, then be reopened and converted using licensed
+DipTrace. Available unassigned labels, invalid stale labels, grouping independent
+of polygon order, and binary revision behavior can be distinguished this way.
+The portable tests additionally construct these variants directly and verify
+reference edits, raw output validity and all supported binary output profiles.
 
 Add a rule
 ----------
@@ -913,3 +1239,905 @@ capacity, same-format behavior, export precondition/action, calculated-data
 availability, required context, info/warning/error behavior, tests and open limits.
 Keep format inability distinct from an unfinished adapter. Never weaken the
 shared model because another export cannot carry a source variant.
+
+XML_PAD_HOLE_SETTINGS
+---------------------
+Physical pad-style XML can carry HoleType, Hole and HoleH even for a surface
+style or round hole. These are independent stored settings; surface/round mode
+does not erase them in the model. Writers include both dimensions, avoiding
+unnecessary loss when moving between formats. A missing XML HoleH inherits Hole;
+an explicitly supplied zero remains zero. Units scale both physical lengths.
+
+An external check can use an ordinary XML pad style with distinct Hole/HoleH
+values, attach it to a pattern pad and convert to ASC. Surface and round variants
+expose the retained settings there. Removing HoleH from the XML distinguishes
+the inherited height from an explicit zero. No external file lookup is needed.
+
+XML_PAD_INACTIVE_GEOMETRY
+-------------------------
+Pad-style MainStack can retain Corner, XOff, YOff and Points independently of
+the selected Shape and surface/through mode. Terminal styles likewise retain
+Corner and Points independently of their selected Shape. These settings can
+become relevant after a later edit; XML output preserves supplied values rather
+than clearing them when another geometry is selected. Missing corner/offset
+attributes mean zero, and missing point collections mean no supplied vertices.
+No source backup or additional availability flag is involved.
+
+The shared writer applies this rule to default and individual styles in both
+schematic and PCB XML. Active geometry and the stored shape selection remain
+unchanged. Empty collections and inactive zero settings need no XML spelling.
+
+An external derivation can start with an XML style using Ellipse, nonzero Corner
+and offsets, and distinct Points/Item vertices. Attach it to a pattern pad and
+convert to ASC with installed, licensed DipTrace to inspect the independent
+fields. Repeat with Surface and Through styles, default and individual pads,
+and terminal styles. Changing only Shape to Rectangle or Polygon exposes the
+previously inactive settings without supplying them again. Ordinary ASC fields
+also allow the inverse conversion to be checked. These are concrete measurement
+procedures, not a claim that every controlled variant has been run.
+
+XML_LIBRARY_SUBFOLDERS
+---------------------
+Component-library XML carries folder labels as ordered SubFolders/Item text and
+each symbol's selection as SubFolderIndex. These map to
+CacheLib/Subfolders/Folder.Name and Part.SubfolderIndex. Folder names remain text,
+including numeric-looking labels, empty labels and duplicates. A missing symbol
+selection defaults to -1; nonnegative indices remain explicit values, including
+when the XML omits its folder list. No external library lookup supplies missing names.
+The shared XML library mapping preserves both labels and selections. Empty folder
+collections need no output element, and output does not alter the source model.
+
+An external check can create two component-library folders, assign a symbol to
+the second and export XML. Renaming that folder changes its Item text while the
+symbol's zero-based SubFolderIndex remains 1. Converting the library to ASC
+exposes the same labels and index.
+
+SCHEMATIC_BINARY_EMPTY_LIBRARY_SLOTS
+----------------------------------
+The shared library-slot model allows no definitions, but current schematic DCH
+requires at least one definition in every stored slot. DCH schema45 and later
+input rejects a slot with no definitions; every supported output revision has
+the same requirement. Add a definition or explicitly remove an unused slot
+before writing. Export does not invent a symbol or footprint, discard a slot's
+references or change the authoring model to meet this requirement.
+
+Earlier DCH schemas34..44 can contain empty slots. Import keeps their position
+but clears the unused trailing literal library path, reporting the quiet info
+unused-library-path. No definition owns that path. This normalization is
+schematic-specific; the shared model and other families keep their own rules.
+ASC likewise needs nonempty cached definitions. XML can represent an empty
+entry with the path omissions described below.
+
+Controlled cache sections with zero versus one definition and distinct following
+path/project fields provide an external check: canonical loading/conversion can
+distinguish the earlier empty-slot framing from the current definition-owned
+paths. This is a discovery procedure, not a claim of a performed experiment.
+
+XML_EMPTY_LIBRARY_SLOTS
+-----------------------
+An empty CacheLib/Slots/Slot remains an empty XML Component entry, without a
+synthetic Part or physical definition. XML import accepts that entry; a placed
+component referring to a missing Part remains an import error.
+
+Slot.LibPath and Slot.VariablePath normally project to a Part's LibPath/Path
+and LibPath/Var. Without a definition there is no XML owner for these paths;
+nonempty values produce empty-library-path warnings. An independent
+Slot.Model3DFile_Variable likewise has no XML field and produces
+unattached-model-path. Physical definitions retain their own model paths.
+Empty metadata is quiet. These exports leave the authoring model unchanged.
+The omitted paths cannot be reconstructed from that XML alone.
+
+The capacity can be determined with an empty cached component carrying library
+and 3D model paths, contrasted with a component containing one Part and a
+physical definition with its own model path. Canonical XML conversion exposes
+the empty Component, the Part-owned library paths and the physical model path.
+Reopening the XML distinguishes retained metadata from omitted metadata.
+
+PCB_PLACEMENT_COORDINATES
+-------------------------
+The PCB model's placed physical coordinates describe the actual
+placement side. Cached footprint definitions retain their library coordinates.
+XML separates reusable library geometry from placement, so its reader reflects
+bottom-side physical data into the placed frame. Placement X/Y, angle and the
+independent Flip/HorzFlip choices remain separate facts; a flip flag is not used
+as a substitute for Side.
+
+The reflection covers pad centers, copper offsets, polygon points and angles;
+terminal geometry; paste rectangles; drawing points, text horizontal alignment
+and angle; hole centers; local dimension X coordinates; and the footprint origin.
+It retains record identities and ordering. Default-pad settings, marking settings
+and 3D model data remain in their respective scopes. XML's Y-axis/unit conversion
+is a separate mapping.
+
+XML output applies the inverse view to physical styles and placement options.
+Standalone physical projection helpers use that same view. No source fields,
+relationships or caches are mutated, including when projection fails. Ordinary
+frame conversion is quiet; it is not data loss or a repair diagnostic. Nominal
+size and recentering use the separate mapping below.
+
+An external derivation uses an asymmetric footprint with separately numbered
+pads, a nonzero copper offset, a polygon terminal, a text anchor, a local hole,
+a dimension and paste rectangles. Place it on each side and compare canonical
+DIP/ASC placed coordinates with XML's physical style and placement options.
+Vary Side, Flip and HorzFlip separately, and reopen controlled XML copies to
+distinguish side installation from stored editor choices. Include a cached
+definition to establish which geometry remains independent of the placement.
+
+PCB_LEGACY_TEXT_PLACEMENT
+-------------------------
+Before DIP schema47, footprint text uses a normalized box and quarter-turn
+choice. Bottom-side placement selects the opposite horizontal box corner as
+its current text anchor. This is independent of the saved Flip choice. Cached
+footprint definitions retain the top-side corner selection. Other drawings do
+not acquire an additional reflection from this text-only conversion.
+
+Older component marking slots resolve in saved order. When both slots select
+the same label, a later explicit edge choice can replace an earlier explicit
+position. The current model contains one named label placement, with its normal
+alignment and coordinate fields; it does not retain competing historical slots.
+
+To observe these rules, convert an asymmetric older text footprint at each
+quarter turn on both sides, varying Side and Flip separately. Compare its
+normalized controls with ASC/XML text anchors and include a cached definition.
+For marking precedence, select the same category in both old slots, give one a
+distinct shift and the other an explicit edge, then swap their order and compare
+the named fields produced by ordinary conversions. These are external discovery
+procedures; they do not imply that every fixture combination was measured.
+
+PCB_FOOTPRINT_FRAMES
+--------------------
+PCB import derives placed footprint nominal sizes and local frames from current
+physical geometry. Bounds include main pad copper, non-text footprint drawings
+and enabled mounting-hole outer diameters. Text, stroke width, terminal extensions
+and ordinary pad drills do not enlarge this body envelope. Unknown or empty
+copper outlines contribute no envelope. A zero or empty nominal extent uses
+0.001 shared length units.
+
+Recentering translates active physical anchors, the ordinary footprint origin,
+local dimension coordinates and explicitly positioned component/user markings.
+It compensates component placement so board geometry stays in place. Common or
+automatic marking positions and 3D offsets remain independent. Mounting holes
+and static vias retain their initialized zero independent origin. Every nonzero
+translation is compensated, including sub-display-precision offsets; no renderer
+rounding cutoff is used to move design geometry.
+
+Angular bounds use reflection-consistent rotation factors: equivalent reflected
+angles share one reduced magnitude and opposite sine signs. Exact quarter turns
+keep integer rotation matrices; nearby continuous angles are not quantized to
+those turns. Coordinate reflection retains Decimal values without ambient
+precision loss. These are calculation rules, not extra authored model fields.
+
+Binary output keeps an already representable centered frame. Where rounding
+would change that frame, it expresses local coordinates around an authored
+origin, or another current physical anchor if the origin exceeds the destination
+range. Placement compensation uses the destination's rounded component angle.
+Loading reconstructs the centered model without retaining an earlier wire frame.
+This prevents repeated rounding and recentering from walking a rotated component
+across the board. Explicit local markings and dimensions use the same translation;
+net identities and existing board traces stay independent. The output-only
+adaptation emits binary-footprint-frame info. Normal scalar/angle precision limits
+still apply; this does not promise arbitrary source-byte reconstruction.
+
+Common fiducial visibility uses the stored ShowCompFiducials choice, falling back
+to ImportContext.show_component_fiducials (True). Individual Show/Hide choices
+override Common. A standalone fiducial contributes its own physical geometry.
+The resolved common setting remains editable model data so output does not
+silently select another loading environment.
+
+XML first constructs a placed physical template frame, without altering cached
+definitions or incoming placement/marking coordinates. Actual placement-side and
+per-component settings are then installed. Shared finalization runs after via
+styles supply physical sizes and before validating Standard pad declarations.
+Export recalculates the same derived frame on a detached view after data edits;
+ordinary editing does not require a manual rebuild.
+
+An XML output style uses the common visibility frame at construction. Its
+placement and explicit marking coordinates compensate that change, leaving the
+individual Show/Hide choice intact. Final import then restores the component's
+own frame. This also preserves board positions when the individual choice differs
+from the common setting; writing an individually centered style with unchanged
+placement coordinates would otherwise lose its construction displacement.
+
+The external derivation uses asymmetric main copper, remote text, wide strokes,
+a mounting hole and a dimension. Canonical conversion exposes changes to nominal
+size, origin, local anchors and placement. Vary fiducial visibility and explicit
+versus automatic marking alignment separately. Noncentral XML templates with
+supplied placement coordinates distinguish construction from finalization.
+Physical pad positions and repeated conversions distinguish stable normalization
+from accumulated movement. Analytic shape bounds use ordinary geometry rather
+than a renderer's sampled outline approximation.
+
+PCB_UNAVAILABLE_COPPER_GEOMETRY
+-------------------------------
+Placed PCB pad width and height can independently be None when physical copper
+geometry is unavailable. There is no second availability flag or retained source
+marker. A selected via style or an explicit edit can supply the missing values;
+removing a style retains the latest materialized geometry. Unavailable copper
+does not contribute a body envelope; identities, positions and connections stay
+available for inspection and editing.
+
+Adapters consume the negative-one scalar marker and generate it again where the
+destination requires a numerical field. Recognition uses the destination scalar's
+binary64 boundary, including XML unit conversion, without a general negative-size
+clamp. Import/export reports this equivalent representation as information.
+Shared library-footprint constraints remain separate from nullable placed PCB
+geometry. The observable route is an XML via placement without a selected style,
+contrasted with the same placement selecting a known size/hole style; canonical
+exports expose constructor dimensions and style-supplied physical geometry.
+
+PCB_OBJECT_CLASSIFICATION
+--------------------------
+Current physical content determines standalone PCB classifications. One ordinary
+pad becomes Pad (retaining an existing Via classification); one fiducial main
+shape becomes Fiducial; one enabled mounting hole becomes MtHole. Text does not
+prevent these classifications, while additional non-text physical objects do.
+Incompatible Pad/MtHole/Via classifications become Free. Other compound types
+are retained rather than arbitrarily becoming Free.
+
+Import applies this rule before binding the editable model. Export applies it
+to the detached view using normal model edits, including automatic reference
+ownership updates. Adding non-text geometry to a selected via can therefore
+produce a Free object without losing its geometry, connections or style reference.
+Its dimensions become independent of the selected via style. Removing that
+geometry later does not restore a remembered historical Via classification.
+Classification changes report standalone-object-normalization as information.
+
+MtHole, Via and Fiducial initialize named and custom component marking Show
+choices to Hide. Changed import choices are normalization information. Export
+reports standalone-marking-visibility as a warning if current choices would be
+lost, while retaining text and relative placements. The authoring model remains
+unchanged. A concrete observable derivation varies pad/hole/drawing counts and
+text versus non-text drawings in controlled public text inputs, then compares
+canonical classifications, marking choices, geometry and endpoint identities.
+
+PCB_STANDALONE_OBJECT_DATA
+--------------------------
+Canonical loading initializes component-only settings on mounting holes and
+static vias. Their footprint origin becomes zero; hierarchy paths, assembly
+exclusions and authored internal pad-pair definitions clear. A via additionally
+has no 3D attachment: file paths, transforms and generation settings reset to
+the shared model's empty-attachment defaults. A mounting hole retains its 3D
+attachment. Ordinary components and independent cached definitions retain these
+facts. Do not generalize this rule to every standalone pad or fiducial.
+
+The shared importer performs this initialization before relationship binding.
+XML also applies its construction rule before subsequent object classification
+and side conversion; a later change of classification does not restore data
+already ignored during that construction. Changed input reports
+standalone-object-data as info. No obsolete values remain as source backups.
+Empty 3D attachment uses the library's shared constructor defaults rather than
+unavailable renderer or resource state.
+
+The editable model can still contain independent values in these fields. Export
+warns with standalone-object-data when a receiving editor will initialize them.
+These fields may be serialized, but reopening does not preserve those settings
+for the special object. Export does not change the authoring model. Authored
+pad geometry, connectivity and independent flip/placement choices remain.
+
+An external derivation creates a one-pad via and a mounting-hole layout with
+distinct origin coordinates, assembly choices, hierarchy/pad-pair entries and
+3D file/transform settings in controlled ASC/XML inputs. Canonical load/save and
+text exports expose which fields initialize and distinguish the hole's retained
+3D attachment from the via's empty one. Include an ordinary component and a
+cached definition as independent controls. A declared XML via with several
+physical objects distinguishes construction from subsequent classification.
+
+PCB_XML_PAD_INHERITANCE
+-----------------------
+An ordinary placed XML pad with no DefStyle declaration infers Standard from
+its current physical geometry, applicable mask/paste settings and terminals.
+Inference occurs after placed-side installation and uses the same default-style
+comparison as ordinary import validation. Only supplied placement pad rows
+participate; an unlisted pad keeps its template declaration. A fiducial pad
+does not use this inference. Resolving an omitted declaration is quiet.
+
+An explicit placement declaration takes priority over inference. Subsequent
+common import validation can still clear a contradictory Standard=True. Selected
+via geometry is installed before this validation, so temporary constructor or
+earlier local dimensions do not incorrectly clear a valid declaration. Vias
+skip the XML inference step: omission keeps their constructor's custom status.
+Separate cached definitions retain their own style declaration.
+
+The current XML dialect writes DefStyle on every placement pad as well as on
+physical definitions. Earlier supported dialects omit it. They can change an
+independent custom choice on an ordinary pad whose settings equal the defaults;
+via pads initialize as custom instead. Export reports pad-style-inheritance
+as a warning only when those receiving rules change the current selection.
+Geometry is retained and the source model is unchanged. Style-key separation
+still preserves independent cached definitions; it does not prevent a placed
+pad's geometry-based inference.
+
+To derive this rule, use equal default/individual physical styles with a custom
+declaration, then vary the placement's DefStyle between omitted, Y and N. Reopen
+and convert to ASC to inspect Standard. Repeat with an independent mask override,
+a fiducial pad, an unlisted pad and a Via placement. Canonical exports in the
+selected XML versions expose when the explicit placement field is available.
+Distinct saved via dimensions and selected style dimensions establish that
+style installation precedes the common status check.
+
+PCB_NEW_COMPONENT_LINKAGE
+-------------------------
+A newly authored PCB component starts with HiddenId=-1 and no hierarchy steps.
+Identifier zero is a valid schematic update key, so it must not imply an initial
+association for a component created without a schematic. Importing an explicitly
+supplied key, including zero, retains it. No additional linked/unlinked flag is
+needed; export represents the same association in the destination's fields.
+
+This convention can be derived by placing a component directly in a new PCB,
+then saving and converting to ASC/XML without importing a schematic. Inspect
+HiddenId/UpdateId and HierarchyPath, and compare with a component transferred
+from a schematic whose persistent identifier is zero.
+
+PCB_ASC_DRAWING_ANGLE
+---------------------
+Current PCB ASC imports TextAngle as the authoritative board-drawing angle.
+When it is absent, the integer Orientation supplies the numeric angle directly;
+when both are absent, the angle is zero. This fallback does not multiply by a
+quarter turn or transform existing point geometry. The editable model retains
+only TextAngle; output derives the redundant compatibility Orientation.
+
+This mapping can be derived using a current ASC text drawing with distinct
+TextAngle and Orientation values. Remove TextAngle, reopen and export, then
+inspect the resulting TextAngle. Repeat with an Orientation value such as 1
+that distinguishes direct numeric use from quarter-turn conversion, and with
+both fields omitted. Existing point coordinates provide the geometry control.
+
+PCB_XML_BOARD_DRAWING_DOMAINS
+-----------------------------
+XML emits board-drawing font style only for ordinary text (Type 6). FontName
+and TextLines belong to the text-bearing kinds 6 and 10. Picture alignment and
+image settings belong to pictures (Type 7); ordinary geometric drawings do not
+acquire font or picture content from inactive binary slots. The output leaves
+those source values unchanged and does not strip characters from authored text.
+XML-invalid characters in active text remain errors. Omission of unused fields
+is an ordinary projection of the current drawing, without a loss warning.
+
+An observable derivation varies a drawing's kind while keeping distinct font,
+text and picture settings in controlled ASC/DIP inputs. Canonical XML exports
+expose which fields each kind supplies. Include separate text and picture
+controls to distinguish meaningful content from inactive properties. Numeric
+kind 10 retains its text body and TextAlign without ordinary text styling.
+
+PCB_STATIC_VIA_STYLES
+--------------------
+The PCB adapter resolves an active static via's physical geometry
+from its valid selected ViaStyle during DIP, ASC and DIPXML import. This sets
+the pad's circular copper size, circular hole, zero corner radius and shape offsets;
+the style's copper span supplies its BlindLayer exclusions. Through vias have
+no excluded copper layers. The footprint's size fields follow the style size.
+This refresh retains pad identity, connections, position, labels, angle, mask/paste
+and thermal settings. Ordinary pads and vias without a selected style do not
+use this normalization. No previous geometry is kept as an alternate truth.
+
+Import reports changed geometry as static-via-style info. In the editable model,
+the component's via-style relationship projects Size into the pad's width/height
+and the footprint's four size fields, and HoleSize into the pad's hole dimensions.
+These managed values follow style edits and retargeting automatically. Its
+BlindLayer rows likewise follow the selected span and copper-stack ordering.
+Rows retain their identities while their excluded layers remain applicable.
+Edit the style to change controlled data; independent contradictory assignments
+are rejected. Removing a derived row that has an external user also fails before
+the span changes. Changing type or disabling the component releases the
+projections. Removing the style leaves the latest geometry and layer rows as
+independent data; reactivation restores the projections. Invalid transitions
+fail atomically, without requiring a rebuild. Ordinary pad layer choices remain
+independent. Existing constraints on deleting referenced layers still apply.
+
+Export retains a static-via-style warning for contradictory internally assembled
+content that the receiving editor would replace. Normal model operations prevent
+those contradictions. The authoring model remains unchanged by export.
+An explicit XML PatternStyle does not prevent this selected-style refresh.
+
+An XML via supplied by its ViaStyle without a nonempty PatternStyle has Through
+mounting (Mounting=0). An empty PatternStyle is equivalent to omission. A nonempty
+style retains its own Mounting and LockTypeChange; cached definitions remain
+independent. Compact XML omits a physical style only when its implicit defaults
+reproduce the current physical data. Other mounting choices or a type lock
+therefore require an explicit style. This can be derived by importing small
+XML via fixtures with omitted/empty style keys and contrasting them with explicit
+None, Through, SMD or Mixed mounting and Y/N type locks, then comparing ordinary
+ASC/XML conversions. Unknown nonempty styles still fail to resolve.
+
+XML physical library patterns use the shared pattern-type vocabulary (Free
+through IPC-7351), separately from PCB placement types such as Pad, MtHole, Via
+and Fiducial. A placed object's PCB-only kind projects to a Free physical style;
+its component Type retains the classification. This equivalent projection is
+xml-physical-pattern-type info. An unplaced physical definition has no component
+Type to retain that kind and produces a warning instead. Physical data and
+explicit LockProperties remain. Canonical XML exports may lock these generated
+styles; the library retains the supplied lock choice because XML can express it
+independently. Import does not change explicit lock settings merely to match a
+generated companion. Compare ordinary ASC/XML exports of controlled standalone
+objects, then vary their physical styles' LockTypeChange independently of their
+placements' Type to derive both the vocabulary boundary and the retained data.
+
+The rule can be derived with a small via board by assigning distinct copper
+and drill dimensions to the selected style and its placed pad, saving controlled
+DIP/ASC/XML inputs and reopening them before canonical conversion. Varying pad
+shape, angle and offsets independently identifies the affected fields. Contrasting
+a through style with an inner-layer span identifies the excluded layers, while
+independent mask and thermal edits distinguish the options which remain local.
+
+Cached footprint origin-display choices and Model3D.AutoColor are independent
+settings, including in an empty named or unnamed footprint. XML carries them in
+Origin and Model3D attributes. Generated style sharing must account for these
+settings as well as geometry; equal geometry alone does not justify combining
+different definitions. Import and export retain the supplied choices. A
+canonical conversion can change these attributes while building shared styles;
+that does not establish a format limitation or justify discarding representable
+values. Derive their independence with two equal footprints whose Cross, Circle,
+Common, Courtyard or AutoColor differs, inspecting the public attributes and
+style links before and after conversion. Empty footprints provide a separate
+control, without assuming that an empty name means an absent definition.
+
+Symbol custom fields and footprint-template custom fields are separate ordered
+lists. XML carries both under their owning Part/AddFields and Pattern/AddFields;
+neither list supplies a replacement for the other. Field names, values and
+text/link types participate in physical-style equality. Cached and placed
+footprint classifications likewise remain independent. A canonical XML export
+may use symbol fields in a generated physical style or share a placement's
+classified style with a cached footprint. Keep the original independent data
+where XML can express it. Controlled equal-geometry definitions with different
+custom fields or classifications, and distinct placed overrides, expose these
+namespaces through ordinary ASC/XML conversion and their explicit style links.
+
+XML via-pad initialization is separate from that selected-style refresh. Pads
+come from ordered placement rows even when PatternStyle supplies a physical
+template. Each receives a generated StringNumber starting at "1", a blank Name,
+zero X/Y and PadAngle, and default locking, side, group, corner and contour data.
+Placement keys bind net/other references before regeneration; they are not
+retained as a second identity. A key is optional for an unconnected pad.
+Duplicate supplied keys remain errors. Independent cached definitions remain
+independent of the new placed pads.
+
+Placement NetId, InternalConnection, mask/paste, layer and thermal options still
+apply. The selected via style subsequently supplies the circular physical size
+and span described above. Without that style, the XML pad initialization defaults
+are width/height -1 and round hole dimensions 0.5 in shared length units.
+Import records xml-via-pad-initialization as info. Export warns with
+xml-via-pad-data about independent values this process replaces, even if an
+explicit physical template can spell them. Local pad labels, positions and angles
+survive DIP/ASC import; they cannot override XML via initialization.
+
+An external check can give a physical template's pad a distinctive name, number,
+position and locking, reference it from a Via component, and use a different
+placement Pad.Id in its net membership. Reopening and canonical export distinguish
+the template data from generated placed data. Removing the style selection and
+varying the placement options independently exposes the initialization defaults.
+
+PCB_INTERACTIVE_ROUTING_STATE
+-----------------------------
+DIP schema 53 onward can contain an additional interactive routing-session
+block. Ordinary document import consumes and validates its scalar values and
+nested collections, then clears the session. It retains neither preview paths
+nor selection/undo snapshots as authored board data. Committed trace geometry,
+endpoints and differential-pair geometry are read from their own board sections.
+Malformed or truncated session data remains an import error.
+
+This follows ordinary file loading and Save/Save As in the checked DipTrace 5.3
+release, which clear this session. DIP output likewise contains no paused
+routing session. Import reports this equivalent normalization as information.
+Preserving an interactive recovery session is not part of ordinary design I/O.
+The name PausedTrace in text check results identifies a DRC object kind, not
+an encoding of the interactive routing session.
+
+An external check pauses a distinct route, saves the design, closes and reopens
+it, and compares the committed geometry and canonical ASC/DIPXML companions
+with separate resumed and cancelled cases. To expose the conditional block's
+encoding, synthetic file variants keep a known committed board and distinctive
+following fields fixed while varying the session flag, scalar groups and nested
+collection counts. Zero, one and two rows at each level, together with truncated
+variants, distinguish collection boundaries and scalar widths using the common
+DIP encodings and the application's file acceptance and canonical conversions.
+Compare a valid session-bearing variant with its session-free counterpart after
+normal opening/export; the committed design should agree. This is a concrete
+external derivation procedure, not a claim that those synthetic variants have
+already been converted by the application.
+
+PCB_LEGACY_PHASE_INITIALIZATION
+-------------------------------
+
+DIP schemas before 40 contain no differential-routing phase section. Import
+initializes ordinary trace points' PhaseFwd and PhaseBack to zero, matching the
+current values exposed after loading those designs. This is an import upgrade,
+not a change to the model's optional-field default. A newly authored point can
+still have unavailable phase data. Schema 40 and later retain their supplied
+signed lengths; the established unavailable-phase marker becomes None.
+
+External derivation: convert a small routed design saved before the phase section
+was introduced into ASC and DIPXML. The public point values expose the zero
+initialization. Repeat with schema-40 inputs containing distinct forward/back
+values to distinguish initialization from overwriting existing data. Portable
+tests cover every supported earlier binary schema and the first later schema,
+including stream alignment and preservation of explicit later values.
+
+PCB_MAIN_LENGTH_RULE_SELECTION
+------------------------------
+
+MainLengthRule holds the current working length rule. Its optional Class selects
+a net-class rule, while Name, FixedLength, Delta and Rules retain the working
+values and connections. They are not aliases for the class's current settings
+or generated LengthResults. A working rule can select a class without requiring
+all its connections to belong to that class. Ordinary user LengthRule records
+do not have a class selection; generated class results remain owned by NetClass.
+
+DIP, ASC and DIPXML import consume a main rule's Type/NetClass selectors into
+the Class reference. NetClass is a derived model index. Writers generate the
+class-selected kind and current destination class index, or the user kind and
+-1 when Class is None. Class reordering and retargeting maintain the selection
+without replacing the working values. Class renaming likewise leaves the working
+rule's literal Name unchanged. Referenced class removal requires disconnection.
+
+External derivation: select a class rule in the length-matching editor and save
+the design and public text exports. MainLengthRule can carry the class-selected
+type. Controlled ASC/XML copies can give that working rule distinct limits,
+name and connections while retaining the class and its ordinary class results.
+Canonical reopen/export and the displayed working values distinguish the working
+copy from generated class results. Reordering classes distinguishes the selection
+from its numerical spelling. These are concrete derivation procedures, not a
+claim that every controlled variant has been newly converted. Portable tests
+exercise import, relationship edits, independent binary/ASC field order, and all
+supported output profiles.
+
+PCB_FILLED_BOARD_DRAWING_IMPORT
+-------------------------------
+
+DIP, ASC and DIPXML import remove active filled board rectangles and ellipses
+whose first two corners give either an X or Y span strictly below 0.0001 shared
+length units. A span equal to that boundary remains. Filled board polygons with
+exactly two points are also removed. This rule leaves outlined primitives and
+other polygon point counts unchanged; it does not calculate polygon area.
+Footprint drawings, copper pours and other geometric families have their own
+rules. No file-origin flag or old geometry is retained.
+
+Import records degenerate-board-drawing as information and compacts the ordinary
+drawing collection before binding its relationships. Later surviving drawings
+keep their own identities and selectors. Dimensions whose target becomes
+unavailable use the existing attachment-normalization policy. Ordinary data
+edits do not invoke this import cleanup, and export leaves its source model
+unchanged.
+
+The rule is externally producible from controlled ASC/XML filled rectangle and
+ellipse inputs with one span below, equal to and above the boundary. Open and
+save or export each input, inspect the resulting drawing collection, and compare
+outlined controls. One-, two- and three-point filled polygons distinguish the
+point-count rule from a general area test. A dimension on the following drawing
+tests reference maintenance independently of geometry. These are derivation
+procedures; they do not claim that every variant was newly converted through
+the application. Portable tests cover all supported output profiles followed
+by import, exact boundary behavior, repeated conversion and surviving references.
+
+PCB_EARLY_STANDALONE_LINKAGE
+---------------------------
+
+Before DIP schema 35, mounting-hole objects with a schematic-link HiddenId of
+20000 or greater import as unlinked (-1). The same normalization applies to an
+object declared as a standalone pad when its component Name is "Pad" and its
+RefDes base is "Pad", ignoring letter case. This historical base removes trailing
+ASCII digits and spaces. It does not change the authored Name or RefDes, or the
+common RefDes API's editing rules.
+
+The rule uses the saved object classification before physical modernization.
+Vias, other component kinds, differently named pads, identifiers below 20000
+including zero, and schemas 35 onward retain their identifiers. Import reports
+legacy-component-linkage as information. Physical and electrical identities
+remain; an unlinked component uses the existing hierarchy-path normalization.
+No obsolete identifier or source-version flag is retained for output.
+
+An external derivation uses complete early binary fixtures and controlled edits
+to these named fields with the version's scalar/text encodings. Canonical ASC
+and DIPXML exports expose HiddenId/UpdateId, names, classifications and linkage.
+Vary the identifier across the boundary, object kind, name case and RefDes base.
+Use independently valid fixtures on either side of schema 35; merely changing a
+header is insufficient where other versioned records differ. A current installed,
+licensed application can open these older inputs. These are derivation procedures,
+not a claim that every controlled variant was newly converted. Portable record
+fixtures exercise the version/identifier boundaries, exact marker spelling and
+unaffected kinds while checking reader alignment.
+
+PCB_UNUSABLE_TRACE_IMPORT
+-------------------------
+PCB import removes ordinary traces with fewer than two points. It also removes
+two-point paths shorter than 0.001 shared length units when an end is free and
+no other ordinary trace uses that path as an endpoint target. The distance is
+Euclidean and the bound is strict. Longer paths, paths with both ends connected
+and paths used by another ordinary trace are retained. Separate differential
+geometry has its own ownership and is not selected by this ordinary-path rule.
+
+Cleanup frees references to removed paths, clears their pair selections and
+associated calculated teardrop polygons, and preserves surviving coordinates.
+Current selectors regenerate from surviving identities. The library applies
+the same eligibility rule until stable, making unused chains independent of
+their input ordering and preventing progressive loss over repeated conversions.
+It reports unusable-trace-normalization as import information. No previous
+geometry or deleted handle is retained. Ordinary data edits do not run cleanup.
+
+An external derivation uses complete ASC/XML fixtures with a free-ended
+two-point trace and a distinct retained route. Canonical save/reopen through
+DIP exposes the normalized trace list and endpoint choices in ASC/XML. Vary
+length below, at and above the bound, including diagonal coordinates; compare
+zero-, one-, two- and three-point paths. Add another ordinary trace using the
+short path, and separately pair selections and connected teardrops. Those
+controls expose both the retention predicate and dependent-reference cleanup.
+Repeated canonical cycles distinguish a stable result from transient positional
+bookkeeping. These are concrete derivation procedures, not a claim every control
+has been newly converted with the application.
+
+PCB_MISSING_COMPONENT_ROUTE_IMPORT
+----------------------------------
+An ordinary Pad endpoint that refers to an absent or inactive component imports
+as a Free endpoint. Trace coordinates are retained. Only an affected net has its
+explicit member list reconciled: surviving Pad endpoints on nonempty ordinary
+traces contribute each pad once, in trace and endpoint order, and establish its
+net assignment. During this reconciliation, invalid pad selectors also become
+Free endpoints. Ambiguous identities and contradictory surviving membership
+claims remain errors; the importer does not guess which current object to use.
+
+This is conditional import modernization, reported as information under
+missing-component-route-target. It is not an ordinary edit or export operation.
+Valid explicit members remain independent of trace geometry: a net may have
+members without traces, and an assigned pad need not be listed. Already Free
+endpoints, missing pad selectors alone and unrelated nets do not trigger this
+reconciliation. Separate differential geometry keeps its own binding rules.
+Source inspection retains the supplied syntax; normal import retains no repair
+flags or obsolete endpoint/member snapshots in the editable model.
+
+XML ordinary endpoints to absent components reach this shared repair without
+attempting to translate a pad Id for a nonexistent placement. Other XML pad and
+explicit member Id mappings are validated during format preparation; unresolved
+Ids remain errors there. Separate differential endpoints keep strict resolution.
+
+A concrete external derivation starts with complete ASC/XML fixtures containing
+independent explicit members, per-pad assignments and ordinary trace endpoints.
+Vary a component target between present, absent and inactive, then canonically
+open/save through DIP and compare endpoints, coordinates, members and assignments.
+Controls with no traces, an already Free end, a missing pad in a present component
+and an unaffected second net distinguish the trigger from universal rebuilding.
+Repeated conversions expose whether normalization is stable. These are derivation
+procedures, not a claim that every controlled variant has been newly converted.
+
+PCB_XML_POINT_VIA_SELECTION
+--------------------------
+An omitted ordinary trace-point ViaStyle imports without a selected style,
+independently of the choices on adjacent points. Explicit selections remain
+references to the corresponding style. The same model distinction survives DIP,
+PCB ASC and DIPXML output; no previous-point selection or historical default
+selection is invented for an omitted XML attribute.
+
+An external derivation uses a complete XML fixture with two distinct via styles
+and a same-layer trace containing explicit, omitted and explicit -1 selections.
+Place omissions before, between and after explicit choices. Canonical conversions
+in current and older installed versions expose differing default initialization;
+compare their saved point attributes rather than inferring physical via creation
+from a style selection alone. This is a derivation procedure, not a claim that
+every controlled variant has been newly converted. Portable tests cover all
+supported XML input profiles and every output profile through two stable cycles.
+
+PCB_EARLY_PANEL_CONFIGURATION
+----------------------------
+DIP schemas before 50 omit the tab-routing configuration. Import initializes
+these ordinary editable panel settings, rather than exporting zero placeholders:
+
+Setting          Shared length units    Millimetres
+TabWidth                  13.5              4.5
+TabRadius                  3.6              1.2
+TabStep                  225               75
+HoleDiam                   2.4              0.8
+HoleStep                   3.6              1.2
+HoleInset                  0                0
+HoleKeepout                3                1
+CombinedRadius             3.6              1.2
+
+Type is V-Scoring, BorderTabs is zero, TabsDone and KeepMaterial are false,
+and the horizontal/vertical tab-position lists are empty. Existing panel-gap
+modernization still uses the saved board spacing. These are import defaults
+for the omitted earlier record: schema 50 onward retains saved values,
+including explicit zeros. Subsequent edits remain current data, without an
+import-origin flag or a writer rule that restores the defaults.
+
+An external derivation uses independently valid older DIP files on either side
+of the schema-50 boundary. Canonical ASC exposes Panelize_* values and DIPXML
+exposes Panel attributes. Compare their physical units and absence of tab
+positions. In newer files, vary saved values independently, including zero, to
+distinguish initialization of an omitted record from overriding authored data.
+Changing only a version header is insufficient where record layouts differ.
+These procedures do not claim that every controlled variant was newly converted.
+
+PCB_PLACED_FOOTPRINT_GROUP_VALUES
+--------------------------------
+Cached footprint definitions own their local groups and managed member references.
+A placed physical copy does not acquire that group collection. Its pads, drawings,
+holes and dimensions can nevertheless carry numeric Group values. These are
+editable placement data, distinct from the cached definition's group identities.
+
+XML requires a definition for each selected group. For a placement without an
+owned group collection, export derives those definitions from shared membership
+of its exported pads, drawings, holes and dimensions. Groups with two or more
+members receive consecutive keys in ascending order of the current numeric
+values, with zero local origins. Single-member selections become unassigned.
+The generated definitions belong to the detached XML output; they do not create
+another group collection in the source model or borrow cached group identities.
+Renumbering and single-member normalization produce informational diagnostics.
+Cached definitions keep their own coordinates, identities, unresolved-reference
+rules and key allocation. Calculated marking drawings omitted from XML do not
+contribute to its group membership.
+
+An external derivation starts with a footprint containing grouped drawings and
+one or more placements. Canonical DIP/ASC/XML conversions expose the numeric
+placement fields independently of the definition's Groups collection. Controlled
+edits can split and combine membership, use sparse numeric values, and leave a
+single member in a group. Inspect the generated Groups/Item records, their
+origins and the corresponding member keys after canonical export. Vary a separate
+cached definition's group coordinates independently to distinguish authored
+template data from generated placement output. These are derivation procedures,
+not a claim every controlled variant was newly converted. Portable tests exercise
+all four member kinds, sparse keys, single-member normalization, every supported
+XML output profile, repeated import/export, source immutability and independent
+cached group references.
+
+PCB_INACTIVE_BOARD_EXPORT
+-------------------------
+Programmatic edits can deactivate unreferenced board objects while retaining
+their content in the authoring model. XML export omits inactive components,
+nets, live differential pairs, board drawings, copper pours, dimensions, tables
+and saved check results on its detached output view. The inactive-records
+warning identifies omitted content. Source objects remain editable and may be
+reactivated. Retained references follow the same surviving identities when
+output positions change; a live reference into omitted content remains an error.
+
+This selection does not apply to cached definitions, board groups or removed-pair
+restoration data, whose activation fields have their own format rules. DIP and
+ASC retain their existing Enabled-field output policy. Import modernization of
+inactive saved records is separate from editing an in-memory document.
+
+An external derivation uses complete disposable ASC boards and changes only
+Enabled on an unreferenced object of each listed kind. Canonical XML conversions
+expose omitted records and retained active identities. Include an earlier
+inactive component and a later connected component to distinguish positional
+renumbering from changed connection identity. A disabled removed differential
+pair distinguishes restoration state from an inactive live pair. These are
+concrete derivation procedures, not a claim that every variant was newly
+converted. Portable checks cover every XML output profile, repeated conversion,
+source immutability, retained routing, restoration state and unsafe references.
+
+PCB_UNCHECKED_CLASS_LENGTH_RESULTS
+----------------------------------
+NetClass.CheckLength, FixedLength and LengthDelta are independent class settings.
+Optional LengthResults contains calculated connection results. Switching checking
+off does not erase those results from the editable source or change its limits.
+Every output format omits results for unchecked classes on a detached view and
+reports obsolete-class-length-results as information. Re-enabling the source
+class can reuse its still-owned results. A saved check referencing those results
+must be detached or retargeted before disabling the class; live identities are
+not silently invalidated.
+
+An external derivation saves a class with distinctive limits and calculated
+connections, toggles only CheckLength, and compares canonical DIP/ASC/XML class
+settings and generated result rows. A separate user rule distinguishes generated
+class results from independently authored policies. These are concrete proposed
+file/conversion procedures, not a claim of a new application experiment. Portable
+checks cover every supported output profile, source immutability, preserved
+class limits and reactivation with the original connection results.
+
+PCB_INACTIVE_TEMPLATE_EXPORT
+----------------------------
+The selected PCB XML projection uses compact physical definitions: drawings
+with a nonpositive Type and disabled holes or dimensions are omitted on the
+detached export view. This applies to cached footprint definitions and current
+placed geometry. Meaningful omitted content warns with inactive-library-records
+or inactive-records, respectively. An empty Type 0 drawing with no text, points
+or identity association produces inactive-empty-drawings information instead.
+Unused appearance defaults alone do not turn an empty slot into authored geometry.
+
+The original objects and flags remain editable. Pads, template metadata, local
+group definitions and independent resources are retained; live references cannot
+silently lose a target. DIP and ASC keep their existing physical-record policy.
+This compact output choice does not claim that every XML variant is inherently
+unable to encode an inactive physical slot.
+
+An external derivation uses disposable component-library and board ASC sections
+with distinguishable inactive drawings, holes and dimensions. Compare ordinary
+canonical XML conversions for cached definitions and placed copies, including
+active neighboring objects, dimension targets and independent template settings.
+Use a separate empty Type 0 slot to distinguish unused storage from authored
+dormant content. These are concrete derivation procedures, not a claim that all
+variants were newly converted. Portable checks cover the supported XML profiles,
+repeat stability, source immutability, retained targets and unsafe-reference
+rejection. Schematic and PCB share report grouping and severity mechanics while
+keeping their own activation and emptiness rules.
+
+PCB_PLACED_PATTERN_OWNERSHIP
+----------------------------
+A component owns its current UserFields, including silk and assembly markings,
+and its IntConRecords pad pairs. Its Pattern owns current physical geometry and
+settings. Reusable UserFields defaults and Pattern_Groups definitions belong to
+the cached footprint definition; placed Pattern does not expose another copy of
+these collections. Numerical Group membership on placed geometry remains saved
+data, and XML output derives its placement-local group declarations separately.
+This distinction leaves shared library/schematic footprint definitions intact.
+
+Shared footprint constructors may include empty definition collections. Binding
+one as a PCB placement removes those empty collections, but rejects populated
+ones rather than discarding or guessing a transfer of meaningful data. All three
+writers enforce the placed schema, including explicitly added unknown content.
+
+An external derivation uses XML styles with distinctive default custom fields,
+local groups and internal pad pairs, then places them with different component
+fields and connection settings. Canonical DIP/ASC/XML conversions distinguish
+the cached definitions from current component data and placed geometry. Editing
+each owner independently reveals which values survive and which XML group keys
+are generated from placement membership. This concrete derivation does not claim
+a new application experiment; portable tests cover distinct owners, constructor
+binding, retained cached defaults, editable current fields and output rejection
+of unsupported extra namespaces.
+
+BINARY_EXTENDED_COLOR_VALUES
+----------------------------
+Binary DCH and DIP color fields contain three RGB bytes. Text formats and the
+editable model may carry a signed or unsigned 32-bit color integer. On detached
+binary output, negative values and unsigned values with the sign bit set become
+black; other positive extended values retain their low 24 RGB bits. The shared
+color-rgb-range warning reports this projection. Ordinary RGB values are exact,
+the authored integer remains unchanged, and values outside the 32-bit domain
+still fail. Raw scalar BinaryWriter.color remains strict; this is named document
+field projection.
+
+An external derivation assigns distinguishable RGB, positive extended, negative
+and sign-bit color values through disposable ASC/XML fields, canonically saves
+DCH or DIP, and compares the resulting three bytes and reopened named colors.
+This exposes the sign boundary separately from loss of upper bits. It is a
+concrete derivation procedure, not a claim of a fresh application experiment.
+Portable checks cover both family writers, exact bytes, unchanged model values,
+structured warnings and invalid domains.
+
+BINARY_DISPLAY_SCALE_PRECISION
+----------------------------
+The model stores viewport Scale as a percentage; DCH and DIP store the corresponding
+factor with four fractional places. Output shifts the decimal exponent before
+the shared fixed-point rounding, without an intermediate float or dependence on
+the caller's decimal precision. For example, 1.055 percent projects through
+factor .01055 to .0106 and imports as 1.06 percent. The source value remains
+editable and repeated output stabilizes. Import retains the established factor
+limits .01 through 1000 before converting to percent. This concerns display zoom,
+not physical geometry or a change of model units.
+
+The encoding and limits can be derived by changing zoom in disposable text
+designs, comparing canonical binary prefixes and reopening them. Exact decimal
+factor conversion and half-even rounding also follow directly from the stated
+wire precision; the library does not reproduce incidental float tie noise.
+Portable checks cover every supported DCH output revision, low caller precision,
+import limits, source immutability and repeated bytes. No fresh application
+experiment is claimed by this numerical correction.
+
+PCB_AUTOMATIC_PAIR_MEMBERS
+--------------------------
+Paired-pad rows and segment endpoints use the existing pad/pair identities.
+Import reconstructs automatic members before endpoint binding when an enabled
+pair has no member rows. DIP schema 40 also requests this modernization for
+populated automatic pairs. Valid manual members remain authored; a contradictory
+manual pad assignment switches to automatic selection during a requested refresh.
+No source-index backups or cache-origin flags are added to the document model.
+
+Selection uses current net assignments, placed pad positions, effective SMT
+sides and semantic order. A mixed static-via/component connection has twice its
+geometric distance; two static vias use ordinary distance. An inferred span must
+be below 100000 shared length units and strictly below either twice the class's
+MaxUncoupledLength or twenty times the sum of its width and differential clearance. Missing
+or nonpositive class widths/clearances use the stored routing defaults. Existing
+routed associations take precedence where both prior endpoints remain attached.
+Segment endpoints follow their logical pad pair when calculated rows change order.
+The import calculation does not route traces or change geometry. Ordinary edits
+do not automatically recalculate this table or its routed geometry.
+
+Changed calculated members produce automatic-pair-members information. Unresolved
+references still require normal validation; reconstructing a table does not grant
+permission to silently select an unrelated endpoint.
+
+An external derivation uses two/four-pad readable designs with distinguishable
+net memberships, automatic/manual choice, routed endpoints and row order. Sweep
+pad separation and each class/routing limit around the acceptance boundary;
+replace one component with a static via and vary SMT sides. Canonical load/save
+and readable exports expose the generated rows, mode and endpoint selectors.
+A historical schema-40 file with populated automatic rows distinguishes its
+compatibility trigger from ordinary empty-member recovery. These procedures do
+not claim that a new application experiment was performed during implementation.

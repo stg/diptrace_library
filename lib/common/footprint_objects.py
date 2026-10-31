@@ -35,6 +35,18 @@ def new_pattern_drawing(index=0, *, kind=0):
     return shape.bind_schema(PATTERN_SHAPE)
 
 
+def new_model3d():
+    """Create an empty physical-model attachment with shared library defaults."""
+    model = Element('Model3D').bind_schema(MODEL3D)
+    _fields(model, Model3DFile='', Model3DFile_Variable='', Mirror=False, NoSearch=False,
+            Units=0, IPC_XOff=0, IPC_YOff=0, AutoHeight=0, AutoColor=0x4B4B4B,
+            Type=0, KeepPins=False)
+    for name, schema in VECTORS.items():
+        value = 1 if name == 'Zoom' else 0
+        _fields(model.add(name), X=value, Y=value, Z=value).bind_schema(schema)
+    return model
+
+
 def new_pattern(name=''):
     """Create an empty definition in its own local coordinate frame."""
     pattern = Element('Pattern', name)
@@ -55,11 +67,5 @@ def new_pattern(name=''):
                        'PadMask_TopSegments', 'PadMask_BotSegments', 'Dimensions', 'PossibleNames',
                        'Pattern_CategoryTypes', 'Pads', 'Shapes', 'Holes'):
         pattern.add(collection)
-    model = pattern.add('Model3D').bind_schema(MODEL3D)
-    _fields(model, Model3DFile='', Model3DFile_Variable='', Mirror=False, NoSearch=False,
-            Units=0, IPC_XOff=0, IPC_YOff=0, AutoHeight=0, AutoColor=0x4B4B4B,
-            Type=0, KeepPins=False)
-    for name, schema in VECTORS.items():
-        value = 1 if name == 'Zoom' else 0
-        _fields(model.add(name), X=value, Y=value, Z=value).bind_schema(schema)
+    pattern.append(new_model3d())
     return pattern.bind_schema(PATTERN)

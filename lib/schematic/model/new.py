@@ -17,13 +17,9 @@ def new_page(name='Sheet 1'):
            HorzZoneBorder=0, VertZoneBorder=0, PageXPos=0, PageyPos=0, PageScale=1,
            PageType=0, PageHiddenId=0, FLeft=0, FTop=0, FRight=0, FBottom=0)
     page.add('FontLineWidth', -1).annotations['asc_omit'] = 'zone font pen is not present in ASC'
-    titles = page.add('TitleBlocks')
+    from ...common.title_records import new_title_blocks
+    titles = page.append(new_title_blocks())
     titles.annotations['asc_omit'] = 'format schematic ASC omits title grids'
-    for index in range(6):
-        grid = titles.add('TitleBlock', index, '')
-        fields(grid, Width=0, Height=0)
-        for key in ('ColWidths', 'RowHeights', 'Cells', 'Contents'):
-            grid.add(key)
     from .definitions import PAGE
     return page.bind_schema(PAGE)
 

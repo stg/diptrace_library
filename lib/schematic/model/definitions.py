@@ -5,6 +5,7 @@ from ...common.footprint_records import PATTERN, PAD, PAD_STYLE, PATTERN_SHAPE, 
 from ...common.library_records import SLOT, DEFINITION, CACHE
 from ...common.library_metadata import CATALOG_CATEGORY, CATALOG_TYPE, CATALOG_SUBTYPE
 from ...common.cell_records import CELL
+from ...common.title_records import TITLE_FIELD as CONTENT
 from ...common.symbol_records import SYMBOL as CACHED_PART, PIN as CACHED_PIN, DRAWING as SYMBOL_SHAPE
 from dataclasses import replace
 from . import vocabulary as names
@@ -52,7 +53,7 @@ NetNumber BitmapIndex RelatedNet RelatedBus FontType FontColor Color BrushColor
 TextHorz TextVert TextAlign TextShow NetClass ActiveLine ActivePoint Region
 Connect1 Connect2 ConnectL1 ConnectL2 ConnectB1 ConnectB2 ConnectMode1 ConnectMode2
 BusNumber Arrows Layer PadHoleType PadShape PadShape_New PadTerminalCount
-PadMask_SegmentSide TopMask_State BotMask_State TopPaste_State BotPaste_State
+TopMask_State BotMask_State TopPaste_State BotPaste_State
 DisableTopMask DisableBottomMask DisableTopPaste DisableBottomPaste Number_New
 PadId Id Units Connected1 Connected2 Object1 Object2 SubObject1 SubObject2 Point1
 Point2 PointerMode DefAlign DefFontColor Align HorzZones VertZones ZoneStandard
@@ -67,7 +68,7 @@ PinNameYShift PinNameRotate PinNumRotate SignalDelay MarkingFontSize PenWidth
 Picture_Width Picture_Height Picture_Transparent PatternOrientation Spacing1
 Spacing2 Spacing3 PadAngle PadWidth PadHeight PadWidth_New PadHeight_New PadHole
 PadHoleH PadCorner PadShape_X PadShape_Y CustomSwell CustomShrink CustomSwell_New
-CustomShrink_New PadMask_Percent PadMask_EdgeGap PadMask_SegmentGap GridSize
+CustomShrink_New PadMask_Percent PadMask_EdgeGap PadMask_SegmentGap PadMask_SegmentSide GridSize
 PinNumberFont BusConnectionFont PartFontSize NetNameFontSize PartFontWidth
 PartFontScale BusLineWidth WireLineWidth TableLineWidth TitlesLineWidth NodeSize
 PageWidth PageHeight ZoneFontSize PageXPos PageyPos PageScale FLeft FTop FRight
@@ -164,7 +165,6 @@ SCHEMATIC = replace(SCHEMATIC, fields={**SCHEMATIC.fields,
     'ActiveSheet': Field('ActiveSheet', 'integer',
                          description='Selected page position; a resolved link follows page identity. Absent selection uses the first page on XML output.')})
 TABLE = record('Table', names.TABLE_FIELDS, extra=('DefFontMono',))
-CONTENT = record('TitleField', (*names.CELL_FIELDS, 'Placement'), (INDEX,), extra=('FontMono',))
 
 
 def _owned(schema, **children):
@@ -200,100 +200,111 @@ for _name in ('PIN', 'SHEET_SHAPE', 'INTERNAL_CONNECTION'):
     globals()[_name] = _owned(globals()[_name], UnresolvedKeys='UnresolvedKeys')
 
 
+_MARKING_FIELDS = TUPLE_FIELDS - {'Edges', 'Placement'}
+_BASE_DEFINITIONS = {'Settings': SETTINGS, 'Schematic': SCHEMATIC, 'Table': TABLE}
+
+
 def definition(node):
     """Select a record definition by its meaning and ownership, not input format."""
+    kind = node.kind
     parent = node.parent
     owner = parent.parent if parent is not None else None
-    if not node.kind and parent is None:
+    if parent is not None and parent.schema is not None:
+        field = parent.schema.fields.get(kind)
+        if field is not None and field.kind != 'tuple':
+            # Named scalar storage cannot itself own a record schema. Tuple
+            # fields still need their member definitions established below.
+            return None
+    if not kind and parent is None:
         return DOCUMENT
-    if node.kind == 'Source' and parent is not None and not parent.kind:
+    if kind == 'Source' and parent is not None and not parent.kind:
         return SOURCE_HEADER
     schema = collection_definition(node)
     if schema is not None:
         return schema
     if parent is not None:
-        if node.kind == 'CacheLib' and parent.kind == 'Schematic':
+        if kind == 'CacheLib' and parent.kind == 'Schematic':
             return CACHE
-        if node.kind == 'Model3D' and parent.kind == 'Pattern':
+        if kind == 'Model3D' and parent.kind == 'Pattern':
             return MODEL3D
-        if parent.kind == 'Model3D' and node.kind in VECTORS:
-            return VECTORS[node.kind]
-        if node.kind == 'Suppliers' and parent.kind == 'Part':
+        if parent.kind == 'Model3D' and kind in VECTORS:
+            return VECTORS[kind]
+        if kind == 'Suppliers' and parent.kind == 'Part':
             return SUPPLIERS
-        if node.kind == 'Group' and parent.kind == 'Groups' and owner is not None and owner.kind == 'Schematic':
+        if kind == 'Group' and parent.kind == 'Groups' and owner is not None and owner.kind == 'Schematic':
             return SCHEMATIC_GROUP
-        if node.kind == 'Key' and parent.kind == 'UnresolvedKeys':
+        if kind == 'Key' and parent.kind == 'UnresolvedKeys':
             return UNRESOLVED_KEY
-        if node.kind == 'Link' and parent.kind == 'DesignCache_Links':
+        if kind == 'Link' and parent.kind == 'DesignCache_Links':
             return DESIGN_LINK
-        if node.kind == 'CategoryType' and parent.kind in ('Component_CategoryTypes', 'Pattern_CategoryTypes'):
+        if kind == 'CategoryType' and parent.kind in ('Component_CategoryTypes', 'Pattern_CategoryTypes'):
             return CATEGORY_TYPE
-        if node.kind == 'Category' and parent.kind in ('Categories', 'PatternCategories'):
+        if kind == 'Category' and parent.kind in ('Categories', 'PatternCategories'):
             return CATALOG_CATEGORY
-        if node.kind == 'Type' and parent.kind == 'Category':
+        if kind == 'Type' and parent.kind == 'Category':
             return CATALOG_TYPE
-        if node.kind == 'Subtype' and parent.kind == 'Type':
+        if kind == 'Subtype' and parent.kind == 'Type':
             return CATALOG_SUBTYPE
-        if node.kind in ('Folder', 'Lib') and parent.kind in ('ProjectLibs_Folders', 'ProjectLibs_Libs'):
+        if kind in ('Folder', 'Lib') and parent.kind in ('ProjectLibs_Folders', 'ProjectLibs_Libs'):
             return LIBRARY_PATH
-        if node.kind == 'Folder' and parent.kind == 'Subfolders':
+        if kind == 'Folder' and parent.kind == 'Subfolders':
             return SUBFOLDER
-        if node.kind == 'PossibleName' and parent.kind == 'PossibleNames':
+        if kind == 'PossibleName' and parent.kind == 'PossibleNames':
             return POSSIBLE_NAME
-        if node.kind == 'Line' and parent.kind == 'ModelBody':
+        if kind == 'Line' and parent.kind == 'ModelBody':
             return MODEL_LINE
-        if node.kind == 'Line' and parent.kind == 'Lines' and owner is not None:
+        if kind == 'Line' and parent.kind == 'Lines' and owner is not None:
             return NET_LINE if owner.kind == 'Net' else BUS_LINE if owner.kind == 'Bus' else None
-        if node.kind == 'IntCon' and parent.kind == 'InternalConnections':
+        if kind == 'IntCon' and parent.kind == 'InternalConnections':
             return INTERNAL_CONNECTION
-        if node.kind == 'Quote' and parent.kind == 'Prices':
+        if kind == 'Quote' and parent.kind == 'Prices':
             return QUOTE
-        if node.kind == 'PadTerminal' and parent.kind in ('Pad', 'Pattern', 'PadStyle'):
+        if kind == 'PadTerminal' and parent.kind in ('Pad', 'Pattern', 'PadStyle'):
             return TERMINAL
-        if node.kind == 'PadStyle' and parent.kind == 'PadStyles':
+        if kind == 'PadStyle' and parent.kind == 'PadStyles':
             return PAD_STYLE
-        if node.kind == 'DifferentialPair' and parent.kind == 'DifferentialPairs':
+        if kind == 'DifferentialPair' and parent.kind == 'DifferentialPairs':
             return DIFFERENTIAL_PAIR
-    if node.kind == 'Slot' and parent is not None and parent.kind == 'Slots':
+    if kind == 'Slot' and parent is not None and parent.kind == 'Slots':
         return SLOT
-    if node.kind == 'Definition' and parent is not None and parent.kind == 'Slot':
+    if kind == 'Definition' and parent is not None and parent.kind == 'Slot':
         return DEFINITION
-    if node.kind == 'Hole' and parent is not None and parent.kind == 'Holes':
+    if kind == 'Hole' and parent is not None and parent.kind == 'Holes':
         return HOLE
-    if node.kind == 'ssimulator' and parent is not None and parent.kind == 'Schematic':
+    if kind == 'ssimulator' and parent is not None and parent.kind == 'Schematic':
         return SIMULATOR
     if parent is not None and parent.kind == 'ssimulator':
-        return ARGUMENT_SCHEMAS.get(node.kind) or OPTION_SCHEMAS.get(node.kind)
-    if node.kind == 'signal' and parent is not None and parent.kind == 'signals':
+        return ARGUMENT_SCHEMAS.get(kind) or OPTION_SCHEMAS.get(kind)
+    if kind == 'signal' and parent is not None and parent.kind == 'signals':
         return SIGNAL
-    if node.kind == 'Item' and parent is not None and parent.kind in ARGUMENT_SCHEMAS:
+    if kind == 'Item' and parent is not None and parent.kind in ARGUMENT_SCHEMAS:
         return ARGUMENT_ITEM
-    if node.kind == 'Part' and parent is not None:
+    if kind == 'Part' and parent is not None:
         return PART if parent.kind == 'Components' else CACHED_PART if parent.kind == 'Definition' else None
-    if node.kind == 'Pin' and parent is not None and parent.kind == 'Pins' and owner is not None and owner.kind == 'Part':
+    if kind == 'Pin' and parent is not None and parent.kind == 'Pins' and owner is not None and owner.kind == 'Part':
         return PIN if owner.parent is not None and owner.parent.kind == 'Components' else CACHED_PIN
-    if node.kind == 'Pattern' and parent is not None and parent.kind in ('Part', 'Definition', 'Patterns'):
+    if kind == 'Pattern' and parent is not None and parent.kind in ('Part', 'Definition', 'Patterns'):
         return PATTERN
-    if node.kind == 'Pad' and parent is not None and parent.kind == 'Pads':
+    if kind == 'Pad' and parent is not None and parent.kind == 'Pads':
         return PAD
-    if node.kind == 'Shape' and parent is not None and parent.kind == 'Shapes':
+    if kind == 'Shape' and parent is not None and parent.kind == 'Shapes':
         if owner is not None:
             return {'Part': SYMBOL_SHAPE, 'Pattern': PATTERN_SHAPE, 'Schematic': SHEET_SHAPE}.get(owner.kind)
-    if node.kind == 'UserField' and parent is not None and parent.kind == 'UserFields':
+    if kind == 'UserField' and parent is not None and parent.kind == 'UserFields':
         return COMPONENT_USER_FIELD if owner is not None and owner.kind == 'Part' else USER_FIELD
-    if node.kind in TUPLE_FIELDS - {'Edges', 'Placement'} and parent is not None and parent.kind in ('Part', 'Schematic'):
-        return marking_definition(node.kind)
-    if node.kind == 'TitleBlock' and parent is not None and parent.kind == 'TitleBlocks':
+    if kind in _MARKING_FIELDS and parent is not None and parent.kind in ('Part', 'Schematic'):
+        return marking_definition(kind)
+    if kind == 'TitleBlock' and parent is not None and parent.kind == 'TitleBlocks':
         return TITLE_BLOCK
-    if node.kind == 'Cell' and parent is not None and parent.kind == 'Cells' and owner is not None:
+    if kind == 'Cell' and parent is not None and parent.kind == 'Cells' and owner is not None:
         return TITLE_CELL if owner.kind == 'TitleBlock' else CELL if owner.kind == 'Table' else None
-    if node.kind == 'Content' and parent is not None and parent.kind == 'Contents':
+    if kind == 'Content' and parent is not None and parent.kind == 'Contents':
         return CONTENT
-    if node.kind == 'Edges' and parent is not None and parent.kind == 'Cell':
+    if kind == 'Edges' and parent is not None and parent.kind == 'Cell':
         return BORDERS
-    if node.kind == 'Placement' and parent is not None and parent.kind == 'Content':
+    if kind == 'Placement' and parent is not None and parent.kind == 'Content':
         return BOUNDS
-    if node.kind == 'pt' and parent is not None:
+    if kind == 'pt' and parent is not None:
         if parent.kind in ('Groups', 'Pattern_Groups'):
             return LOCAL_GROUP
         if parent.kind == 'Nets' and owner is not None and owner.kind == 'Bus':
@@ -321,19 +332,19 @@ def definition(node):
             return POINT
         if parent.kind == 'Points_New' and owner is not None and owner.kind == 'Shape':
             return POINT
-    if node.kind == 'NetClass' and parent is not None and parent.kind == 'NetClasses':
+    if kind == 'NetClass' and parent is not None and parent.kind == 'NetClasses':
         return NET_CLASS
-    if node.kind == 'Page' and parent is not None and parent.kind == 'Pages':
+    if kind == 'Page' and parent is not None and parent.kind == 'Pages':
         return PAGE
-    if node.kind == 'Net' and parent is not None and parent.kind == 'Nets' and owner is not None and owner.kind == 'Schematic':
+    if kind == 'Net' and parent is not None and parent.kind == 'Nets' and owner is not None and owner.kind == 'Schematic':
         return NET
-    if node.kind == 'Bus' and parent is not None and parent.kind == 'Buses':
+    if kind == 'Bus' and parent is not None and parent.kind == 'Buses':
         return BUS
-    if node.kind == 'PageConnector' and parent is not None and parent.kind == 'PageConnectors':
+    if kind == 'PageConnector' and parent is not None and parent.kind == 'PageConnectors':
         return CONNECTOR
-    if node.kind == 'Dimension' and parent is not None and parent.kind == 'Dimensions':
+    if kind == 'Dimension' and parent is not None and parent.kind == 'Dimensions':
         return DIMENSION
-    return {'Settings': SETTINGS, 'Schematic': SCHEMATIC, 'Table': TABLE}.get(node.kind)
+    return _BASE_DEFINITIONS.get(kind)
 
 
 def establish(document):

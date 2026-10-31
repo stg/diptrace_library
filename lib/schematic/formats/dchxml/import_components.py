@@ -2,8 +2,8 @@
 import math
 
 from .components import (HORZ, VERT)
-from .import_library_values import (read_category, read_path)
-from .import_values import (enum_value, length, point, replace_rows)
+from ....common.xml_library_values import (read_category, read_path)
+from ....common.xml_records import (enum_value, length, point, replace_rows)
 from .settings import (SHOW, ALIGN)
 from ....common.model import (Element, Value)
 from ...model.objects import (new_symbol, new_pin)
@@ -123,7 +123,7 @@ def read_component(record, definition, pattern, *, units, sheets):
     part.set_field('Value', record.text('Value', definition.scalar('Value')))
     part.set_field('ShowNumbers', enum_value(record.value('ShowNumbers', SHOW[definition.scalar('ShowNumbers')]
                    if 0 <= definition.scalar('ShowNumbers') < len(SHOW) else str(definition.scalar('ShowNumbers'))), SHOW))
-    from .fonts import (read_size)
+    from ....common.xml_font_import import (read_size)
     part.set_field('MarkingFontSize', read_size(record, 'MarkingFontSize', floating='MarkingFontSizeFloat'))
     for name in ('BaseName', 'Manufacturer', 'Datasheet', 'PartString'):
         if record.has(name):

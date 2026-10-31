@@ -6,7 +6,9 @@ runtime layouts are not part of this adapter.
 """
 from ....common.model import (Element, Value)
 from ....common.asc_model_body import project_model_body
-from .projection import (ProjectionError, _head, _plain, _visible, _ordered, _value, _project_drawing, project_pad, project_model3d, project_user_fields, project_pattern_drawing, _project_terminals, _scalar_field)
+from .projection import (ProjectionError, _head, _plain, _visible, _ordered, _value, _project_drawing, project_pad, project_model3d, project_user_fields, project_pattern_drawing, _scalar_field)
+from ....common.asc_footprints import project_terminals
+from ....common.asc_library import project_catalogs
 from ...model.vocabulary import (PATTERN_FIELDS, DIMENSION_FIELDS)
 
 
@@ -137,7 +139,7 @@ def project_cached_pattern(pattern, *, datasheet='', line_width=None, text_bound
         elif name == 'Model3D':
             projected = _prefix(project_model3d(field, variable_fallback=False))
         elif name == 'PadTerminalCount':
-            projected = _prefix(_project_terminals(pattern))
+            projected = _prefix(project_terminals(pattern, convert=_value))
         elif name == 'UserFields':
             projected = _prefix(_plain(field))
         else:
@@ -155,29 +157,10 @@ def project_cache(cache, *, line_width=None, symbol_text_bounds=None, pattern_te
     unknown=[n.kind for n in _visible(cache) if n.kind not in ('Categories','Subfolders','Slots')]
     if unknown:
         raise ProjectionError(f'{cache.path}: no cache projection for {unknown}')
-    result=Element('CacheLib')
-    def catalog(parent,kind,child_kind,public):
-        nodes=parent.children(kind)
-        if len(nodes) != len(_visible(parent)):
-            raise ProjectionError(f'{parent.path}: expected only {kind} records')
-        for node in nodes:
-            record=Element(public,*map(_value,node.arguments))
-            if child_kind is not None:
-                record.set_values(*record.arguments,len(node.children(child_kind)))
-                for child in catalog(node,child_kind,'Subtype' if child_kind=='Type' else None,
-                                     'cl_Type' if child_kind=='Type' else 'cl_SubType'):
-                    record.append(child)
-            elif _visible(node):
-                raise ProjectionError(f'{node.path}: unexpected catalog children')
-            yield record
-    categories=cache.one('Categories')
-    target=result.add('cl_Categories',len(categories.children('Category')))
-    for category in catalog(categories,'Category','Type','cl_Category'):
-        target.append(category)
-    folders=cache.one('Subfolders')
-    target=result.add('cl_Subfolders',len(folders.children('Folder')))
-    for folder in catalog(folders,'Folder',None,'cl_Subfolder'):
-        target.append(folder)
+    try:
+        result=project_catalogs(cache,convert=_value,visible=_visible)
+    except ValueError as error:
+        raise ProjectionError(str(error)) from error
     components=result.add('cl_Components')
     paths=Element('Design_Cache_specific')
     slots=cache.one('Slots')

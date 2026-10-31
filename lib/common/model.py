@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from copy import deepcopy
+from functools import lru_cache
 import math
 import re
 from typing import Callable, Iterator
@@ -24,6 +26,12 @@ ELEMENT_NAME = r"[A-Za-z_][A-Za-z_0-9.-]*"
 _NAME = re.compile(ELEMENT_NAME + r"\Z")
 _SYMBOL = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\Z")
 _EMPTY_CHILDREN = {None: ()}
+
+
+@lru_cache(maxsize=1024)
+def _valid_element_name(kind):
+    """Cache syntax checks, never mutable element state."""
+    return _NAME.fullmatch(kind) is not None
 
 
 @dataclass(frozen=True)
@@ -70,8 +78,14 @@ class Value:
 
 
 class Element:
+    # Most designs contain many scalar-field elements. Keep their fixed state
+    # compact while retaining custom attributes and weak references.
+    __slots__ = ('_uid', '_kind', '_items', '_children_cache', '_positions_cache',
+                 '_schema', '_document', '_parent', 'source', 'annotations',
+                 '_syntax', '_dirty', '_reordered', '__dict__', '__weakref__')
+
     def __init__(self, kind: str, *values: Scalar | float | Value, source: SourceSpan | None = None):
-        if kind and not _NAME.fullmatch(kind):
+        if kind and not _valid_element_name(kind):
             raise ValueError(f"invalid element kind: {kind!r}")
         self._uid = uuid4().hex
         self._kind = kind
@@ -97,7 +111,7 @@ class Element:
 
     @kind.setter
     def kind(self, kind: str):
-        if not _NAME.fullmatch(kind):
+        if not _valid_element_name(kind):
             raise ValueError(f"invalid element kind: {kind!r}")
         if self._kind != kind:
             self._kind = kind
@@ -134,7 +148,10 @@ class Element:
         return proposed if proposed is not None else self._stored_arguments()
 
     def _stored_arguments(self):
-        direct = tuple(i for i in self._items if isinstance(i, Value))
+        if len(self._items) == 1 and isinstance(self._items[0], Value):
+            direct = (self._items[0],)
+        else:
+            direct = tuple(i for i in self._items if isinstance(i, Value))
         if self._schema is None or not self._schema.parameters:
             return direct
         named = []
@@ -178,6 +195,8 @@ class Element:
             prospective = children_override(self, kind)
             if prospective is not None:
                 return prospective
+        if self._children_cache is not None:
+            return self._children_cache.get(kind, ())
         return self._stored_child_sequence(kind)
 
     def _stored_child_sequence(self, kind=None):
@@ -526,9 +545,19 @@ class Element:
                     except BaseException:
                         snapshot.restore()
                         raise
+        cached_children = self._children_cache
+        if (position == len(self._items) and cached_children is not None
+                and node.kind not in cached_children):
+            # New field kinds can extend the lookup without regrouping siblings.
+            # Copy it: detached edit snapshots may still share the old cache.
+            cached_children = {**cached_children, None: cached_children[None] + (node,),
+                               node.kind: (node,)}
+        else:
+            cached_children = None
         self._items.insert(position, node)
         node._parent = self
         self._touch(reordered=True)
+        self._children_cache = cached_children
         if owner is not None:
             if attachment is None:
                 owner.references.apply_value_change(plan)
@@ -639,13 +668,19 @@ class Element:
 
     def clone(self) -> "Element":
         """Copy content and formatting with fresh identities and no shared children."""
-        from copy import deepcopy
+        return self._clone()
+
+    def _clone(self, mapping=None):
+        """Collect document ownership mappings during the copy traversal."""
         result = Element(self.kind, source=self.source)
-        result.annotations = deepcopy(self.annotations)
+        if mapping is not None:
+            mapping[self] = result
+        if self.annotations:
+            result.annotations = deepcopy(self.annotations)
         result._items = []
         for item in self._items:
             if isinstance(item, Element):
-                copied = item.clone()
+                copied = item._clone(mapping)
                 copied._parent = result
                 result._items.append(copied)
             else:
@@ -740,6 +775,14 @@ class Document:
     def _validate_reference_change(self, reference, target):
         pass
 
+    def _prepare_reference_binding(self, reference):
+        """Add domain-owned projections before a relationship is checked."""
+        return reference
+
+    def _plan_reference_outputs(self, references):
+        """Prepare domain-owned collection projections in the proposed graph."""
+        return ()
+
     def _attachment_required(self, parent, node):
         return False
 
@@ -750,6 +793,14 @@ class Document:
         pass
 
     def _validate_reference_removal(self, reference):
+        pass
+
+    def _unresolved_reference_fields(self, issue):
+        """Calculated fields whose inputs constrain an unresolved selection."""
+        return ()
+
+    def _validate_unresolved_reference(self, issue):
+        """Validate model constraints against the current or prospective graph."""
         pass
 
     def _validate_move(self, node, parent):
@@ -836,13 +887,12 @@ class Document:
                                    for n in self.root.walk() if n.annotations.get("incomplete")]
 
     def clone(self) -> "Document":
-        from copy import deepcopy
-        doc = type(self)(self.root.clone(), representation=self.representation)
+        mapping = {}
+        doc = type(self)(self.root._clone(mapping), representation=self.representation)
         doc.metadata = deepcopy(self.metadata)
         doc.complete, doc.diagnostics = self.complete, list(self.diagnostics)
         doc._source_text, doc._source_bytes = self._source_text, self._source_bytes
         doc._source_encoding = self._source_encoding
-        mapping = dict(zip(self.root.walk(include_self=True), doc.root.walk(include_self=True)))
         doc._automatic_structure = False
         try:
             doc.references = self.references.clone_to(doc, mapping)

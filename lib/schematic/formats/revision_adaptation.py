@@ -1,6 +1,7 @@
 """Destination revision choices applied only to detached export views."""
 from ...common.conversion import (warn)
-from ..model.fonts import (all_fonts, complete_fonts, compatibility_size)
+from ..model.fonts import all_fonts, complete_fonts
+from ...common.font_codec import compatibility_size
 from ..model.simulation import (OPTION_FIELDS, complete_options, argument_values)
 
 

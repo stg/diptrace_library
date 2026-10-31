@@ -1,5 +1,7 @@
 """Schematic destination capabilities and adaptation diagnostics."""
 from ...common.conversion import (info, warn)
+from ...common.supplier_conversion import report_supplier_omissions
+from ...common.inactive_output import report_omitted_records as _report_omitted_records
 
 
 def report_generated_marking_attributes(schematic, *, use_part_font_color, font_name='', report=None):
@@ -39,16 +41,9 @@ def _empty_inactive_drawing(node):
 
 
 def report_omitted_records(nodes, *, destination, report=None, rule='inactive-records'):
-    """Separate empty compatibility slots from inactive content worth retaining."""
-    empty, content = [], []
-    for node in nodes:
-        (empty if _empty_inactive_drawing(node) else content).append(node)
-    if empty:
-        info(report, 'inactive-empty-drawings', destination, 'empty inactive drawing slots are omitted', empty,
-             recoverability='no drawing, text or association is lost; unused slot attributes remain in the authoring model')
-    if content:
-        warn(report, rule, destination, 'inactive records are omitted from this export view', content,
-             recoverability='inactive states and content remain in the authoring model')
+    """Use schematic rules for an empty slot with the shared report policy."""
+    return _report_omitted_records(nodes, destination=destination, report=report,
+                                   rule=rule, empty_drawing=_empty_inactive_drawing)
 
 
 def nondefault_net_ids(schematic):
@@ -69,34 +64,18 @@ def report_text_omissions(document, *, destination, report=None):
     """Report known saved data absent from the public text projections."""
     from ..model.traversal import (symbols, cached_definitions)
     schematic = document.one('/Schematic')
-    locators, quotes, main_flags = [], [], []
-    for part in symbols(schematic):
-        supplier = part.child('Suppliers')
-        if supplier is None:
-            continue
-        locator = supplier.child('SourceLocator')
-        if locator is not None and locator.values and locator.values[0]:
-            locators.append(locator)
-        quotes.extend(supplier.select('Prices/Quote'))
-        flag = supplier.child('MainSupplier')
-        if destination == 'dchxml' and flag is not None and flag.values == (True,):
-            main_flags.append(flag)
-    for rule, message, nodes in (
-            ('supplier-source-locator', 'stored supplier source locators are omitted', locators),
-            ('supplier-quotes', 'stored supplier quantity/price rows are omitted', quotes)):
-        if nodes:
-            warn(report, rule, destination, message, nodes,
-                 recoverability='the omitted saved values cannot be recovered from this destination alone; source facts remain intact')
+    report_supplier_omissions(symbols(schematic), destination=destination, report=report,
+                              omit_preference=destination == 'dchxml')
+    if destination == 'asc':
+        report_supplier_omissions((definition.one('Part') for definition in cached_definitions(schematic)),
+            destination=destination, report=report, omit_source_locator=False, omit_prices=False, omit_preference=True)
     notes = [part.one('ModelNote') for definition in cached_definitions(schematic)
              if (part := definition.one('Part')).scalar('ModelNote', '')]
     if notes:
         warn(report, 'cached-model-note', destination, 'cached model notes are omitted by this adapter', notes,
              recoverability='model notes remain editable in the authoring model; the current destination mapping does not include them')
-    if main_flags:
-        info(report, 'supplier-preference', destination, 'the cached main-supplier match flag is omitted', main_flags,
-             recoverability='the chosen supplier is retained; its match to a preferred supplier depends on the receiving environment, not the saved cached bit')
     if destination == 'asc':
-        from ..model.page_titles import (has_title_data)
+        from ...common.title_records import has_title_data
         titles = [grid for grid in schematic.select('Pages/Page/TitleBlocks/TitleBlock') if has_title_data(grid)]
         if titles:
             warn(report, 'page-title-blocks', destination, 'page title-grid names, layout and fields are omitted', titles,
@@ -164,20 +143,6 @@ def apply_capacity(document, *, destination, report=None):
              [row for container in resources for row in container.children()])
     if resources:
         _remove_resources(document, resources)
-    empty_shapes = []
-    for pattern in footprints(schematic):
-        owners = [(pattern, 'PadShape'), *((pad, 'PadShape_New') for pad in pattern.select('Pads/Pad'))]
-        for owner, name in owners:
-            empty_shapes.extend(terminal.one('Type') for terminal in owner.children('PadTerminal')
-                                if terminal.scalar('Type') == '')
-            if owner.scalar(name) == '':
-                empty_shapes.append(owner.one(name))
-    if empty_shapes:
-        info(report, 'empty-pad-shape', destination,
-             'empty XML pad-shape labels use numeric -1 in this destination', empty_shapes,
-             recoverability='both forms denote an unspecified shape; the empty label remains in the authoring model')
-        for node in empty_shapes:
-            node.set_values(-1)
     public_keys = []
     for pattern in footprints(schematic):
         for index, pad in enumerate(pattern.select('Pads/Pad')[1:-1], 1):

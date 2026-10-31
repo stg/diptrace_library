@@ -2,7 +2,8 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from lib import Document
+from lib import document_family
+from lib.common.model import Document
 
 Signature = tuple[str, str, str]
 
@@ -21,6 +22,8 @@ class Component:
 
 def physical_components(design: Document) -> Iterator[Component]:
     """Read enabled physical parts through the public, named-field model API."""
+    if document_family(design) != 'schematic':
+        raise ValueError('component listing expects a schematic document')
     for part in design.select("/Schematic/Components/Part"):
         # Ports and other logical symbols do not identify parts to purchase or
         # find in a component usage database.
