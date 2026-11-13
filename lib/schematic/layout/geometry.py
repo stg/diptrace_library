@@ -15,6 +15,9 @@ def symbol_bounds(part):
     layout service and do not determine this box. The placed position, rotation
     and pen width are deliberately outside this local coordinate calculation.
     """
+    from ...common.unit_views import UnitElement
+    if isinstance(part, UnitElement):
+        return part._scope.bounds(symbol_bounds(part.model))
     boxes = []
     pins = part.child('Pins')
     if pins:
@@ -51,11 +54,12 @@ def pattern_bounds(pattern):
     arbitrary rotations need their own contour view rather than a rectangle
     approximation. Unsupported rotations are explicit errors.
     """
+    from ...common.unit_views import UnitElement
+    if isinstance(pattern, UnitElement):
+        return pattern._scope.bounds(pattern_bounds(pattern.model))
     boxes = []
     pads = pattern.child('Pads')
-    for pad in pads.children('Pad') if pads else ():
-        if pad.annotations.get('reserved'):
-            continue
+    for pad in pads.children('Pad')[1:-1] if pads else ():
         width, height = float(pad.scalar('PadWidth_New')), float(pad.scalar('PadHeight_New'))
         if not width and not height:
             continue  # Reserved array records have no physical geometry.
@@ -68,7 +72,7 @@ def pattern_bounds(pattern):
         x, y = map(float, pad.values[3:5])
         boxes.append(Bounds(x-abs(width)/2, y-abs(height)/2, x+abs(width)/2, y+abs(height)/2))
     for shape, kind, geometry in _pattern_drawings(pattern):
-        if kind is None or kind <= 0 or kind == 7 or shape.annotations.get('asc_omit'):
+        if kind is None or kind <= 0 or kind == 7:
             continue
         points = [point.values[:2] for point in geometry.children('pt')] if geometry else []
         if kind == 6:

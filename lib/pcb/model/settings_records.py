@@ -38,7 +38,7 @@ BORDER_ZONES = Record('PcbBorderZones', {
     **_fields('boolean', 'Visible Border'),
     **_fields('integer', 'HorzZones VertZones Standard'),
     **_fields('text', 'FontName'),
-    **_fields('number', 'FontSize'),
+    **_fields('number', 'FontSize', unit='font size'),
     **_fields('number', 'HorzBorderSize VertBorderSize FontLineWidth', unit='shared length'),
 })
 

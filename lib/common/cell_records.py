@@ -1,5 +1,6 @@
 """Authored cell text/style/bounds and derived grid coordinates."""
-from .schema import Child, Field, Record
+from .schema import Child, Field, Record, with_units
+from .measurements import nonnegative_length
 
 
 def _row(name, fields, description=''):
@@ -45,6 +46,9 @@ CELL = Record('Cell', {
     'FontMono': Field('FontMono', 'boolean', default=False),
     **BOUNDS.fields, **GRID_FIELDS,
 }, BOUNDS.parameters, 'A table cell with authored bounds and derived grid position.')
+CELL = with_units(CELL, {
+    'FontSize': 'font size', 'FontWidth': 'shared length', 'FontScale': 'ratio', 'LineSpacing': 'ratio',
+}, selectors={'FontWidth': nonnegative_length})
 
 
 def _collection(name, kind, record):

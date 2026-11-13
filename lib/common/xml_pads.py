@@ -35,9 +35,7 @@ def read_pad_style(record, owner, *, units):
     if kind not in (0, 1) or side not in (0, 1):
         raise ValueError(f'{record.node.path}: unsupported pad type or side')
     owner.set_field('SurfacePad', kind == 0)
-    sided = owner.set_field('Sided', side == 1)
-    if owner.kind == 'Pattern' and not side:
-        sided.annotations['asc_omit'] = 'XML default pad side; no binary pattern default-side field'
+    owner.set_field('Sided', side == 1)
     owner.set_field('PadHoleType', enum_value(record.value('HoleType', 'Round'), ('Round', 'Obround')))
     hole = record.number('Hole', 0)
     owner.set_field('PadHole', length(hole, units))

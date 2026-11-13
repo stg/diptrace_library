@@ -1,5 +1,5 @@
 """A document family supplies vocabulary without replacing the XML parser."""
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import unittest
 
 from lib.common import xml
@@ -14,6 +14,38 @@ PCB = xml.XmlDialect(format='dipxml', source_type='DipTrace-PCB',
 
 
 class XmlTests(unittest.TestCase):
+    def test_rendering_and_style_keys_do_not_add_annotation_maps(self):
+        from lib.common.xml_catalog import record_key
+        document = Document()
+        source = document.root.add('Source')
+        xml.set_attribute(source, 'Type', 'DipTrace-PCB')
+        item = source.add('Item', 'content')
+        snapshot = [(node, node._annotations) for node in document.root.walk(include_self=True)]
+        key = record_key(source)
+        self.assertEqual(key[3], (('Item', (('string', 'content', ''),), (), ()),))
+        self.assertIn('<Item>content</Item>', xml.dumps(document, dialect=PCB))
+        for node, notes in snapshot:
+            self.assertIs(node._annotations, notes)
+        self.assertIsNone(item._annotations)
+
+    def test_invalid_new_attribute_does_not_leave_an_empty_field(self):
+        document = xml.loads('<Source Type="DipTrace-PCB"/>', dialect=PCB)
+        source = document.one('Source')
+        with self.assertRaises(ValueError):
+            xml.set_attribute(source, 'X', float('inf'))
+        self.assertIsNone(source.child('X'))
+
+    def test_equivalent_numeric_spellings_have_stable_output_without_rounding(self):
+        for literal, expected in (('1.840', '1.84'), ('-0.0000', '0'),
+                                  ('123000.0', '123000'), ('1E+3', '1000'),
+                                  ('123456.78900', '123456.789')):
+            with self.subTest(literal=literal), localcontext() as context:
+                context.prec = 2
+                document = xml.loads(f'<Source Type="DipTrace-PCB"><Value X="{literal}"/></Source>', dialect=PCB)
+                output = xml.dumps(document, dialect=PCB, canonical_numbers=True)
+                self.assertIn(f'X="{expected}"', output)
+                self.assertEqual(xml.dumps(xml.loads(output, dialect=PCB), dialect=PCB, canonical_numbers=True), output)
+
     def test_typed_data_survives_syntax_round_trip(self):
         document = xml.loads('<Source Type="DipTrace-PCB"><Board><Component '
             'X="1.25" Y="-2" Locked="Y"><RefDes>R01</RefDes></Component>'

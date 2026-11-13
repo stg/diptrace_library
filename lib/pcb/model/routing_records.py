@@ -55,7 +55,7 @@ POINT_FIELDS = {
     **LAYER_FIELDS, **VIA_FIELDS,
     'Id': _ordinal(),
     **{name: Field(name, 'number', required=True, default=0, unit='shared length') for name in ('X', 'Y')},
-    'Width': Field('Width', 'number', default=-1, unit='shared length'),
+    'Width': Field('Width', 'number', default=-1, unit='shared length', unit_sentinels=(-1,)),
     **{name: Field(name, 'integer', default=default) for name, default in
        (('Jumper', 0), ('Meander', 0), ('ShieldGroup', -1))},
     'PairTarget': reference_field('PairTarget', pair_membership.ROLE),
@@ -67,7 +67,7 @@ POINT_FIELDS = {
     **{name: Field(name, 'number', nullable=True, default=None, unit='shared length',
                   description='Calculated phase length, absent when unavailable.')
        for name in ('PhaseFwd', 'PhaseBack')},
-    'MeanderAngle': Field('MeanderAngle', 'number', default=0),
+    'MeanderAngle': Field('MeanderAngle', 'number', default=0, unit='angle'),
 }
 POINT = Record('PcbTracePoint', POINT_FIELDS, parameters=('Id',))
 SIDE_POINT = Record('PcbPairSidePoint', {

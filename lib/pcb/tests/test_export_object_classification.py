@@ -133,10 +133,14 @@ class ExportObjectClassificationTests(unittest.TestCase):
         document = via_document()
         add_drawing(document)
         before = state(document)
-        with patch('lib.pcb.formats.dipxml.write.project_document', side_effect=RuntimeError('probe')):
-            with self.assertRaisesRegex(RuntimeError, 'probe'):
-                io.serialize(document, format='dipxml', report=ConversionReport())
-        self.assertEqual(state(document), before)
+        for export in (io.serialize, io.project):
+            with self.subTest(export=export.__name__):
+                # Fail after detached classification and library/component
+                # projection, on the path shared by both output interfaces.
+                with patch('lib.pcb.formats.dipxml.write.project_nets', side_effect=RuntimeError('probe')):
+                    with self.assertRaisesRegex(RuntimeError, 'probe'):
+                        export(document, format='dipxml', report=ConversionReport())
+                self.assertEqual(state(document), before)
         self.assertEqual(document.one(COMPONENT+'/Pattern')['Type'], 16)
         self.assertTrue(document.references.manages(document.one(PAD+'/PadWidth_New')))
         document.validate()

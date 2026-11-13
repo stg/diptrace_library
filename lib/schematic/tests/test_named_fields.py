@@ -66,6 +66,20 @@ class NamedFieldTests(unittest.TestCase):
                 getattr(doc, 'to_'+kind+'_bytes')(report=report)
             self.assertEqual(len(report.errors), 1)
 
+    def test_destination_coverage_is_independent_of_annotation_history(self):
+        document = design()
+        formats = ('dch', 'asc', 'dchxml')
+        expected = {format: getattr(document, 'to_'+format+'_bytes')(report=ConversionReport())
+                    for format in formats}
+        # Obsolete flags supplied by a caller are ordinary notes. They cannot
+        # turn off fields, array members, geometry or destination coverage.
+        for node in document.root.walk(include_self=True):
+            node.annotations.update(asc_omit='a user note', reserved=True)
+        for format in formats:
+            with self.subTest(format=format):
+                self.assertEqual(getattr(document, 'to_'+format+'_bytes')(report=ConversionReport()),
+                                 expected[format])
+
     def test_calculated_names_work_in_selectors(self):
         doc = design()
         pin = doc.one('//Pin[Index=0]')

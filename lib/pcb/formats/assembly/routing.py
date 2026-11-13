@@ -168,7 +168,7 @@ def assemble_routing(decoded, core=None):
             slot.detach()
         for center, role, name, index, points in unresolved_ranges:
             center.add(name, index)
-        for node in board.walk(include_self=True):
+        for node in board._record_walk(include_self=True):
             schema = routing_records.definition(node)
             if schema is not None:
                 if schema.parameters == ('Id',):

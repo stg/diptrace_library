@@ -64,7 +64,6 @@ def read_library(record, schematic, *, units, cache_count):
     replace_rows(cache, 'Categories', [row.clone() for row in categories.children()])
     if pattern_categories.children():
         pattern_categories.kind = 'PatternCategories'
-        pattern_categories.annotations['asc_omit'] = 'XML pattern catalog; binary output checks semantic coverage'
         cache.append(pattern_categories)
     slots = cache.one('Slots')
     definitions, used_patterns = {}, set()

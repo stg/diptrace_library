@@ -8,6 +8,7 @@ from contextlib import nullcontext
 from ....common.asc_text import raw_token
 from ....common.structural_edits import assembly
 from ....common.model import Value
+from ....common.import_tree import move_children
 from ....common import footprint_records
 from ....common.asc_footprints import unpack_model, unpack_terminals, unpack_pattern_shapes
 from ....common.library_metadata import CLASSIFICATIONS, consume_count, modernize_classifications
@@ -97,17 +98,20 @@ def _unpack_component(component):
     pattern = component.one('Pattern')
     if len(pattern.arguments) != 1 or pattern.children():
         raise ValueError(f'{pattern.path}: expected a scalar footprint name')
-    for node in tuple(component.children()):
+    selected, names = [], set(pattern._child_kinds())
+    for node in component.children():
         if node.kind in _PATTERN_FIELDS:
-            if pattern.child(node.kind) is not None:
+            if node.kind in names:
                 raise ValueError(f'{component.path}: duplicate footprint field {node.kind}')
-            node.move_to(pattern)
+            names.add(node.kind)
+            selected.append(node)
+    move_children(component, pattern, selected)
     for owner, name in ((component, 'Component_CategoryTypes'), (pattern, 'Pattern_CategoryTypes')):
         if (classifications := owner.child(name)) is not None:
             modernize_classifications(classifications)
             consume_count(classifications, CLASSIFICATIONS)
     terminals = component.one('PadTerminals')
-    terminals.move_to(pattern)
+    move_children(component, pattern, (terminals,))
     unpack_terminals(pattern, container='PadTerminals', counted=False)
     if (points := pattern.child('PadPoints')) is not None:
         if points.arguments:

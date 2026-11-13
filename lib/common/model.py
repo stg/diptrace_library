@@ -14,14 +14,16 @@ import math
 import re
 from typing import Callable, Iterator
 from uuid import uuid4
-from .schema import MISSING
+from .schema import MISSING, _bind_validation_preview
+from .validation_scope import _active as _checked_preparation
+from .element_storage import FieldItems, RecordItems, _bind_model_types
 from .field_edits import proposed_arguments, field_proposal, ValueEdit, _values as _prospective_values
 from .structural_edits import (ordinal_override, parent_override, children_override, validate_child_change,
                                preview_structure, DetachedSnapshot, assembly,
                                _structure as _prospective_structure, _ordinals as _prospective_ordinals)
 
 
-Scalar = str | int | Decimal | bool | None
+Scalar = str | int | float | Decimal | bool | None
 ELEMENT_NAME = r"[A-Za-z_][A-Za-z_0-9.-]*"
 _NAME = re.compile(ELEMENT_NAME + r"\Z")
 _SYMBOL = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\Z")
@@ -34,7 +36,7 @@ def _valid_element_name(kind):
     return _NAME.fullmatch(kind) is not None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SourceSpan:
     format: str
     start: int
@@ -42,7 +44,7 @@ class SourceSpan:
     source: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Value:
     value: Scalar
     kind: str
@@ -64,13 +66,11 @@ class Value:
             return cls(value, "boolean")
         if isinstance(value, str):
             return cls(value, "string")
-        if isinstance(value, float):
-            if not math.isfinite(value):
-                raise ValueError("numbers must be finite")
-            value = Decimal(str(value))
         if isinstance(value, Decimal) and not value.is_finite():
             raise ValueError("numbers must be finite")
-        if isinstance(value, (int, Decimal)):
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError("numbers must be finite")
+        if isinstance(value, (int, float, Decimal)):
             if unit not in ("", "%"):
                 raise ValueError(f"unsupported numeric unit: {unit!r}")
             return cls(value, "number", unit)
@@ -80,29 +80,100 @@ class Value:
 class Element:
     # Most designs contain many scalar-field elements. Keep their fixed state
     # compact while retaining custom attributes and weak references.
-    __slots__ = ('_uid', '_kind', '_items', '_children_cache', '_positions_cache',
-                 '_schema', '_document', '_parent', 'source', 'annotations',
-                 '_syntax', '_dirty', '_reordered', '__dict__', '__weakref__')
+    __slots__ = ('_uid', '_kind', '_content', '_children_cache', '_positions_cache',
+                 '_schema', '_document', '_parent', '_source', '_annotations',
+                 '_syntax', '_dirty_flag', '_reordered_flag', '__dict__', '__weakref__')
 
     def __init__(self, kind: str, *values: Scalar | float | Value, source: SourceSpan | None = None):
         if kind and not _valid_element_name(kind):
             raise ValueError(f"invalid element kind: {kind!r}")
-        self._uid = uuid4().hex
+        self._uid = None
         self._kind = kind
-        self._items: list[Element | Value] = [Value.of(v) for v in values]
+        self._content = [Value.of(v) for v in values]
         self._children_cache = None
         self._positions_cache = None
         self._schema = None
         self._document = None
         self._parent: Element | None = None
         self.source = source
-        self.annotations: dict[str, object] = {}
+        self._annotations: dict[str, object] | None = None
         self._syntax = None
         self._dirty = True
         self._reordered = True
 
     @property
+    def _items(self):
+        return self._content
+
+    @_items.setter
+    def _items(self, items):
+        if type(self._content) in (RecordItems, FieldItems):
+            self._content.replace(items)
+        else:
+            self._content = items
+
+    @property
+    def source(self):
+        return self._content.source() if type(self._content) is FieldItems else self._source
+
+    @source.setter
+    def source(self, source):
+        if type(self._content) is FieldItems:
+            self._content.set_source(source)
+        else:
+            self._source = source
+
+    @property
+    def _dirty(self):
+        if type(self._content) is FieldItems:
+            return bool(self._content.record.dirty_fields & (1 << self._content.slot))
+        return self._dirty_flag
+
+    @_dirty.setter
+    def _dirty(self, value):
+        if type(self._content) is FieldItems:
+            content, bit = self._content, 1 << self._content.slot
+            content.record.dirty_fields = content.record.dirty_fields | bit if value else content.record.dirty_fields & ~bit
+        else:
+            self._dirty_flag = value
+
+    @property
+    def _reordered(self):
+        if type(self._content) is FieldItems:
+            return bool(self._content.record.reordered_fields & (1 << self._content.slot))
+        return self._reordered_flag
+
+    @_reordered.setter
+    def _reordered(self, value):
+        if type(self._content) is FieldItems:
+            content, bit = self._content, 1 << self._content.slot
+            content.record.reordered_fields = content.record.reordered_fields | bit if value else content.record.reordered_fields & ~bit
+        else:
+            self._reordered_flag = value
+
+    @property
+    def annotations(self) -> dict[str, object]:
+        """Optional inspection/user notes, allocated only when requested."""
+        if self._annotations is None:
+            self._annotations = {}
+            if type(self._content) is FieldItems:
+                self._content.set_notes(self._annotations)
+        return self._annotations
+
+    @annotations.setter
+    def annotations(self, value):
+        self._annotations = value
+        if type(self._content) is FieldItems:
+            self._content.set_notes(value)
+
+    @property
     def uid(self) -> str:
+        if self._uid is None:
+            self._uid = uuid4().hex
+            if (scope := _checked_preparation.get()) is not None:
+                scope.identity(self)
+        if type(self._content) is FieldItems:
+            self._content.remember_uid(self._uid)
         return self._uid
 
     @property
@@ -114,10 +185,14 @@ class Element:
         if not _valid_element_name(kind):
             raise ValueError(f"invalid element kind: {kind!r}")
         if self._kind != kind:
+            if type(self._content) is FieldItems:
+                self._content.record.materialize(self)
             self._kind = kind
             if self._parent is not None:
                 self._parent._children_cache = None
                 self._parent._positions_cache = None
+                if type(self._parent._content) is RecordItems:
+                    self._parent._content.invalidate()
             self._touch()
 
     @property
@@ -148,10 +223,12 @@ class Element:
         return proposed if proposed is not None else self._stored_arguments()
 
     def _stored_arguments(self):
-        if len(self._items) == 1 and isinstance(self._items[0], Value):
-            direct = (self._items[0],)
+        content = self._content
+        items = content.order if type(content) is RecordItems else content
+        if len(items) == 1 and isinstance(items[0], Value):
+            direct = (items[0],)
         else:
-            direct = tuple(i for i in self._items if isinstance(i, Value))
+            direct = tuple(i for i in items if isinstance(i, Value))
         if self._schema is None or not self._schema.parameters:
             return direct
         named = []
@@ -159,6 +236,10 @@ class Element:
             definition = self._schema.fields[name]
             if definition.getter is not None:
                 named.append(Value.of(definition.getter(self)))
+            elif (type(content) is RecordItems and _prospective_structure.get() is None
+                  and _prospective_values.get() is None
+                  and name in content.storage):
+                named.append(content.argument(content.storage.layout.slots[name]))
             else:
                 child = self.child(name)
                 named.append(child.arguments[0] if child is not None else Value.of(definition.default))
@@ -166,6 +247,28 @@ class Element:
 
     @property
     def values(self) -> tuple[Scalar, ...]:
+        content = self._content
+        proposed = _prospective_values.get()
+        if proposed is not None and (arguments := proposed.get(self)) is not None:
+            return tuple(value.value for value in arguments)
+        # A preview changes particular fields, not every scalar in the model.
+        # Read unaffected slots directly; parameter records still consult each
+        # field's proposal before projecting their positional values.
+        if type(content) is FieldItems:
+            return content.values()
+        if type(content) is RecordItems and _prospective_structure.get() is None:
+            named = []
+            for name in self._schema.parameters if self._schema is not None else ():
+                definition = self._schema.fields[name]
+                if definition.getter is not None:
+                    named.append(Value.of(definition.getter(self)).value)
+                else:
+                    value = self._field_value(name, definition) if proposed else content.value(name)
+                    if value is MISSING:
+                        break
+                    named.append(value[0] if definition.kind == 'tuple' else value)
+            else:
+                return tuple(named) + tuple(item.value for item in content.order if isinstance(item, Value))
         return tuple(v.value for v in self.arguments)
 
     @property
@@ -188,6 +291,8 @@ class Element:
             if reordered and node._document is not None:
                 node._document._identity_index = None
             node = node._parent
+        if (scope := _checked_preparation.get()) is not None:
+            scope.touch(self)
 
     def _child_sequence(self, kind=None):
         """Private immutable lookup; public callers receive independent lists."""
@@ -195,11 +300,15 @@ class Element:
             prospective = children_override(self, kind)
             if prospective is not None:
                 return prospective
+        if type(self._content) in (RecordItems, FieldItems):
+            return self._content.children(kind)
         if self._children_cache is not None:
             return self._children_cache.get(kind, ())
         return self._stored_child_sequence(kind)
 
     def _stored_child_sequence(self, kind=None):
+        if type(self._content) in (RecordItems, FieldItems):
+            return self._content.children(kind)
         if self._children_cache is None:
             children = tuple(item for item in self._items if isinstance(item, Element))
             if children:
@@ -229,6 +338,9 @@ class Element:
         if self._parent is None:
             return 0
         parent = self._parent
+        if type(self._content) is FieldItems:
+            siblings = parent._stored_child_sequence(self.kind)
+            return siblings.index(self)
         if parent._positions_cache is None:
             parent._positions_cache = {}
         if self.kind not in parent._positions_cache:
@@ -245,12 +357,20 @@ class Element:
         """Establish named storage; positional adapter values become projections."""
         if self._schema is schema:
             return self
+        if (scope := _checked_preparation.get()) is not None:
+            scope.schema(self)
+        if type(self._content) is FieldItems:
+            self._content.record.materialize(self)
         if self._schema is not None:
             if self._schema.parameters != schema.parameters:
                 raise ValueError('record already has an incompatible parameter schema')
             self._schema = schema
-            return self
-        raw = tuple(item for item in self._items if isinstance(item, Value))
+            if type(self._content) is RecordItems:
+                self._content.rebind(schema)
+            return self._compact_bound_fields()
+        content = self._content
+        items = content.order if type(content) is RecordItems else content
+        raw = tuple(item for item in items if isinstance(item, Value))
         plan = []
         for index, name in enumerate(schema.parameters):
             definition = schema.fields[name]
@@ -271,12 +391,62 @@ class Element:
             else:
                 definition.validate(value.value)
                 plan.append((name, value))
-        self._items = list(raw[len(schema.parameters):]) + self.children()
+        if type(content) is RecordItems:
+            content.order = list(raw[len(schema.parameters):]) + [item for item in content.order if not isinstance(item, Value)]
+        else:
+            self._items = list(raw[len(schema.parameters):]) + self.children()
         self._schema = schema
+        if type(content) is RecordItems and content.storage.layout.schema is not schema:
+            content.rebind(schema)
         self._touch(reordered=True)
+        if plan and type(content) is not RecordItems:
+            owner = self._owner()
+            if owner is None or not owner._automatic_structure:
+                # Constructor/import binding can place named header values
+                # directly into slots. Live attachment planning keeps the
+                # ordinary authoring path below.
+                self._compact_bound_fields()
+                content = self._content
         for name, value in plan:
-            self.add(name, value)
+            if type(content) is not RecordItems or not content.import_field(name, (value,)):
+                self.add(name, value)
+        return self._compact_bound_fields()
+
+    def _compact_bound_fields(self):
+        """Use named value storage while keeping explicit text syntax separate."""
+        if type(self._content) is not RecordItems:
+            owner = self._owner()
+            if (owner is None or owner.representation == 'tree'
+                    or owner.representation in owner._named_representations):
+                self._compact_fields(retain_debug=True)
         return self
+
+    def _compact_fields(self, *, recursive=False, retain_debug=False):
+        """Enable canonical value slots without changing the public field view."""
+        if self._schema is not None and type(self._content) not in (RecordItems, FieldItems):
+            self._content = RecordItems(self, self._schema, self._content, retain_debug=retain_debug)
+            self._children_cache = self._positions_cache = None
+            owner = self._owner()
+            if owner is not None:
+                owner._identity_index = None
+        if recursive:
+            children = (tuple(item for item in self._content.order if isinstance(item, Element))
+                        if type(self._content) is RecordItems else self._child_sequence())
+            for child in children:
+                child._compact_fields(recursive=True, retain_debug=retain_debug)
+        return self
+
+    def _append_import(self, node):
+        """Attach a fresh adapter-owned child before the import audit boundary."""
+        if node._parent is not None or node._document is not None:
+            raise ValueError('import construction requires a detached fresh child')
+        node._parent = self
+        self._content.append(node)
+        self._children_cache = self._positions_cache = None
+        self._dirty = self._reordered = True
+        if (scope := _checked_preparation.get()) is not None:
+            scope.attach(self, node)
+        return node
 
     def _argument_owner(self, index):
         if self._schema is not None and 0 <= index < len(self._schema.parameters):
@@ -291,6 +461,10 @@ class Element:
 
     def _owner(self):
         root = self
+        if _prospective_structure.get() is None:
+            while root._parent is not None:
+                root = root._parent
+            return root._document
         while root.parent is not None:
             root = root.parent
         return root._document
@@ -299,9 +473,12 @@ class Element:
         if not isinstance(name, str):
             raise TypeError('field names must be strings')
         definition = self._schema.fields.get(name) if self._schema is not None else None
-        if definition is not None:
-            if definition is not None and definition.getter is not None:
-                return definition.getter(self)
+        if definition is not None and definition.getter is not None:
+            return definition.getter(self)
+        if type(self._content) is RecordItems and _prospective_structure.get() is None:
+            value = self._field_value(name, definition)
+            if value is not MISSING:
+                return value
         child = self.child(name)
         if child is None:
             raise KeyError(name)
@@ -312,15 +489,60 @@ class Element:
         return values if definition is not None and definition.kind == 'tuple' else (
             values[0] if len(values) == 1 else values)
 
+    def _field_value(self, name, definition):
+        """Read a compact field, respecting a preview of this particular slot."""
+        content = self._content
+        proposed = _prospective_values.get()
+        if proposed:
+            slot = content.storage.layout.slots.get(name)
+            handle = content.handles.get(slot)
+            if handle in proposed:
+                arguments = proposed[handle]
+                if definition is not None and definition.kind == 'tuple':
+                    return tuple(argument.value for argument in arguments)
+                return arguments[0].value if len(arguments) == 1 else MISSING
+        value = content.value(name)
+        if definition is None and isinstance(value, tuple) and len(value) == 1:
+            return value[0]
+        return value
+
+    def _field_arguments(self, name):
+        """Adapter read of field values without requiring an editable handle.
+
+        Paths, structural fields and malformed records retain ordinary one()
+        behavior. The direct slot path still observes prospective edits.
+        """
+        content = self._content
+        if type(content) is RecordItems and _prospective_structure.get() is None:
+            slot = content.storage.layout.slots.get(name)
+            if (slot is not None and name in content.storage
+                    and name not in content._owned_records()):
+                value = content.value(name)
+                if value is not MISSING:
+                    proposed = _prospective_values.get()
+                    handle = content.handles.get(slot) if proposed else None
+                    if proposed and handle in proposed:
+                        return proposed[handle]
+                    width = len(value) if content.storage.layout.definitions[slot].kind == 'tuple' else 1
+                    return tuple(content.argument(slot, index) for index in range(width))
+        return self.one(name).arguments
+
     def get(self, name, default=None):
         try:
             return self[name]
         except KeyError:
             return default
 
+    def in_units(self, units=None):
+        """View declared lengths/areas in mm, mil or inch over these same facts."""
+        from .unit_views import in_units
+        return in_units(self, units)
+
     def __contains__(self, name):
         if not isinstance(name, str):
             return False
+        if type(self._content) is RecordItems and _prospective_structure.get() is None and name in self._content.storage:
+            return True
         return (self.child(name) is not None or self._schema is not None and
                 name in self._schema.fields and self._schema.fields[name].getter is not None)
 
@@ -402,15 +624,55 @@ class Element:
             yield node
             stack.extend(reversed(node._child_sequence()))
 
+    def _record_children(self):
+        if type(self._content) is RecordItems:
+            return self._content.record_children()
+        return self._child_sequence()
+
+    def _child_kinds(self):
+        return (self._content.child_kinds() if type(self._content) is RecordItems
+                else (child.kind for child in self._child_sequence()))
+
+    def _record_walk(self, *, include_self=False):
+        """Adapter traversal over owned records, leaving stored scalar views lazy."""
+        stack = [self] if include_self else list(reversed(self._record_children()))
+        while stack:
+            node = stack.pop()
+            yield node
+            stack.extend(reversed(node._record_children()))
+
+    def _mark_loaded(self, *, clear_syntax=False):
+        for node in self._record_walk(include_self=True):
+            node._dirty = node._reordered = False
+            if clear_syntax:
+                node._syntax = None
+            if type(node._content) is RecordItems:
+                node._content.dirty_fields = node._content.reordered_fields = 0
+                if clear_syntax:
+                    for field in node._content.handles.values():
+                        field._syntax = None
+
     def descendants(self, kind: str | None = None) -> list["Element"]:
-        return [n for n in self.walk() if kind is None or n.kind == kind]
+        if kind is None:
+            return list(self.walk())
+        def children(node):
+            return (tuple(node._content.search_children(kind)) if type(node._content) is RecordItems
+                    else node._child_sequence())
+        result, pending = [], list(reversed(children(self)))
+        while pending:
+            node = pending.pop()
+            if node.kind == kind:
+                result.append(node)
+            pending.extend(reversed(children(node)))
+        return result
 
     def select(self, path: str, *, where=None) -> list["Element"]:
         from .query import (select)
         return select(self, path, where=where)
 
     def one(self, path: str, *, where=None) -> "Element":
-        matches = self.select(path, where=where)
+        matches = (self._child_sequence(path) if where is None and _valid_element_name(path)
+                   else self.select(path, where=where))
         if len(matches) != 1:
             raise LookupError(f"expected one match for {path!r}, found {len(matches)}")
         return matches[0]
@@ -420,6 +682,11 @@ class Element:
         if occurrence == 0 and self._schema is not None:
             if definition is not None and definition.getter is not None:
                 return definition.getter(self)
+        if (occurrence == 0 and type(self._content) is RecordItems
+                and _prospective_structure.get() is None):
+            value = self._field_value(name, definition)
+            if value is not MISSING:
+                return value
         matches = self._child_sequence(name)
         if occurrence >= len(matches):
             return default
@@ -446,13 +713,14 @@ class Element:
                     self.set_field(name, value)
                 return self
             index -= len(self._schema.parameters)
-        positions = [i for i, item in enumerate(self._items) if isinstance(item, Value)]
+        items = self._content.order if type(self._content) is RecordItems else self._items
+        positions = [i for i, item in enumerate(items) if isinstance(item, Value)]
         position = positions[index]
         replacement = Value.of(value)
-        previous = self._items[position]
+        previous = items[position]
         if ((previous.value, previous.kind, previous.unit) != (replacement.value, replacement.kind, replacement.unit)
                 or isinstance(value, Value) and previous != replacement):
-            self._items[position] = replacement
+            items[position] = replacement
             self._touch()
         return self
 
@@ -468,23 +736,37 @@ class Element:
                     definition.validate(value.value)
             for index, value in enumerate(replacements[:count]):
                 self.set_argument(index, value)
-            self._items = list(replacements[count:]) + self.children()
+            content = self._content
+            if type(content) is RecordItems:
+                # Parameters already updated their authoritative slots. Only
+                # extra adapter arguments change this mixed-content order;
+                # rebuilding it through children() would expand and recopy
+                # every otherwise untouched field in the record.
+                extra = list(replacements[count:])
+                if extra or any(isinstance(item, Value) for item in content.order):
+                    content.order = extra + [item for item in content.order if not isinstance(item, Value)]
+            else:
+                self._items = list(replacements[count:]) + self.children()
             self._touch(reordered=True)
             return self
         replacements = [Value.of(v) for v in values]
-        positions = [i for i, item in enumerate(self._items) if isinstance(item, Value)]
+        items = self._content.order if type(self._content) is RecordItems else self._items
+        positions = [i for i, item in enumerate(items) if isinstance(item, Value)]
         if len(positions) == len(replacements):
             changed = False
             for i, value, supplied in zip(positions, replacements, values):
-                old = self._items[i]
+                old = items[i]
                 if ((old.value, old.kind, old.unit) != (value.value, value.kind, value.unit)
                         or isinstance(supplied, Value) and old != value):
-                    self._items[i] = value
+                    items[i] = value
                     changed = True
             if changed:
                 self._touch()
         else:
-            self._items = replacements + self.children()
+            if type(self._content) is RecordItems:
+                self._content.order = replacements + [item for item in items if not isinstance(item, Value)]
+            else:
+                self._items = replacements + self.children()
             self._touch(reordered=True)
         return self
 
@@ -558,6 +840,8 @@ class Element:
         node._parent = self
         self._touch(reordered=True)
         self._children_cache = cached_children
+        if (scope := _checked_preparation.get()) is not None:
+            scope.attach(self, node)
         if owner is not None:
             if attachment is None:
                 owner.references.apply_value_change(plan)
@@ -660,11 +944,22 @@ class Element:
         parent._items.insert(position, self)
         self._parent = parent
         parent._touch(reordered=True)
+        if (scope := _checked_preparation.get()) is not None:
+            scope.attach(parent, self, incoming=owner is not destination)
         for document, plan in plans:
             document.references.apply_value_change(plan)
             document.references.refresh_structure(moved)
             document.references.finish_structure(changes, removed=moved if document is owner and owner is not destination else ())
         return self
+
+    def _audit_owned_content(self):
+        """Read actual owned content, independently of warmed lookup caches."""
+        self._children_cache = self._positions_cache = None
+        content = self._content
+        if type(content) is RecordItems:
+            content.validate()
+            return content.record_children()
+        return tuple(item for item in content if isinstance(item, Element))
 
     def clone(self) -> "Element":
         """Copy content and formatting with fresh identities and no shared children."""
@@ -673,10 +968,15 @@ class Element:
     def _clone(self, mapping=None):
         """Collect document ownership mappings during the copy traversal."""
         result = Element(self.kind, source=self.source)
+        result._schema = self._schema
+        result._dirty, result._reordered = self._dirty, self._reordered
         if mapping is not None:
             mapping[self] = result
-        if self.annotations:
-            result.annotations = deepcopy(self.annotations)
+        if self._annotations:
+            result._annotations = deepcopy(self._annotations)
+        if type(self._content) is RecordItems:
+            result._content = self._content.clone_to(result, mapping)
+            return result
         result._items = []
         for item in self._items:
             if isinstance(item, Element):
@@ -695,7 +995,7 @@ class Element:
                 "values": [{"value": v.value, "kind": v.kind, "unit": v.unit,
                             "source": v.source} for v in self.arguments],
                 "source": self.source, "child_count": len(self.children()),
-                "changed": self._dirty, "annotations": dict(self.annotations)}
+                "changed": self._dirty, "annotations": dict(self._annotations or ())}
 
 
 class IncompleteDocumentError(ValueError):
@@ -705,6 +1005,15 @@ class IncompleteDocumentError(ValueError):
 class Document:
     _representations = ('tree', 'asc', 'xml')
     _named_representations = ()
+
+    def in_units(self, units=None):
+        """View this editable document in selected natural length units."""
+        from .unit_views import in_units
+        return in_units(self, units)
+
+    def _record_definition(self, node):
+        """Resolve a prospective owned record; domains supply their catalogue."""
+        return node.schema
 
     def __init__(self, root: Element | None = None, *, representation='tree'):
         if representation not in self._representations:
@@ -826,6 +1135,9 @@ class Document:
     def one(self, path: str, *, where=None) -> Element:
         return self.root.one(path, where=where)
 
+    def _field_arguments(self, path):
+        return self.root._field_arguments(path)
+
     def find_all(self, kind: str, *, where=None) -> list[Element]:
         return self.root.find_all(kind, recursive=True, where=where)
 
@@ -834,6 +1146,8 @@ class Document:
         pending = [self.root]
         while pending:
             node = pending.pop()
+            if type(node._content) is RecordItems:
+                node._content.validate()
             if node.uid in index:
                 raise ValueError(f"duplicate element identity: {node.uid}")
             index[node.uid] = node
@@ -845,24 +1159,65 @@ class Document:
         return index
 
     def get(self, uid: str) -> Element:
-        if self._identity_index is None:
-            self._identity_index = self.rebuild_index()
+        if self._identity_index is None or uid not in self._identity_index:
+            self._identity_index = self._observed_index()
         try:
-            return self._identity_index[uid]
+            result = self._identity_index[uid]
         except KeyError:
             raise LookupError(f"unknown element identity: {uid}") from None
+        return result.record.field(result.slot) if type(result) is FieldItems else result
 
-    def _validate_structure(self):
-        index = self.rebuild_index()
-        for node in index.values():
-            if node.schema is not None:
-                if self.representation in self._named_representations and any(isinstance(item, Value) for item in node._items):
-                    raise ValueError(f'{node.path}: unnamed values are not part of the {self.representation} record schema')
-                node.schema.validate_fields(node)
-                node.schema.validate_children(node)
+    def _observed_index(self):
+        """Index already observed IDs without generating IDs or retaining leaf views."""
+        index = {}
+        for node in self._audit_nodes():
+            if node._uid is not None:
+                index[node._uid] = node
+            if type(node._content) is RecordItems:
+                for slot, uid in node._content.identities.items():
+                    index[uid] = FieldItems(node._content, slot)
+        return index
+
+    def _audit_nodes(self):
+        """Inspect actual ownership and known identities without creating field IDs."""
+        pending, seen, identities = [self.root], set(), set()
+        while pending:
+            node = pending.pop()
+            if id(node) in seen:
+                raise ValueError('an element occurs more than once in the document')
+            seen.add(id(node))
+            if node._uid is not None:
+                if node._uid in identities:
+                    raise ValueError(f'duplicate element identity: {node._uid}')
+                identities.add(node._uid)
+            children = node._audit_owned_content()
+            content = node._content
+            if type(content) is RecordItems:
+                for uid in content.identities.values():
+                    if uid in identities:
+                        raise ValueError(f'duplicate element identity: {uid}')
+                    identities.add(uid)
+            for child in children:
+                if child.parent is not node:
+                    raise ValueError(f'inconsistent parent for {child.uid}')
+            yield node
+            pending.extend(reversed(children))
+
+    def _validate_structure(self, *, materialize=False):
+        index = self.rebuild_index() if materialize else None
+        for node in index.values() if index is not None else self._audit_nodes():
+            self._validate_record(node)
         if self._reference_validator:
             self._reference_validator(self)
         return index
+
+    def _validate_record(self, node):
+        if node.schema is not None:
+            content = node._content.order if type(node._content) is RecordItems else node._content
+            if self.representation in self._named_representations and any(isinstance(item, Value) for item in content):
+                raise ValueError(f'{node.path}: unnamed values are not part of the {self.representation} record schema')
+            node.schema.validate_fields(node)
+            node.schema.validate_children(node)
 
     def validate(self):
         """Audit the full tree and references without projecting output indices.
@@ -871,20 +1226,26 @@ class Document:
         or unsafe references.
         Unresolved identities may remain when their guarded contents are intact.
         """
-        index = self._validate_structure()
+        self._validate_structure()
         self.references.validate()
-        self._identity_index = index
+        self._identity_index = None
+
+    def _synchronize(self, *, force=True):
+        """Adapter boundary: audit and project without building an inspection index."""
+        self._validate_structure()
+        self.references.synchronize(force=force)
+        self._identity_index = None
 
     def rebuild(self, *, force=True):
         """Advanced validation plus projection of compatibility index fields."""
-        index = self._validate_structure()
+        index = self._validate_structure(materialize=True)
         self.references.synchronize(force=force)
         self._identity_index = index
         return index
 
     def unresolved(self) -> list[str]:
-        return self.diagnostics + [f"{n.path}: {n.annotations['incomplete']}"
-                                   for n in self.root.walk() if n.annotations.get("incomplete")]
+        return self.diagnostics + [f"{n.path}: {n._annotations['incomplete']}"
+                                   for n in self.root.walk() if n._annotations and n._annotations.get("incomplete")]
 
     def clone(self) -> "Document":
         mapping = {}
@@ -900,3 +1261,11 @@ class Document:
             doc._automatic_structure = True
         doc._reference_validator = self._reference_validator
         return doc
+
+
+_bind_model_types(Element, Value)
+_bind_validation_preview(
+    lambda: (_prospective_values.get() is not None or _prospective_structure.get() is not None
+             or _prospective_ordinals.get() is not None),
+    structure=lambda: (_prospective_structure.get() is not None or _prospective_ordinals.get() is not None),
+    values=_prospective_values.get)

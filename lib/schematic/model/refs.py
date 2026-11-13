@@ -349,7 +349,7 @@ def bind_schematic_references(document, *, clamp_segments=False):
                     graph.bind(source, target, *indices, role=role, guards=guards, preserve=True)
                 except ReferenceError as error:
                     graph.note(source, str(error), *indices, collections=reference_collections(document, source, role), guards=guards)
-    for node in document.root.walk():
+    for node in document.root._record_walk():
         if node.kind in REFERENCE_COLLECTIONS:
             graph.watch(node)
     document._reference_validator = validate_schematic_references

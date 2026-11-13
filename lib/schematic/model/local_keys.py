@@ -31,7 +31,7 @@ def _rows(owner):
 
 
 def validate_keys(document):
-    for owner in document.root.walk(include_self=True):
+    for owner in document.root._record_walk(include_self=True):
         _rows(owner)
 
 
@@ -75,7 +75,7 @@ def prepare_positional_keys(document, *, destination, report=None):
     """Detach only absent public targets in a positional destination view."""
     from ...common.conversion import (warn)
     missing = []
-    for owner in document.root.walk(include_self=True):
+    for owner in document.root._record_walk(include_self=True):
         for row in _rows(owner):
             name = row.values[0]
             missing_key(owner, name)  # Validate typed data before changing output.

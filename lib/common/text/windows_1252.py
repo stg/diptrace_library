@@ -18,6 +18,11 @@ def decode(data):
     """Decode every byte, including the five control values Python omits."""
     if isinstance(data, (bytes, bytearray)) and data.isascii():
         return data.decode('ascii')
+    try:
+        return data.decode('cp1252')
+    except (UnicodeDecodeError, AttributeError):
+        # Keep the table's five additional control values and iterable inputs.
+        pass
     characters, _, _ = _tables()
     return ''.join(chr(characters[byte]) for byte in data)
 
@@ -30,6 +35,11 @@ def encode(text, *, best_fit=True):
     """
     if isinstance(text, str) and text.isascii():
         return text.encode('ascii')
+    try:
+        return text.encode('cp1252')
+    except UnicodeEncodeError:
+        # The fallback supplies best fits and exact control-code mappings.
+        pass
     characters, mappings, default = _tables()
     result = bytearray()
     for index, character in enumerate(text):

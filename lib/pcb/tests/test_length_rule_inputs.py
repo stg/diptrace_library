@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import loads, dumps
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.pcb.formats.asc.core import prepare_core
@@ -45,7 +46,7 @@ class LengthRuleInputTests(unittest.TestCase):
         row = main.one('Rules/Rule')
         self.assertEqual((main['Name'], main['AnyError']), ('Y', False))
         self.assertEqual((net_class['Name'], net_class['FixedLength'], net_class['LengthDelta']),
-                         ('Signal', 9, Decimal('.4')))
+                         ('Signal', 9, 0.4))
         self.assertTrue(results['AnyError'])
         self.assertEqual(result.document.one('/Board/LengthRules').children(), [])
         self.assertEqual(set(results.schema.fields), {'AnyError'})
@@ -62,8 +63,8 @@ class LengthRuleInputTests(unittest.TestCase):
         net_class = result.classes[1]
         results = net_class.one('LengthResults')
         row = results.one('Rules/Rule')
-        self.assertEqual((main['Name'], main['FixedLength'], main['Delta']), ('Y', -1, Decimal('7.62')))
-        self.assertEqual((net_class['FixedLength'], net_class['LengthDelta'], row['Length']),
+        self.assertEqual((main['Name'], main['FixedLength'], main['Delta']), ('Y', -1, 7.62))
+        assert_float_facts(self,(net_class['FixedLength'], net_class['LengthDelta'], row['Length']),
                          (15, Decimal('1.2'), Decimal('3.9')))
         self.assertEqual(document.one('/Board/LengthRules').children(), [])
         for name in ('Name', 'FixedLength', 'Delta', 'NetClass', 'Type'):
@@ -87,8 +88,8 @@ class LengthRuleInputTests(unittest.TestCase):
             'AnyError="Y" NetClass="70"', 'AnyError="Y" NetClass="999"')
         result = assemble_rules(prepared(text))
         policy = result.document.one('/Board/LengthRules/LengthRule')
-        self.assertEqual((policy['Name'], policy['FixedLength'], policy['Delta']),
-                         ('Signals', 6, Decimal('.9')))
+        assert_float_facts(self,(policy['Name'], policy['FixedLength'], policy['Delta']),
+                         ('Signals', 6, 0.9))
         self.assertIsNone(result.classes[1].child('LengthResults'))
         self.assertIsNone(policy.child('NetClass'))
 

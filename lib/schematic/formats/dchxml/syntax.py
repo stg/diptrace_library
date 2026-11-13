@@ -59,8 +59,9 @@ DIALECT = xml.XmlDialect(format='dchxml', source_type='DipTrace-Schematic',
     number_text=frozenset(_NUMBER_TEXT))
 
 
-def loads(data, *, source=None):
-    document = xml.loads(data, source=source, dialect=DIALECT, document_factory=Document)
+def loads(data, *, source=None, retain_source=True):
+    document = xml.loads(data, source=source, dialect=DIALECT, document_factory=Document,
+                         retain_source=retain_source)
     from .refs import bind_references
     bind_references(document)
     return document
@@ -71,5 +72,5 @@ def read(path):
     return loads(path.read_bytes(), source=str(path))
 
 
-def dumps(document, *, newline='\n'):
-    return xml.dumps(document, newline=newline, dialect=DIALECT)
+def dumps(document, *, newline='\n', canonical_numbers=False):
+    return xml.dumps(document, newline=newline, dialect=DIALECT, canonical_numbers=canonical_numbers)

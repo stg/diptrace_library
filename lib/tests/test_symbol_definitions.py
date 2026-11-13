@@ -6,9 +6,51 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib.schematic.model.cache import (symbol_definition)
 from lib.schematic.model.objects import (new_symbol, new_symbol_shape)
+from lib.common.model import SourceSpan
+from lib.common.symbol_records import SYMBOL
 
 
 class SymbolDefinitionTests(unittest.TestCase):
+    def test_import_defaults_accept_a_synthesized_typed_definition(self):
+        from lib import Element
+        from lib.schematic.formats.dch.compat import complete_properties
+        source = self.component(0)
+        schematic = Element('Schematic')
+        schematic.add('Components')
+        cache = schematic.add('CacheLib')
+        cache.add('Patterns')
+        slot = cache.add('Slots').add('Slot', 0, '')
+        definition = slot.add('Definition', 0)
+        symbol = definition.append(symbol_definition(source))
+        definition.append(source.one('Pattern').clone())
+        symbol['ModelNote'] = 'authored note'
+        complete_properties(schematic)
+        self.assertEqual(symbol['ModelNote'], 'authored note')
+        incomplete = Element('Part', *symbol.arguments)
+        for child in symbol.children():
+            if child.kind != 'ModelNote':
+                incomplete.append(child.clone())
+        symbol.detach()
+        definition.append(incomplete.bind_schema(SYMBOL))
+        complete_properties(schematic)
+        self.assertEqual(incomplete['ModelNote'], '')
+
+    def test_current_definition_is_independent_and_retains_selected_field_details(self):
+        source = self.component(0)
+        width = source.one('Width')
+        width.source = SourceSpan('test', 2, 5)
+        width.annotations['note'] = ['original']
+        definition = symbol_definition(source)
+        self.assertIs(definition.schema, SYMBOL)
+        copied = definition.one('Width')
+        self.assertEqual(copied.source, width.source)
+        self.assertEqual(copied.annotations, width.annotations)
+        copied.annotations['note'].append('copy')
+        definition['Width'] = 7
+        self.assertNotEqual(definition['Width'], source['Width'])
+        self.assertEqual(width.annotations, {'note': ['original']})
+        self.assertIsNot(copied, width)
+
     def component(self, angle):
         part = new_symbol('Block', 'U1')
         part.set_field('Angle', angle)

@@ -1,5 +1,6 @@
 """Schematic library XML uses physical strokes in the current dialect."""
 from decimal import Decimal
+import math
 import unittest
 from xml.etree import ElementTree
 
@@ -40,12 +41,22 @@ class LibraryFontWidthTests(unittest.TestCase):
                                    ('Library/Components/Component/Part/Shapes/Shape','FontWidth'),
                                    ('Library/Library/Patterns/Pattern/Shapes/Shape','FontWidth'),
                                    ('Library/Library/Patterns/Pattern/Dimensions/Dimension','FontWidth')):
-                    self.assertEqual(Decimal(root.find(path).get(field)),expected)
+                    self.assertAlmostEqual(float(root.find(path).get(field)), float(expected),
+                                           delta=2*math.ulp(float(expected)))
                 rebuilt = parse(output,format='dchxml')
                 definition = rebuilt.one('/Schematic/CacheLib/Slots/Slot/Definition')
                 for path,name in (('Part/Pins/Pin','NameFontWidth'),('Part/Shapes/Shape','FontWidth'),
                                   ('Pattern/Shapes/Shape[2]','FontWidth'),('Pattern/Dimensions/Dimension','FontWidth')):
-                    self.assertEqual(definition.one(path)[name],Decimal('.6'))
+                    self.assertAlmostEqual(definition.one(path)[name], .6, delta=2*math.ulp(.6))
+                first = tuple(definition.one(path)[name] for path, name in (
+                    ('Part/Pins/Pin','NameFontWidth'), ('Part/Shapes/Shape','FontWidth'),
+                    ('Pattern/Shapes/Shape[2]','FontWidth'), ('Pattern/Dimensions/Dimension','FontWidth')))
+                for _ in range(8):
+                    rebuilt = parse(rebuilt.to_dchxml_bytes(version=version, report=ExportReport()), format='dchxml')
+                    definition = rebuilt.one('/Schematic/CacheLib/Slots/Slot/Definition')
+                    self.assertEqual(tuple(definition.one(path)[name] for path, name in (
+                        ('Part/Pins/Pin','NameFontWidth'), ('Part/Shapes/Shape','FontWidth'),
+                        ('Pattern/Shapes/Shape[2]','FontWidth'), ('Pattern/Dimensions/Dimension','FontWidth'))), first)
 
 
 if __name__ == '__main__':

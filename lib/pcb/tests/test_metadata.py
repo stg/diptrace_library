@@ -45,10 +45,12 @@ def metadata_fixture(version):
 class MetadataTests(unittest.TestCase):
     def test_versions_without_a_cache_initialize_an_empty_active_selection(self):
         from types import SimpleNamespace
+        from lib.common.binary_records import RecordReader
         from lib.pcb.formats.dip.cache import read_cache
         for version in (31, 38):
             board = Element('Board')
-            reader = SimpleNamespace(header=SimpleNamespace(version=version))
+            reader = RecordReader()
+            reader.header = SimpleNamespace(version=version)
             self.assertEqual(read_cache(reader, board), ())
             self.assertEqual(board['DesignCache_Count'], -1)
             self.assertEqual(board.one('DesignCache_Links').children(), [])

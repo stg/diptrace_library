@@ -12,8 +12,11 @@ from xml.sax.saxutils import escape
 
 from dataclasses import dataclass, field
 from .model import Document, Element, Value, _valid_element_name
+from .xml_plan import XmlBuilder, XmlPlan
+from .numbers import fixed_number_text
 
 _NUMBER = re.compile(r'[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z')
+_FORBIDDEN_TEXT = re.compile('[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]')
 
 @dataclass(frozen=True)
 class XmlDialect:
@@ -48,18 +51,30 @@ def _listed(vocabulary, parent, name):
     return name in vocabulary or (parent, name) in vocabulary
 
 
+def syntax_role(node):
+    """Inspect an XML role without creating an otherwise absent notes map."""
+    notes = node._annotations
+    return notes.get('xml_role') if notes is not None else None
+
+
 def set_attribute(node, name, value):
     """Add or edit an XML attribute through the ordinary model field API."""
     if not _valid_element_name(name):
         raise ValueError(f'invalid XML attribute name: {name!r}')
+    if type(node) is XmlBuilder:
+        return node.attribute(name, value)
     matches = [child for child in node.children(name)
-               if child.annotations.get('xml_role') == 'attribute']
+               if syntax_role(child) == 'attribute']
     if len(matches) > 1:
         raise ValueError(f'{node.path}: duplicate XML attribute {name}')
-    field = matches[0] if matches else node.add(name)
-    field.set_values(value)
+    if matches:
+        field = matches[0]
+        field.set_values(value)
+        field.annotations['xml_role'] = 'attribute'
+        return field
+    field = Element(name, value)
     field.annotations['xml_role'] = 'attribute'
-    return field
+    return node.append(field)
 
 
 def _attribute_value(name, text, dialect, parent=''):
@@ -70,7 +85,7 @@ def _attribute_value(name, text, dialect, parent=''):
     return Value(text, 'string')
 
 
-def loads(data, *, source=None, dialect=DEFAULT_DIALECT, document_factory=Document):
+def loads(data, *, source=None, dialect=DEFAULT_DIALECT, document_factory=Document, retain_source=True):
     """Read XML directly into Elements; unknown fields retain literal strings."""
     document = document_factory(representation=dialect.representation)
     parser = expat.ParserCreate()
@@ -89,11 +104,15 @@ def loads(data, *, source=None, dialect=DEFAULT_DIALECT, document_factory=Docume
         if not _valid_element_name(name):
             raise ValueError(f'unsupported XML element name: {name!r}')
         flush()
-        node = stack[-1].add(name)
-        node.annotations.update(xml_role='element', xml_line=parser.CurrentLineNumber)
+        node = stack[-1]._append_import(Element(name))
+        node.annotations['xml_role'] = 'element'
+        if retain_source:
+            node.annotations['xml_line'] = parser.CurrentLineNumber
         for index in range(0, len(attributes), 2):
             key, text = attributes[index:index+2]
-            set_attribute(node, key, _attribute_value(key, text, dialect, name))
+            attribute = Element(key, _attribute_value(key, text, dialect, name))
+            attribute.annotations['xml_role'] = 'attribute'
+            node._append_import(attribute)
         stack.append(node)
         pending.append([])
 
@@ -102,7 +121,7 @@ def loads(data, *, source=None, dialect=DEFAULT_DIALECT, document_factory=Docume
         node = stack.pop()
         pending.pop()
         children = [child for child in node.children()
-                    if child.annotations.get('xml_role') != 'attribute']
+                    if syntax_role(child) != 'attribute']
         values = node.arguments
         if children and not any(str(value.value).strip() for value in values):
             node._items = [item for item in node._items if isinstance(item, Element)]
@@ -110,18 +129,18 @@ def loads(data, *, source=None, dialect=DEFAULT_DIALECT, document_factory=Docume
             text = values[0].value
             parent = stack[-1].kind
             if _listed(dialect.boolean_text, parent, node.kind):
-                node.set_values(_boolean(text))
+                node._items = [_boolean(text), *node.children()]
             elif (parent, node.kind) in dialect.number_text:
-                node.set_values(_number(text))
+                node._items = [_number(text), *node.children()]
 
     def comment(text):
         flush()
-        node = stack[-1].add('Comment', text)
+        node = stack[-1]._append_import(Element('Comment', text))
         node.annotations['xml_role'] = 'comment'
 
     def instruction(target, text):
         flush()
-        node = stack[-1].add('ProcessingInstruction', target, text)
+        node = stack[-1]._append_import(Element('ProcessingInstruction', target, text))
         node.annotations['xml_role'] = 'instruction'
 
     def doctype(*arguments):
@@ -154,7 +173,7 @@ def read(path, *, dialect=DEFAULT_DIALECT, document_factory=Document):
     return loads(path.read_bytes(), source=str(path), dialect=dialect, document_factory=document_factory)
 
 
-def _text(value):
+def _text(value, canonical_numbers=False):
     if value.unit:
         raise ValueError('XML scalar values cannot have an implicit unit suffix')
     if value.kind == 'boolean':
@@ -162,18 +181,24 @@ def _text(value):
     elif value.kind == 'number':
         if not math.isfinite(float(value.value)):
             raise ValueError('XML numbers must be finite')
-        text = str(value.value) if isinstance(value.value, int) else format(value.value, 'f')
+        text = fixed_number_text(value.value)
+        # Equivalent numbers have one output spelling, independent of retained
+        # source precision or calculation history. No decimal arithmetic rounds
+        # the value, including under a caller's unusually small context.
+        if canonical_numbers:
+            if '.' in text:
+                text = text.rstrip('0').rstrip('.')
+            if text == '-0':
+                text = '0'
     else:
         text = str(value.value)
-    if any(ord(char) < 32 and char not in '\t\n\r' or
-           0xd800 <= ord(char) <= 0xdfff or ord(char) in (0xfffe, 0xffff)
-           for char in text):
+    if _FORBIDDEN_TEXT.search(text):
         raise ValueError('value contains a character outside XML 1.0')
     return text
 
 
-def _render(node, newline, dialect):
-    role = node.annotations.get('xml_role')
+def _render(node, newline, dialect, canonical_numbers=False):
+    role = syntax_role(node)
     if role in ('comment', 'instruction'):
         count = 1 if role == 'comment' else 2
         if (node.children() or len(node.arguments) != count
@@ -201,7 +226,7 @@ def _render(node, newline, dialect):
     attributes, content = [], []
     seen = set()
     for item in node._items:
-        if isinstance(item, Element) and item.annotations.get('xml_role') == 'attribute':
+        if isinstance(item, Element) and syntax_role(item) == 'attribute':
             if item.kind in seen or not _valid_element_name(item.kind):
                 raise ValueError(f'{node.path}: duplicate or invalid XML attribute {item.kind!r}')
             if len(item.arguments) != 1 or item.children():
@@ -211,7 +236,7 @@ def _render(node, newline, dialect):
             if expected is not None and item.arguments[0].kind != expected:
                 raise ValueError(f'{item.path}: expected an XML {expected} value')
             seen.add(item.kind)
-            value = escape(_text(item.arguments[0]), {'"': '&quot;', '\t': '&#9;', '\n': '&#10;', '\r': '&#13;'})
+            value = escape(_text(item.arguments[0], canonical_numbers), {'"': '&quot;', '\t': '&#9;', '\n': '&#10;', '\r': '&#13;'})
             attributes.append(' '+item.kind+'="'+value+'"')
         else:
             content.append(item)
@@ -219,14 +244,14 @@ def _render(node, newline, dialect):
     if not content:
         return opening+'/>'
     if all(isinstance(item, Element) for item in content):
-        body = newline+newline.join(_render(item, newline, dialect) for item in content)+newline
+        body = newline+newline.join(_render(item, newline, dialect, canonical_numbers) for item in content)+newline
     else:
-        body = ''.join(_render(item, newline, dialect) if isinstance(item, Element)
-                       else escape(_text(item), {'\r': '&#13;'}) for item in content)
+        body = ''.join(_render(item, newline, dialect, canonical_numbers) if isinstance(item, Element)
+                       else escape(_text(item, canonical_numbers), {'\r': '&#13;'}) for item in content)
     return opening+'>'+body+'</'+node.kind+'>'
 
 
-def dumps(document, *, newline='\n', dialect=DEFAULT_DIALECT):
+def dumps(document, *, newline='\n', dialect=DEFAULT_DIALECT, canonical_numbers=False):
     """Reconstruct XML from current typed data; no source-text replay."""
     if newline not in ('\n', '\r\n'):
         raise ValueError('XML newline must be LF or CRLF')
@@ -235,9 +260,73 @@ def dumps(document, *, newline='\n', dialect=DEFAULT_DIALECT):
         raise ValueError(f'{dialect.format.upper()} output requires a Source element'
                          + (f' with Type="{dialect.source_type}"' if dialect.source_type else ''))
     elements = [node for node in document.root.children()
-                if node.annotations.get('xml_role') not in ('comment', 'instruction')]
+                if syntax_role(node) not in ('comment', 'instruction')]
     if elements != [root] or any(str(value.value).strip() for value in document.root.arguments):
         raise ValueError('XML output requires one Source element and no text outside it')
-    document.rebuild(force=False)
+    document._synchronize(force=False)
     return '<?xml version="1.0" encoding="utf-8"?>'+newline+newline.join(
-        _render(node, newline, dialect) for node in document.root.children())+newline
+        _render(node, newline, dialect, canonical_numbers) for node in document.root.children())+newline
+
+
+def render_plan(plan, *, newline='\n', dialect=DEFAULT_DIALECT, canonical_numbers=False):
+    """Serialize generated XML facts without allocating an editable tree.
+
+    Plans have no ownership or edit graph: their producer owns destination
+    mapping and reference checks. This boundary checks XML names, vocabulary
+    types, duplicate attributes, characters and units on every call. It also
+    accepts fragments, so a document writer can compose already checked plans.
+    """
+    if newline not in ('\n', '\r\n'):
+        raise ValueError('XML newline must be LF or CRLF')
+
+    def render(node, parent, depth):
+        if not isinstance(node, XmlPlan):
+            raise TypeError('XML plan children must be XmlPlan records')
+        if depth > 256:
+            raise ValueError('XML nesting exceeds 256 elements')
+        if not node.kind or not _valid_element_name(node.kind):
+            raise ValueError(f'invalid XML element name: {node.kind!r}')
+        if any(not isinstance(value, Value) for value in node.arguments):
+            raise TypeError('XML plan text requires typed scalar values')
+        if not node.children and not node.attributes and len(node.arguments) == 1:
+            expected = ('boolean' if _listed(dialect.boolean_text, parent, node.kind) else
+                        'number' if (parent, node.kind) in dialect.number_text else None)
+            if expected is not None and node.arguments[0].kind != expected:
+                raise ValueError(f'{node.kind}: expected an XML {expected} value')
+        attributes, seen = [], set()
+        for name, value in node.attributes:
+            if name in seen or not name or not _valid_element_name(name):
+                raise ValueError(f'{node.kind}: duplicate or invalid XML attribute {name!r}')
+            if not isinstance(value, Value):
+                raise TypeError('XML plan attributes require typed scalar values')
+            expected = ('boolean' if _listed(dialect.boolean_attributes, node.kind, name) else
+                        'number' if _listed(dialect.number_attributes, node.kind, name) else None)
+            if expected is not None and value.kind != expected:
+                raise ValueError(f'{node.kind}/{name}: expected an XML {expected} value')
+            seen.add(name)
+            text = escape(_text(value, canonical_numbers), {'"': '&quot;', '\t': '&#9;', '\n': '&#10;', '\r': '&#13;'})
+            attributes.append(' '+name+'="'+text+'"')
+        opening = '<'+node.kind+''.join(attributes)
+        if not node.arguments and not node.children:
+            return opening+'/>'
+        if node.arguments:
+            text = []
+            for value in node.arguments:
+                text.append(escape(_text(value, canonical_numbers), {'\r': '&#13;'}))
+            body = ''.join(text)+''.join(render(child, node.kind, depth+1) for child in node.children)
+        else:
+            body = newline+newline.join(render(child, node.kind, depth+1) for child in node.children)+newline
+        return opening+'>'+body+'</'+node.kind+'>'
+
+    return render(plan, '', 1)
+
+
+def dumps_plan(source, *, newline='\n', dialect=DEFAULT_DIALECT, canonical_numbers=False):
+    """Emit a complete generated document from a Source plan."""
+    if (not isinstance(source, XmlPlan) or source.kind != 'Source'
+            or dialect.source_type is not None
+            and getattr(dict(source.attributes).get('Type'), 'value', None) != dialect.source_type):
+        raise ValueError(f'{dialect.format.upper()} output requires a Source element'
+                         + (f' with Type="{dialect.source_type}"' if dialect.source_type else ''))
+    return '<?xml version="1.0" encoding="utf-8"?>'+newline+render_plan(
+        source, newline=newline, dialect=dialect, canonical_numbers=canonical_numbers)+newline

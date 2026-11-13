@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.references import ReferenceError
 from lib.pcb.formats.dipxml.read import prepare
@@ -242,10 +243,10 @@ class PcbXmlLibraryTests(unittest.TestCase):
                 definition = document.one('/Board/CacheLib/Slots/Slot/Definition')
                 symbol_width,physical_width = ((Decimal('.2'),Decimal('.2')) if version == '5.3.4.9'
                                                else (Decimal('.01524'),Decimal('.6')))
-                self.assertEqual(definition.one('Part/Pins/Pin')['NameFontWidth'],symbol_width)
-                self.assertEqual(definition.one('Part/Shapes/Shape')['FontWidth'],symbol_width)
-                self.assertEqual(definition.one('Pattern/Shapes/Shape')['FontWidth'],physical_width)
-                self.assertEqual(definition.one('Pattern/Dimensions/Dimension')['FontWidth'],physical_width)
+                assert_float_facts(self,definition.one('Part/Pins/Pin')['NameFontWidth'],symbol_width)
+                assert_float_facts(self,definition.one('Part/Shapes/Shape')['FontWidth'],symbol_width)
+                assert_float_facts(self,definition.one('Pattern/Shapes/Shape')['FontWidth'],physical_width)
+                assert_float_facts(self,definition.one('Pattern/Dimensions/Dimension')['FontWidth'],physical_width)
 
     def test_template_custom_fields_do_not_become_a_second_placed_field_namespace(self):
         template = '''<AddFields><AddField Name="Order" Text="Template default" Type="Text"/>
@@ -299,12 +300,12 @@ class PcbXmlLibraryTests(unittest.TestCase):
     def test_nested_component_pattern_and_board_units_are_independent(self):
         document = read(source(component_units='mil', pattern_units='inch'), report=ConversionReport())
         definition = document.one('/Board/CacheLib/Slots/Slot/Definition')
-        self.assertEqual(definition.one('Part/Pins/Pin')['X'], Decimal('.0762'))
-        self.assertEqual(definition.one('Part/Pins/Pin')['Y'], Decimal('-.1524'))
-        self.assertEqual(definition.one('Pattern/Pads/Pad[1]')['X'], Decimal('76.2'))
+        self.assertEqual(definition.one('Part/Pins/Pin')['X'], 0.0762)
+        assert_float_facts(self,definition.one('Part/Pins/Pin')['Y'], Decimal('-.1524'))
+        assert_float_facts(self,definition.one('Pattern/Pads/Pad[1]')['X'], Decimal('76.2'))
         placed = document.one('/Board/Components/Component')
         self.assertEqual(placed['X'], 30)
-        self.assertEqual(placed.one('Pattern/Pads/Pad[1]')['X'], Decimal('-60.96'))
+        assert_float_facts(self,placed.one('Pattern/Pads/Pad[1]')['X'], Decimal('-60.96'))
 
     def test_cache_and_placed_geometry_are_independent_and_pin_links_follow_pad_reordering(self):
         document = read(source(), report=ConversionReport())
@@ -317,7 +318,7 @@ class PcbXmlLibraryTests(unittest.TestCase):
             second.move_to(second.parent, 0)
             self.assertEqual(part.one('Pins/Pin')['Number'], 2)
             first['X'] = 99
-            self.assertEqual(placed['X'], Decimal('-2.4'))
+            self.assertEqual(placed['X'], -2.4)
         with self.assertRaises(ReferenceError):
             document.remove(first)
         clone = document.clone()
@@ -385,7 +386,7 @@ class PcbXmlLibraryTests(unittest.TestCase):
             second.move_to(second.parent, 0)
             self.assertEqual(dimension['SubObject1'], 2)
             first['X'] = 44
-        self.assertEqual(board.one('Components/Component/Pattern/Pads/Pad[1]')['X'], Decimal('-2.4'))
+        self.assertEqual(board.one('Components/Component/Pattern/Pads/Pad[1]')['X'], -2.4)
         with self.assertRaises(ReferenceError):
             first.detach()
         copied = document.copy(pattern, parent=pattern.parent)

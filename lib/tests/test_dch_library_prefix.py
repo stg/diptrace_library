@@ -6,7 +6,7 @@ from lib import Document, new_schematic, parse_dch
 from lib.schematic.formats.dch.read import (Reader, _preamble)
 
 
-def prefix(version, count):
+def prefix(version, count, *, active_sheet=0, page_names=('Sheet',)):
     def integer(value):
         return (value+1_000_000).to_bytes(3, 'big')
 
@@ -18,8 +18,10 @@ def prefix(version, count):
         return (len(raw)//2).to_bytes(2, 'big')+raw if version >= 32 else integer(len(raw))+raw
 
     data = bytearray(b'\x07DTSCHEM'+integer(version))
-    data += number(1)+integer(0)*3  # Scale, viewport, picture count.
-    data += integer(1)+text('Sheet')+integer(0)
+    data += number(1)+integer(0)*2+integer(active_sheet)
+    data += integer(len(page_names))
+    for name in page_names:
+        data += text(name)+integer(0)
     data += integer(count)
     data += b''.join(integer(n) for n in (2, 99, 1, 99))
     data += b'\0'+number(0)*2+text('First')+text('Second')+b'\1'+number(-1)+number(1)
@@ -28,6 +30,21 @@ def prefix(version, count):
 
 
 class LibraryPrefixTests(unittest.TestCase):
+    def test_selected_sheet_and_legacy_picture_count_are_independent(self):
+        for version in range(29, 53):
+            with self.subTest(version=version):
+                raw = prefix(version, 7, active_sheet=2,
+                             page_names=('First', 'Second', 'Third'))
+                reader, document = Reader(raw), Document()
+                schematic, components = _preamble(reader, document)
+                self.assertEqual(reader.pos, len(raw))
+                self.assertEqual(components, 0)
+                self.assertEqual(schematic['ActiveSheet'], 2)
+                self.assertNotIn('PictureCount', schematic)
+                self.assertEqual([page.values[0] for page in schematic.select('Pages/Page')],
+                                 ['First', 'Second', 'Third'])
+                self.assertEqual(bool(document.diagnostics), version < 42)
+
     def test_nonzero_counts_never_consume_inline_strings_in_any_supported_schema(self):
         for version in range(29, 49):
             for count in (0, 1, 3, 7, 200_000):

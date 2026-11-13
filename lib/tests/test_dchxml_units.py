@@ -1,5 +1,6 @@
 """Public XML units and Y direction, using explicit physical lengths."""
 from decimal import Decimal
+import math
 from pathlib import Path
 import sys
 import unittest
@@ -19,13 +20,14 @@ class XmlUnitsTests(unittest.TestCase):
         for name, size in (('mm', 3), ('mil', .0762), ('inch', 76.2)):
             unit = XmlUnits(name)
             self.assertEqual(tuple(map(number_text, unit.point(size, -2*size))), ('1', '2'))
-            self.assertEqual(unit.internal_point(1, 2), (Decimal(str(size)), -2*Decimal(str(size))))
+            self.assertEqual(unit.internal_point(1, 2), (float(size), -2*size))
 
     def test_current_value_and_invalid_values_are_explicit(self):
         unit = XmlUnits('mm')
         value = Value.of(Decimal('3.00015'))
-        self.assertEqual(unit.length(value), Decimal('1.00005'))
-        self.assertEqual(unit.internal_length(unit.length(value)), value.value)
+        self.assertEqual(unit.length(value), 1.00005)
+        self.assertAlmostEqual(unit.internal_length(unit.length(value)), float(value.value),
+                               delta=math.ulp(float(value.value)))
         for invalid in (True, '3', Value.of(3, unit='%')):
             with self.subTest(value=invalid), self.assertRaises((TypeError, ValueError)):
                 unit.length(invalid)

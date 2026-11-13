@@ -99,7 +99,7 @@ def project_settings(board, *, units, report=None):
                          ('JumperLayer', ('Silk', 'Assembly', 'Signal', 'Do Not Show'))):
         if source is not None and (value := source.get(name)) is not None:
             field(result, name, enum_text(value, labels))
-    if (panel := project_layer_panel(board)).children():
+    if (panel := project_layer_panel(board, report=report)).children():
         result.append(panel)
     if board.get('RelSchem') is not None or board.get('RelSchem_Variable') is not None:
         target = result.add('RelatedSchem')

@@ -1,8 +1,10 @@
 """Physical PCB XML output preserves editable local geometry and identities."""
 from decimal import Decimal
+import math
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.units import XmlUnits
@@ -179,8 +181,8 @@ class XmlPatternOutputTests(unittest.TestCase):
                     for path in (PATH, PATH+'/Pads/Pad[1]'):
                         current = rebuilt.one(path)
                         self.assertEqual((current['SurfacePad'], current['PadHoleType']), (surface, hole_type))
-                        self.assertLessEqual(abs(current['PadHole']-Decimal('1.75')), Decimal('1e-23'))
-                        self.assertLessEqual(abs(current['PadHoleH']-Decimal('2.25')), Decimal('1e-23'))
+                        self.assertAlmostEqual(current['PadHole'], 1.75, delta=2*math.ulp(1.75))
+                        self.assertAlmostEqual(current['PadHoleH'], 2.25, delta=2*math.ulp(2.25))
                 self.assertEqual(model_text(document, preserve=False), before)
 
     def test_all_xml_profiles_retain_inactive_style_geometry_without_drift(self):
@@ -258,7 +260,7 @@ class XmlPatternOutputTests(unittest.TestCase):
                     self.assertEqual(actual.keys(),expected.keys())
                     for path,value in expected.items():
                         if isinstance(value,(int,float,Decimal)) and not isinstance(value,bool):
-                            self.assertLessEqual(abs(Decimal(str(actual[path]))-Decimal(str(value))),Decimal('1e-28'),path)
+                            assert_float_facts(self, actual[path], value, path)
                         else:
                             self.assertEqual(actual[path],value,path)
         self.assertEqual(model_text(document,preserve=False),before)
@@ -277,7 +279,7 @@ class XmlPatternOutputTests(unittest.TestCase):
         pad['DisableTopPaste'] = 3
         expected = signature(pattern)
         rebuilt = reopen(document)
-        self.assertEqual(signature(rebuilt.one(PATH)),expected)
+        assert_float_facts(self,signature(rebuilt.one(PATH)),expected)
         self.assertFalse(rebuilt.one(PATH+'/Pads/Pad[1]')['Standard'])
 
     def test_unmapped_content_remains_an_explicit_error(self):

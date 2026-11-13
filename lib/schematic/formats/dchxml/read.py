@@ -21,7 +21,7 @@ from ...model.new import (new_schematic)
 def import_schematic(document):
     if document.representation != 'dchxml':
         raise ValueError('public DCHXML input is required')
-    document.rebuild(force=False)
+    document._synchronize(force=False)
     source = XmlRecord(document.one('/Source'))
     if source.text('Type') != 'DipTrace-Schematic':
         raise ValueError('expected a public XML schematic')
@@ -74,7 +74,7 @@ def import_schematic(document):
     schematic.set_field('ActiveSheet', active)
     view.one('/Scale').set_values(Value(page.scalar('PageScale')*100, 'number', '%'))
     for own, public_name in (('Xpos', 'PageXPos'), ('Ypos', 'PageyPos')):
-        view.one('/'+own).set_values(*page.one(public_name).arguments)
+        view.one('/'+own).set_values(*page._field_arguments(public_name))
     view.metadata.update(imported_from='dchxml', xml_source_version=version,
                          missing_data_policy='declared authoring defaults for facts absent from XML',
                          identifier_policy='renumbered by identity; raw XML preserves literal public keys')
@@ -93,17 +93,14 @@ def import_schematic(document):
     bind_schematic_references(view)
     from ...model.symbol_text import (refresh_symbol_text)
     refresh_symbol_text(view)
+    view._synchronize(force=True)
+    from ...editing.route_normalization import (normalize_imported_routes)
+    normalize_imported_routes(view)
     unexpected = [issue for issue in view.references.issues
                   if not issue.message.startswith(('symbol-pin-pad:', 'symbol-group:', 'pattern-group:', 'marking-user-field:',
                                                    'pattern-dimension-', 'pattern-shape-pad:', 'pattern-internal-pad-'))]
     if unexpected:
         raise ValueError('cannot normalize unresolved XML references: '+unexpected[0].message)
-    view.rebuild(force=True)
-    from ...editing.route_normalization import (normalize_imported_routes)
-    normalize_imported_routes(view)
-    for node in view.root.walk(include_self=True):
-        node.annotations['requires_asc_projection'] = True
-        node._syntax = None
-        node._dirty = node._reordered = False
+    view.root._mark_loaded(clear_syntax=True)
     view._automatic_structure = True
     return view

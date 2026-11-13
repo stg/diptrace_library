@@ -30,7 +30,7 @@ class DipResultOutputTests(unittest.TestCase):
         raw, _, _, _ = read_sections(document)
         self.assertEqual((raw.one('DRC')['RealTimeMode'], raw.one('DRC')['DRCDone']), (2, True))
         saved = raw.one('DesignErrors/DesignError[1]')
-        self.assertEqual((saved['Value'], saved['Rule']), (Decimal('.1'), Decimal('.2')))
+        self.assertEqual((saved['Value'], saved['Rule']), (0.1, 0.2))
         rebuilt = reopen(document, source=result_source(document))
         self.assertEqual(signature(rebuilt.one('/Board/DesignErrors')), expected)
         self.assertEqual(signature(reopen(rebuilt, source=result_source(rebuilt)).one('/Board/DesignErrors')), expected)

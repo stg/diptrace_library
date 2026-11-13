@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.asc_text import project_text
 from lib.common.conversion import ConversionReport
@@ -125,7 +126,7 @@ class GraphicProjectionTests(unittest.TestCase):
     def test_text_keeps_full_radian_angle_and_fractional_size_without_layout_context(self):
         text = design().one('/Board/Shapes/Shape[1]')
         output = project_shape(text)
-        self.assertEqual((output['TextAngle'], output['FontSize'], output['Orientation']), (Decimal('9.2'), Decimal('1.25'), 6))
+        self.assertEqual((output['TextAngle'], output['FontSize'], output['Orientation']), (9.2, 1.25, 6))
         self.assertEqual(output['Name'], 'First line')
         self.assertEqual([node.values for node in output.select('TextLines/TextLine')], [('First line',), ('Second line',)])
 
@@ -153,7 +154,7 @@ class GraphicProjectionTests(unittest.TestCase):
         pour['MinimumArea'] = 2
         rebuilt = reopen(document)
         first = rebuilt.one(pour.path)['MinimumArea']
-        self.assertLess(abs(first-2), Decimal('1e-32'))
+        assert_float_facts(self, first, 2)
         for _ in range(5):
             rebuilt = reopen(rebuilt)
             self.assertEqual(rebuilt.one(pour.path)['MinimumArea'], first)

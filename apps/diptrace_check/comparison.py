@@ -59,8 +59,8 @@ def snapshot(document):
             owner = index.field.path if index is not None else reference.source.path
             argument = index.argument if index is not None else ''
             key = owner+f'/@reference[{reference.role},{argument}]'
-            links.setdefault(key, []).append(reference.target.path)
-    result.update((key, ('reference', '', tuple(sorted(values)))) for key, values in links.items())
+            links.setdefault(key, []).append(value_identity(reference.target))
+    result.update((key, ('reference', '', tuple(sorted(values, key=repr)))) for key, values in links.items())
     return result
 
 
@@ -70,15 +70,54 @@ def compare(before, after, *, tolerance, examples=20):
     Integer settings, flags, text and references remain exact. The threshold is
     in each field's documented model unit, not an inferred physical distance.
     """
+    changes = ((path, before.get(path), after.get(path), path in before, path in after)
+               for path in sorted(before.keys() | after.keys())
+               if before.get(path) != after.get(path))
+    return _compare_changes(changes, tolerance=tolerance, examples=examples)
+
+
+def compare_ordered(before, after, *, tolerance, examples=20):
+    """Compare sorted, unique ``(path, fact)`` rows without storing both maps.
+
+    Use the same classifications and example order as :func:`compare`. Reject
+    unordered or duplicate paths so a streaming producer cannot hide content.
+    """
+    return _compare_changes(_ordered_changes(before, after),
+                            tolerance=tolerance, examples=examples)
+
+
+def _ordered_rows(rows):
+    previous = None
+    for path, fact in rows:
+        if previous is not None and path <= previous:
+            raise ValueError('comparison paths must be sorted and unique: '+path)
+        previous = path
+        yield path, fact
+
+
+def _ordered_changes(before, after):
+    left, right = iter(_ordered_rows(before)), iter(_ordered_rows(after))
+    a, b = next(left, None), next(right, None)
+    while a is not None or b is not None:
+        if b is None or (a is not None and a[0] < b[0]):
+            yield a[0], a[1], None, True, False
+            a = next(left, None)
+        elif a is None or b[0] < a[0]:
+            yield b[0], None, b[1], False, True
+            b = next(right, None)
+        else:
+            if a[1] != b[1]:
+                yield a[0], a[1], b[1], True, True
+            a, b = next(left, None), next(right, None)
+
+
+def _compare_changes(changes, *, tolerance, examples):
     counts, important, rounding, maxima = Counter(), [], [], {}
-    for path in sorted(before.keys() | after.keys()):
-        a, b = before.get(path), after.get(path)
-        if a == b:
-            continue
+    for path, a, b, a_present, b_present in changes:
         delta = None
-        if path not in before:
+        if not a_present:
             kind = 'added'
-        elif path not in after:
+        elif not b_present:
             kind = 'removed'
         elif (a[:2] == b[:2] and a[0] in ('number', 'serialized-number') and
               not (a[0] == 'serialized-number' and all(type(v) is int for v in (a[2], b[2]))) and

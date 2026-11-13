@@ -54,7 +54,6 @@ def new_schematic_shape(index=0):
 def new_pattern_shape(index=0, *, kind=0):
     from ...common.footprint_objects import new_pattern_drawing
     shape = new_pattern_drawing(index, kind=kind)
-    shape.one('PadId').annotations['asc_omit'] = 'not present in ASC'
     return shape
 
 
@@ -93,7 +92,7 @@ def new_symbol(name='', reference='', *, placed=True):
         part.add('Show'+key, 0, 0, 0, 0, 0, 0, 0, 0)
     for key in ('Value', 'Manufacturer', 'Datasheet'):
         part.add('Show'+key, 0, 0, 0, 0, 0, 0, 0)
-    supplier.add('Prices').annotations['asc_omit'] = 'not present in ASC'
+    supplier.add('Prices')
     supplier.add('MainSupplier', False)
     part.append(new_pattern())
     return part.bind_schema(PART)

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.references import Property, ReferenceError
 from lib.pcb.formats.assembly.board_rules import assemble_rules
 from lib.pcb.tests.test_core_assembly import fixture
@@ -80,7 +81,7 @@ class RuleTableTests(unittest.TestCase):
         self.assertEqual([(cell['Class1'], cell['Class2']) for cell in cells],
                          [(classes[0], classes[0]), (classes[1], classes[0]), (classes[1], classes[1])])
         self.assertEqual([row['Clearance'] for row in cells[1].select('LayerClearances/LayerClearance')],
-                         [Decimal('.6'), Decimal('.9')])
+                         [0.6, 0.9])
         self.assertIn('class-clearance-table-normalization', {n.rule for n in report.infos})
         classes[0].move_to(classes[0].parent)
         self.assertIs(cells[1]['Class1'], classes[1])
@@ -106,7 +107,7 @@ class RuleTableTests(unittest.TestCase):
         self.assertEqual([row['LayerName'] for row in properties], ['Top', 'Bottom'])
         details = properties[0].one('ClearanceDetails')
         self.assertEqual(len(details.children()), 14)
-        self.assertEqual(details['ViaToPad'], Decimal('.12'))
+        self.assertEqual(details['ViaToPad'], 0.12)
         self.assertIsNone(properties[0].child('ClearDetails'))
         self.assertIs(uniform.one('AllowedVias/ViaStyle')['Via'], result.via_styles[1])
         self.assertEqual([flag['Enabled'] for flag in uniform.select('RouteLayers/Item')], [True, False])
@@ -125,7 +126,7 @@ class RuleTableTests(unittest.TestCase):
         self.assertFalse(cells[1]['AllLayers'])
         rows = cells[1].select('LayerClearances/LayerClearance')
         self.assertEqual([row['Layer'] for row in rows], list(result.layers.values()))
-        self.assertEqual([row['Clearance'] for row in rows], [Decimal('.6'), Decimal('.9')])
+        self.assertEqual([row['Clearance'] for row in rows], [0.6, 0.9])
         self.assertIsNone(cells[1].child('Values'))
         self.assertIsNone(result.document.one('/Board/ClassClearances').child('Row'))
 
@@ -198,11 +199,11 @@ class RuleTableTests(unittest.TestCase):
         routing = board.one('Settings/Routing')
         default = result.classes[0].one('LayProperties/LayProperty')
         self.assertIs(board['DefaultClass'], result.classes[0])
-        self.assertEqual((default['Width'], default['Clearance']), (Decimal('.6'), Decimal('.9')))
+        self.assertEqual((default['Width'], default['Clearance']), (0.6, 0.9))
         self.assertIsNone(routing.child('TraceWidth'))
         self.assertIsNone(routing.child('TraceClearance'))
         for row in result.classes[1].select('LayProperties/LayProperty'):
-            self.assertEqual((row['Width'], row['Clearance'], row['DifClearance']),
+            assert_float_facts(self,(row['Width'], row['Clearance'], row['DifClearance']),
                              (Decimal('.6'), Decimal('.9'), Decimal('.9')))
         probe = document.root.add('Probe', 0)
         document.references.bind(probe, routing, Property(probe, 'TraceWidth'), role='routing-copy')
@@ -217,7 +218,7 @@ class RuleTableTests(unittest.TestCase):
             self.assertIs(board['DefaultClass'], result.classes[0])
             self.assertEqual(routing['TraceWidth'], 7)
             board['DefaultClass'] = result.classes[1]
-            self.assertEqual(probe.values, (Decimal('.6'),))
+            assert_float_facts(self,probe.values, (Decimal('.6'),))
             result.classes[1].one('LayProperties/LayProperty[1]')['Width'] = 9
             self.assertEqual(probe.values, (9,))
             default['Width'] = 11
@@ -230,7 +231,7 @@ class RuleTableTests(unittest.TestCase):
         self.assertIs(board['DefaultClass'], board.one('NetClasses/NetClass[1]'))
         board.one('Settings/Routing')['TraceClearance'] = 4
         self.assertEqual(board.one('NetClasses/NetClass[1]/LayProperties/LayProperty')['Clearance'], 4)
-        self.assertEqual(result.document.one('/Board/Settings/Routing')['TraceClearance'], Decimal('.9'))
+        self.assertEqual(result.document.one('/Board/Settings/Routing')['TraceClearance'], 0.9)
 
 
 if __name__ == '__main__':

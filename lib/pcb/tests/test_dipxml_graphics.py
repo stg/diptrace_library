@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.references import ReferenceError
 from lib.pcb.formats.assembly.graphics import assemble_graphics
 from lib.pcb.tests.test_dipxml_classes import source as electrical_source
@@ -71,11 +72,11 @@ class PcbXmlGraphicTests(unittest.TestCase):
         self.assertIs(pour['Layer'], shape['LayerTarget'])
         self.assertIs(shape['Net'], result.rules.routing.core.nets[7])
         self.assertIs(pour['Net'], shape['Net'])
-        self.assertEqual((shape['Layer'], shape['Type'], shape['TextAngle']), (3, 6, Decimal('8.7')))
+        self.assertEqual((shape['Layer'], shape['Type'], shape['TextAngle']), (3, 6, 8.7))
         self.assertEqual(shape.one('Points/pt').values, (6, 9))
         self.assertNotIn('Points_New', shape.schema.children)
         self.assertEqual([line['Text'] for line in shape.select('TextLine/pt')], ['First', 'Second'])
-        self.assertEqual((shape['FontSize'], shape['FontWidth'], shape['PenWidth']),
+        assert_float_facts(self,(shape['FontSize'], shape['FontWidth'], shape['PenWidth']),
                          (Decimal('4.5'), Decimal('.6'), Decimal('.9')))
         self.assertTrue(shape['FontMono'])
         self.assertEqual((shape['TextHorz'], shape['TextVert'], shape['TextAlign']), (-1, -1, 1))
@@ -122,11 +123,11 @@ class PcbXmlGraphicTests(unittest.TestCase):
     def test_physical_lengths_areas_and_scalar_fields_have_distinct_units(self):
         result = design(source().replace('Units="mm"', 'Units="mil"'))
         shape, pour = result.drawings[23], result.pours[37]
-        self.assertEqual(pour['MinimumArea'], Decimal('4')*Decimal('.0762')**2)
-        self.assertEqual(shape['FontWidth'], Decimal('.01524'))
-        self.assertEqual(shape['FontSize'], Decimal('4.5'))
-        self.assertEqual(shape['TextAngle'], Decimal('8.7'))
-        self.assertEqual(pour['SpokeWidth'], Decimal('.99'))  # Omitted reset default is already in model units.
+        assert_float_facts(self, pour['MinimumArea'], 4*0.0762**2)
+        assert_float_facts(self, shape['FontWidth'], .01524)
+        self.assertEqual(shape['FontSize'], 4.5)
+        self.assertEqual(shape['TextAngle'], 8.7)
+        self.assertEqual(pour['SpokeWidth'], .99)  # Omitted reset default is already in model units.
 
     def test_missing_optional_fields_use_verified_loader_defaults(self):
         text = electrical_source().replace('</Board>', '''<Shapes><Shape Id="1"/></Shapes>
@@ -139,7 +140,7 @@ class PcbXmlGraphicTests(unittest.TestCase):
         self.assertFalse(pour['Poured'])
         self.assertIsNone(pour.child('Fill'))
         self.assertEqual((pour['MinimumArea'], pour['Clearance'], pour['LineWidth']),
-                         (9, Decimal('.99'), Decimal('1.905')))
+                         (9, 0.99, 1.905))
 
     def test_unknown_fields_ambiguous_ids_and_unavailable_targets_are_explicit(self):
         for before, after in (('Shape Id="51"', 'Shape Id="23"'), ('LayId="8"', 'LayId="999"'),
@@ -167,7 +168,7 @@ class PcbXmlGraphicTests(unittest.TestCase):
         for version, positive, negative in (('5.3.4.9', Decimal('.2'), -3),
                                              ('5.3.5.0', Decimal('.6'), Decimal('-1.5'))):
             text = source().replace('Version="5.3.5.1"', f'Version="{version}"')
-            self.assertEqual(design(text).drawings[23]['FontWidth'], positive)
+            assert_float_facts(self,design(text).drawings[23]['FontWidth'], positive)
             self.assertEqual(design(text.replace('FontWidth="0.2"', 'FontWidth="-1.5"')).drawings[23]['FontWidth'], negative)
             for value in (-1, -2, -3):
                 self.assertEqual(design(text.replace('FontWidth="0.2"', f'FontWidth="{value}"')).drawings[23]['FontWidth'], value)

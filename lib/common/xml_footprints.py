@@ -129,10 +129,7 @@ def read_pattern(record, *, units, styles, policy, physical_font_width=True):
         record.integer('Id')  # PatternStyle is the reference key in schematic libraries.
     pattern = policy.pattern_factory(record.text('Name', ''))
     if record.has('RefDes') and 'RefDes' not in defaults:
-        reference = pattern.add('RefDes', record.text('RefDes'))
-        reference.annotations['xml_only'] = 'public library reference prefix; absent from DCH embedded footprints'
-        if not reference.values[0]:
-            reference.annotations['asc_omit'] = 'empty XML-only footprint reference prefix'
+        pattern.add('RefDes', record.text('RefDes'))
     pattern.set_field('Mounting', enum_value(record.value('Mounting', '-1'), ('Through', 'SMD', 'Chassis', 'Mixed', 'None'), negative='None'))
     pattern.set_field('Type', enum_value(record.value('Type', 'Free'), policy.pattern_types))
     pattern.set_field('PatternOrientation', enum_value(record.number('Orientation', 0), ('0', '90', '180', '270')))
@@ -147,9 +144,7 @@ def read_pattern(record, *, units, styles, policy, physical_font_width=True):
                         ('Datasheet', 'Datasheet'), ('Manufacturer', 'Pattern_Manufacturer')):
         if public in defaults:
             continue
-        target = pattern.set_field(own, record.text(public, ''))
-        if own == 'Datasheet' and not target.values[0]:
-            target.annotations['asc_omit'] = 'empty XML-only footprint datasheet'
+        pattern.set_field(own, record.text(public, ''))
     for name in record.rows('PossibleNames', 'PossibleName'):
         pattern.one('PossibleNames').add('PossibleName', name.content())
         name.finish(allow_text=True)

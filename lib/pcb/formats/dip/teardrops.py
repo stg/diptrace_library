@@ -3,7 +3,7 @@ from .preamble import _fields
 
 
 def _parameters(reader, owner):
-    params = owner.add('TeardropParams')
+    params = reader.add(owner, 'TeardropParams')
     _fields(reader, params, 'integer', 'PadVia Smd Trace TJunc')
     _fields(reader, params, 'number', 'PadViaWidth PadViaLength SmdWidth SmdLength TraceLength TJuncLength')
 
@@ -16,15 +16,15 @@ def read_teardrops(reader, board):
     for net in board.select('Nets/Net'):
         _parameters(reader, net)
         for trace in net.select('Traces/Trace'):
-            connected = trace.add('ConnectedTeardrops')
+            connected = reader.add(trace, 'ConnectedTeardrops')
             for _ in range(reader.count('trace teardrops')):
                 reader.record(connected, 'Item', 'integer')
-        teardrops = net.add('Teardrops')
+        teardrops = reader.add(net, 'Teardrops')
         for index in range(reader.count('net teardrops')):
-            teardrop = teardrops.add('Teardrop', index)
-            reader.field(teardrop, 'Lay', 'integer')
+            teardrop = reader.add(teardrops, 'Teardrop', index)
+            reader.field_into(teardrop, 'Lay', 'integer')
             _fields(reader, teardrop, 'number', 'DrawX DrawY')
-            points = teardrop.add('Points')
+            points = reader.add(teardrop, 'Points')
             for point_index in range(reader.count('teardrop polygon points')):
-                point = points.add('Point', point_index)
+                point = reader.add(points, 'Point', point_index)
                 _fields(reader, point, 'number', 'X Y')

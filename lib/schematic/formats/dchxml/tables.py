@@ -19,10 +19,10 @@ def project_table(table, *, index, units, version=46):
     if table.scalar('HideBorder'):
         set_attribute(result, 'HideBorder', True)
     set_attribute(result, 'Sheet', table.scalar('Page'))
-    _bounds(result, [table.one(name).arguments[0] for name in ('X1', 'Y1', 'X2', 'Y2')], units)
+    _bounds(result, [table._field_arguments(name)[0] for name in ('X1', 'Y1', 'X2', 'Y2')], units)
     set_attribute(result, 'Orientation', int(enum_text(table.scalar('Orientation'), ('0', '90', '180', '270'))))
     for public, own in (('CellWidth', 'DefCellWidth'), ('CellHeight', 'DefCellHeight')):
-        set_attribute(result, public, numeric(units.length(table.one(own).arguments[0])))
+        set_attribute(result, public, numeric(units.length(table._field_arguments(own)[0])))
     set_attribute(result, 'TextAlign', enum_text(table.scalar('DefAlign'), TEXT_ALIGN))
     _font(table, result, prefix='Def', version=version)
     if table.scalar('Group') >= 0:

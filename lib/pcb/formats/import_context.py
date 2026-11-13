@@ -15,13 +15,18 @@ class ImportContext:
     normalization. Set background_color=None to retain authored colors.
     Absent a stored choice, common component fiducials contribute to footprint
     bounds by default; show_component_fiducials overrides that fallback.
+    retain_source keeps available source positions/spelling for investigation.
+    Normal imports discard this optional detail after normalization.
     """
     units: str = 'mm'
     text_layout: TextLayout | None = None
     background_color: int | None = 0
     show_component_fiducials: bool = True
+    retain_source: bool = False
 
     def __post_init__(self):
+        if type(self.retain_source) is not bool:
+            raise TypeError('PCB retain_source must be a Boolean')
         object.__setattr__(self, 'units', display_units(self.units))
         if self.text_layout is not None and not isinstance(self.text_layout, TextLayout):
             raise TypeError('PCB text_layout must be a TextLayout')

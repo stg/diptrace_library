@@ -2,12 +2,20 @@
 from fractions import Fraction
 from decimal import Decimal
 from collections import defaultdict, deque
+import math
 
 from ...common.model import (Element, Value)
 from ...common.references import (Segment)
 from ...common.numbers import (calculation_number)
 from ...common.conversion import (import_notice)
 from ...common.structural_edits import assembling
+
+
+# Parsing a coordinate and its unit factor, then multiplying, has three
+# rounded operations. Express their standard relative error bound against
+# the stored result: gamma(3)/(1-gamma(3)) = 3u/(1-6u).
+_UNIT_ROUNDOFF = math.ulp(1.0)/2
+_COORDINATE_ERROR = 3*_UNIT_ROUNDOFF/(1-6*_UNIT_ROUNDOFF)
 
 
 def _defer(document, message):
@@ -22,6 +30,105 @@ def _enabled_net(line):
     return line.parent.parent.scalar('Enabled', True) in (True, 'Y')
 
 
+def _remove_canceled_buses(document):
+    """Discard isolated netless buses made entirely of free one-point stubs.
+
+    A single point without attachments cannot describe a bus route. Keep
+    logical memberships, ordinary two-point geometry and every referenced
+    identity, including unresolved relationships that could refer to a stub.
+    """
+    from ...common.references import ReferenceError
+    graph = document.references
+    removals = []
+    for bus in document.select('/Schematic/Buses/Bus'):
+        if bus.scalar('Enabled', True) not in (True, 'Y') or bus.select('Nets/pt'):
+            continue
+        lines = bus.select('Lines/Line')
+        if not lines or any(len(line.select('Points/pt')) != 1 or
+                            any(line.scalar('ConnectMode'+str(side)) not in (-1, 0, 1, 5)
+                                for side in (1, 2)) for line in lines):
+            continue
+        nodes = set(bus.walk(include_self=True))
+        outgoing = [reference for node in nodes for reference in graph.outgoing(node)]
+        try:
+            graph._check_collection_changes((bus.parent, *nodes))
+            graph.check_removal(bus, excluding={reference.uid for reference in outgoing})
+        except ReferenceError:
+            continue
+        removals.append((bus, nodes, outgoing))
+    for bus, nodes, outgoing in removals:
+        parent = bus.parent
+        graph._discard_bindings(outgoing)
+        bus.detach()
+        graph.finish_structure((parent,), removed=nodes)
+    if removals:
+        document._synchronize(force=False)
+        import_notice('info', 'bus-modernization',
+                      'Removed isolated netless buses containing only canceled one-point routes',
+                      recoverability='no electrical membership or referenced geometry was removed')
+    return len(removals)
+
+
+def _remove_canceled_bus_branches(document):
+    """Remove closed sets of one-point branches beside surviving bus routes.
+
+    A branch with one point has no routed length. Its own attachments may be
+    discarded, including joins to another canceled branch. Retained consumers,
+    unresolved external joins and unknown endpoint modes protect the geometry.
+    In particular, an actual junction used by other routes is not a free stub.
+    """
+    from ...common.references import ReferenceError
+    graph = document.references
+    removed = 0
+    for bus in document.select('/Schematic/Buses/Bus'):
+        if bus.scalar('Enabled', True) not in (True, 'Y'):
+            continue
+        lines = bus.select('Lines/Line')
+        if not any(len(line.select('Points/pt')) >= 2 for line in lines):
+            continue
+        canceled = {line for line in lines if len(line.select('Points/pt')) == 1
+                    and all(line.scalar('ConnectMode'+str(side)) in (-1, 0, 1, 2, 4, 5)
+                            for side in (1, 2))}
+        if not canceled:
+            continue
+        by_number = {}
+        for line in lines:
+            number = line.scalar('Number')
+            by_number[number] = line if number not in by_number else None
+        nodes = {node for line in canceled for node in line.walk(include_self=True)}
+        outgoing = [reference for node in nodes for reference in graph.outgoing(node)]
+        issues = []
+        for issue in graph.issues:
+            if issue.source not in canceled:
+                continue
+            role = issue.message.split(':', 1)[0]
+            if role in ('bus-wire-segment-1', 'bus-wire-segment-2'):
+                target = by_number.get(issue.source.scalar('Connect'+role[-1]))
+                if target in canceled:
+                    issues.append(issue)
+        parent = lines[0].parent
+        try:
+            graph._check_collection_changes((parent, *nodes), excluded_issues=issues)
+            excluded = {reference.uid for reference in outgoing} | set(issues)
+            for line in canceled:
+                graph.check_removal(line, excluding=excluded)
+        except ReferenceError:
+            continue
+        graph._discard_bindings(outgoing)
+        for issue in issues:
+            graph.discard_issue(issue)
+        for line in canceled:
+            line.detach()
+        graph.finish_structure((parent,), removed=nodes)
+        removed += len(canceled)
+    if removed:
+        document._synchronize(force=False)
+        import_notice('info', 'bus-modernization',
+                      'Removed canceled one-point branches without changing retained bus routes or memberships',
+                      recoverability='no retained route or incoming relationship was removed')
+    return removed
+
+
 @assembling
 def normalize_imported_routes(document):
     """Apply established loading rules independently of file format/version.
@@ -29,8 +136,9 @@ def normalize_imported_routes(document):
     Unknown attachment domains defer geometry changes. This is deliberately
     limited to verified conditions, rather than a complete routing engine.
     """
+    bus_changes = _remove_canceled_bus_branches(document) + _remove_canceled_buses(document)
     if not document.select('/Schematic/Nets/Net/Lines/Line'):
-        return 0
+        return bus_changes
     from ..model.refs import (connectivity_mismatches)
     from ...common.references import (ReferenceError)
     mismatches = connectivity_mismatches(document)
@@ -45,7 +153,7 @@ def normalize_imported_routes(document):
     if blocked or mismatches:
         _defer(document, f'{len(document.references.issues)} unresolved references and '
                          f'{len(mismatches)} inconsistent memberships')
-        return 0
+        return bus_changes
     from .edit import (coalesce_routes)
     changed = len(upgrade_overlapping_junctions(document))
     changed += len(upgrade_short_junctions(document))
@@ -56,7 +164,7 @@ def normalize_imported_routes(document):
         import_notice('info', 'route-modernization',
                       'Normalized route directions, redundant handles and established wire attachments',
                       document.select('/Schematic/Nets'), recoverability='current geometry and identity links are authoritative')
-    return changed
+    return bus_changes + changed
 
 
 def upgrade_redundant_route_handles(document):
@@ -107,7 +215,7 @@ def upgrade_redundant_route_handles(document):
     for item in removed:
         item.point.detach()
     if removed:
-        document.rebuild()
+        document._synchronize()
     return tuple(removed)
 
 
@@ -157,13 +265,28 @@ def _coherent_pin_endpoint(graph, line, side, point):
     if (pin.scalar('Enabled', True) in (False, 'N') or part.scalar('Enabled', True) in (False, 'N')
             or isinstance(orientation, bool) or orientation not in (0, 1, 2, 3) or len(pin.arguments) != 3):
         return False
-    # Pin coordinates and orientation are already placed. Compare the exact
-    # stored physical facts; do not infer snapping for an inconsistent endpoint.
+    # Unit conversion rounds the independent measurements before they meet
+    # here. Propagate that error through the sum instead of treating binary
+    # floats as exact decimal fractions. This guard never snaps the authored
+    # endpoint or applies a fixed geometric tolerance.
     direction = ((-1, 0), (0, -1), (1, 0), (0, 1))[int(orientation)]
-    tip = tuple(Fraction(str(part.scalar(axis)))+Fraction(str(pin.values[index+1]))
-                + Fraction(str(pin.scalar('Length')))*direction[index]
-                for index, axis in enumerate(('X', 'Y')))
-    return tip == tuple(Fraction(str(value)) for value in point.values[:2])
+    try:
+        endpoint = tuple(float(value) for value in point.values[:2])
+        if len(endpoint) != 2:
+            return False
+        for index, axis in enumerate(('X', 'Y')):
+            terms = (float(part.scalar(axis)), float(pin.values[index+1]),
+                     float(pin.scalar('Length'))*direction[index])
+            tip, actual = math.fsum(terms), endpoint[index]
+            if not all(math.isfinite(value) for value in (*terms, tip, actual)):
+                return False
+            error = _COORDINATE_ERROR*math.fsum(abs(value) for value in (*terms, actual))
+            # fsum avoids cancellation error; allow its final float rounding.
+            if abs(tip-actual) > error+math.ulp(tip):
+                return False
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return True
 
 
 @assembling
@@ -306,7 +429,7 @@ def upgrade_short_junctions(document):
             point.set_values(*position, point.arguments[2])
         changed.append(line)
     if changed:
-        document.rebuild()
+        document._synchronize()
     return tuple(changed)
 
 

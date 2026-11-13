@@ -17,7 +17,7 @@ def project_drawing(shape, *, index, units, version=46):
     set_attribute(result, 'Type', enum_text(kind, DRAWING_TYPES))
     set_attribute(result, 'Sheet', shape.scalar('Page'))
     if kind not in (10, 11):
-        width = shape.one('PenWidth').arguments[0]
+        width = shape._field_arguments('PenWidth')[0]
         if width.value > -1:
             set_attribute(result, 'LineWidth', numeric(units.length(width)))
         set_attribute(result, 'Color', shape.scalar('Color'))
@@ -26,22 +26,22 @@ def project_drawing(shape, *, index, units, version=46):
             if shape.scalar(own) >= 0:
                 set_attribute(result, public, shape.scalar(own))
     if kind in (10, 11):
-        set_attribute(result, 'Angle', shape.one('TextAngle').arguments[0])
+        set_attribute(result, 'Angle', shape._field_arguments('TextAngle')[0])
         if kind == 11:
             for public, own in (('PictureWidth', 'Picture_Width'), ('PictureHeight', 'Picture_Height')):
-                set_attribute(result, public, numeric(units.length(shape.one(own).arguments[0])))
+                set_attribute(result, public, numeric(units.length(shape._field_arguments(own)[0])))
             set_attribute(result, 'PictureProportions', shape.scalar('Picture_Proportions'))
             if version >= 52:
                 set_attribute(result, 'PictureFlipped', shape.scalar('PictureFlipped', False))
         for public, own, labels in (('HorzAlign', 'TextHorz', HORZ), ('VertAlign', 'TextVert', VERT)):
             set_attribute(result, public, enum_text(shape.scalar(own), labels, negative=labels[-1]))
         if kind == 11:
-            set_attribute(result, 'PictureTransparent', shape.one('Picture_Transparent').arguments[0])
+            set_attribute(result, 'PictureTransparent', shape._field_arguments('Picture_Transparent')[0])
         else:
             set_attribute(result, 'TextAlign', enum_text(shape.scalar('TextAlign'), HORZ, negative=HORZ[-1]))
             for public, own in (('FontVector', 'VectorFont'), ('FontSize', 'FontSize'), ('FontWidth', 'FontWidth'),
                                 ('FontScale', 'FontScale'), ('FontColor', 'FontColor'), ('LineSpacing', 'LineSpacing')):
-                set_attribute(result, public, shape.one(own).arguments[0])
+                set_attribute(result, public, shape._field_arguments(own)[0])
             from .fonts import (project_size)
             project_size(shape, result, version=version)
     if shape.scalar('Group') >= 0:

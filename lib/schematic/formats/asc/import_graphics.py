@@ -50,16 +50,16 @@ def unpack_pattern(pattern, *, cached=False):
     unpack_model(pattern.one('Model3D'))
     unpack_terminals(pattern)
     pads = pattern.one('Pads')
+    public_pads = pads.children('Pad')
     if not cached:
         # Public pad headers use the physical array positions, starting at one.
-        for index, pad in enumerate(pads.children('Pad'), 1):
+        for index, pad in enumerate(public_pads, 1):
             if pad.values[0] != index:
                 raise ValueError(f'{pad.path}: noncontiguous placed pad indices')
         pads.insert(empty_pad(0), 0)
         pads.append(empty_pad(len(pads.children('Pad'))))
-    for pad in pads.children('Pad'):
-        if not pad.annotations.get('reserved'):
-            unpack_pad(pad)
+    for pad in public_pads:
+        unpack_pad(pad)
     unpack_pattern_shapes(pattern.one('Shapes'))
     for index, dimension in enumerate(pattern.select('Dimensions/Dimension')):
         dimension.set_values(index)

@@ -3,6 +3,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 from lib import ExportReport, new_schematic, parse
+from lib.schematic import ImportContext
 
 
 def schematic():
@@ -23,7 +24,7 @@ class ConnectionPrefixTests(unittest.TestCase):
         for version in (46, 47, 48):
             with self.subTest(version=version):
                 canonical = original.to_dch_bytes(version=version, report=ExportReport())
-                loaded = parse(canonical, format='dch')
+                loaded = parse(canonical, format='dch', context=ImportContext(retain_source=True))
                 changed = bytearray(canonical)
                 for kind, integer_offset in (('Net', 13), ('Bus', 14)):
                     path = '/Schematic/'+('Nets' if kind == 'Net' else 'Buses')+'/'+kind

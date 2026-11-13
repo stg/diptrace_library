@@ -28,6 +28,31 @@ class InstallationTests(unittest.TestCase):
     def snapshot(self, path):
         return path.read_bytes(), Stamp.read(path)
 
+    def test_missing_selection_index_is_rebuilt_from_the_current_names(self):
+        names, rules = {'design.dch'}, load_config(self.repo)['rules']
+        self.assertEqual(self.repo.selected(names, rules), names)
+        binary = self.snapshot(self.binary)
+        (self.repo.state_dir / 'pathspecs/index').unlink()
+        self.assertEqual(self.repo.selected(names, rules), names)
+        self.assertEqual(self.snapshot(self.binary), binary)
+
+    def test_changed_selection_index_is_rebuilt_without_touching_the_design(self):
+        names, rules = {'design.dch'}, load_config(self.repo)['rules']
+        self.assertEqual(self.repo.selected(names, rules), names)
+        binary = self.snapshot(self.binary)
+        (self.repo.state_dir / 'pathspecs/index').write_bytes(b'interrupted disposable cache')
+        self.assertEqual(self.repo.selected(names, rules), names)
+        self.assertEqual(self.snapshot(self.binary), binary)
+
+    def test_unchanged_selection_cache_does_not_rebuild_its_index(self):
+        names, rules = {'design.dch'}, load_config(self.repo)['rules']
+        self.assertEqual(self.repo.selected(names, rules), names)
+        with patch('apps.diptrace_git.git.subprocess.run', wraps=subprocess.run) as calls:
+            self.assertEqual(self.repo.selected(names, rules), names)
+        commands = [call.args[0] for call in calls.call_args_list]
+        self.assertEqual(len(commands), len(rules))
+        self.assertTrue(all('ls-files' in command for command in commands))
+
     def test_pathspec_groups_and_ordered_disable_enable(self):
         directory = self.root / 'archive'
         directory.mkdir()

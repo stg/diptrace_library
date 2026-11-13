@@ -19,16 +19,17 @@ def _known(node, names, *, repeated=()):
     if schema is not None:
         names = set(names) | schema.fields.keys() | schema.children.keys()
     seen = set()
-    for child in node.children():
-        if node.schema is not None and child.kind in node.schema.parameters:
+    for name in node._child_kinds():
+        if node.schema is not None and name in node.schema.parameters:
             continue
-        if child.kind == 'UnresolvedKeys':
+        if name == 'UnresolvedKeys':
             continue
-        if child.kind not in names:
-            raise ValueError(f'{child.path}: unsupported schematic field')
-        if child.kind in seen and child.kind not in repeated:
+        if name not in names:
+            raise ValueError(f'{node.child(name).path}: unsupported schematic field')
+        if name in seen and name not in repeated:
+            child = node.children(name)[1]
             raise ValueError(f'{child.path}: duplicate schematic field')
-        seen.add(child.kind)
+        seen.add(name)
 
 
 def _rows(node, kind):

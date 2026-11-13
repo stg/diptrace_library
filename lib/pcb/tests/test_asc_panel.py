@@ -40,7 +40,7 @@ class AscPanelTests(unittest.TestCase):
         original_x = result.components[17]['X']
         panel = board.one('Panel')
         self.assertIs(panel.schema, board_records.PANEL)
-        self.assertEqual(panel['HoleDiam'], Decimal('2.4'))
+        self.assertEqual(panel['HoleDiam'], 2.4)
         self.assertTrue(panel['PanelizeSingle'])
         self.assertTrue(panel['TabsDone'])
         self.assertFalse(panel['KeepMaterial'])

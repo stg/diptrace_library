@@ -8,7 +8,7 @@ from lib.common.conversion import ConversionReport
 from lib.common.geometry import transform_point
 from lib.pcb.formats import io
 from lib.pcb.formats.capabilities import DIP
-from lib.pcb.formats.dip.frame_projection import project_frames
+from lib.pcb.formats.dip.frame_projection import _on_binary_grid, project_frames
 from lib.pcb.formats.export_view import prepare_export
 from lib.pcb.model.objects import (new_document, new_component, new_pad, new_pattern_drawing,
                                    new_net, new_point, new_trace, new_user_field)
@@ -33,6 +33,23 @@ def rotated_design():
 
 
 class BinaryFrameStabilityTests(unittest.TestCase):
+    def test_last_bit_unit_rounding_does_not_require_another_placement_frame(self):
+        document = new_document()
+        document.one('/Board').add('Settings')
+        component = document.one('/Board/Components').append(new_component('Device', 'U1'))
+        component['X'], component['Y'], component['Angle'] = 31.25, 60, 7.8
+        pad = component.one('Pattern/Pads').append(new_pad('1'))
+        pad['PadWidth_New'], pad['PadHeight_New'] = .3*3, .2*3
+        self.assertNotEqual(pad['PadWidth_New'], .9)
+        self.assertTrue(_on_binary_grid(component))
+        before, report = signature(component), ConversionReport()
+        project_frames(document.one('/Board'), report=report)
+        self.assertEqual(signature(component), before)
+        self.assertEqual(report.notices, [])
+        # A genuine half-wire-step coordinate still selects frame adaptation.
+        pad['X'] = .00005
+        self.assertFalse(_on_binary_grid(component))
+
     def test_rotated_fractional_envelope_keeps_placement_between_binary_saves(self):
         document = rotated_design()
         before = dumps(document, preserve=False)

@@ -1,6 +1,7 @@
 """One editable grid spacing, with generated destination precision fields."""
 from decimal import Decimal, localcontext
 from fractions import Fraction
+import math
 import unittest
 
 from lib import new_schematic, parse
@@ -33,7 +34,7 @@ class GridSizeTests(unittest.TestCase):
             # The file contains an exact numerator/divisor ratio. Verify the
             # mathematical value and stable bytes, not ambient Decimal precision.
             actual = loaded.one('/Schematic/Settings').scalar('GridSize')
-            self.assertLess(abs(Fraction(actual)-Fraction(1, 3)), Fraction(1, 10**33))
+            self.assertLessEqual(abs(Fraction(actual)-Fraction(1, 3)), Fraction(math.ulp(1/3))/2)
             self.assertEqual(loaded.to_dch_bytes(), encoded)
             encoded = loaded.to_dch_bytes()
         loaded.one('/Schematic/Settings/GridSize').set_values(Decimal('.125'))
@@ -46,7 +47,7 @@ class GridSizeTests(unittest.TestCase):
         document.one('/Schematic/Settings/GridSize').set_values(Decimal('.0000125'))
         encoded = document.to_dch_bytes()
         loaded = parse(encoded, format='dch')
-        self.assertEqual(loaded.one('/Schematic/Settings').scalar('GridSize'), Decimal('.0000125'))
+        self.assertEqual(loaded.one('/Schematic/Settings').scalar('GridSize'), 1.25e-05)
         self.assertEqual(loaded.to_dch_bytes(), encoded)
 
 

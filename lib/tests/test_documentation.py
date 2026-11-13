@@ -2,6 +2,7 @@
 from contextlib import redirect_stdout
 from io import StringIO
 import os
+import math
 from pathlib import Path
 import re
 import tempfile
@@ -59,7 +60,7 @@ class DocumentationTests(unittest.TestCase):
             loaded = read(name, report=ConversionReport())
             part = loaded.one('/Schematic/Components/Part[RefDes="J1"]')
             self.assertEqual(part["Value"], "Sensor input")
-            self.assertEqual(part["X"], 15)
+            self.assertAlmostEqual(part["X"], 15, delta=2*math.ulp(15.0))
 
     def _api_reference(self):
         baseline = fixture("R1")["design"]

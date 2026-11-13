@@ -73,6 +73,11 @@ Shared lengths are three units per millimetre. Component `Angle` is in radians;
 PCB placement permits arbitrary angles. Other angle domains have their own
 definitions in the catalogue.
 
+For mm or inch data access, use `design.in_units("mm")` or
+`design.in_units("inch")` with the same query/edit API. The view edits the same
+board; it leaves angles, axes and stored display settings unchanged. See
+[measurement views](API.md#measurement-views) for configuration and construction.
+
 ## Constructors
 
 `new_document()` creates a board with top and bottom copper layers. Other
@@ -190,6 +195,19 @@ that match the canvas receive a visible contrast color during import. Use
 `ImportContext(background_color=None)` to retain those stored colors instead.
 Later color edits remain ordinary data edits.
 
+Before PCB schema 47, automatic component marking positions are resolved during
+import. System-font measurements can change the selected edge or quarter-turn,
+as well as the calculated text bounds. Use `ImportContext(text_layout=...)` when
+matching a particular font environment matters. The default Windows measurement
+backend uses 96 DPI; the file revision does not identify the earlier editor's
+font environment. Current explicit placements keep their stored choices.
+
+Some older files lack global working settings. Before DIP schema 45, for example,
+`SolderMaskSwell` and `PasteMaskShrink` remain absent on import; export supplies
+zero when the output needs those fields. These library fallbacks can differ
+from an editor's preferences. Set the fields under `/Board/Settings` before
+writing when other values are wanted. Explicit stored settings take precedence.
+
 ```python
 from lib import ConversionReport
 from lib.pcb import ExportContext
@@ -206,6 +224,13 @@ are warnings. Invalid or unimplemented operations report errors and still raise.
 `report.clear()` resets the collected notices for another batch. Readable text
 formats have their own capabilities: inspect the report when changing formats
 or versions rather than assuming every supplied setting has an output slot.
+
+For example, DIP and ASC retain the board-outline display toggle; DIPXML carries
+the outline geometry but omits this display preference. XML export reports a
+hidden outline as a warning and leaves the original model unchanged.
+
+PCB ASC's cached footprints use whole-radian text angles. Export warns if it
+rounds a text angle; the model retains the full value for DIP and DIPXML output.
 
 The [PCB examples](../examples/pcb/README.md) create, inspect, edit and convert a
 small design. They use the same fields and relationships as imported boards.

@@ -7,10 +7,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from functools import lru_cache
 from pathlib import Path
 import re
 
 from .model import Document, Element, SourceSpan, Value
+from .numbers import fixed_number_text
 
 
 _TOKEN = re.compile(r'\s+|[()]|"[^"]*"|[^\s()"]+', re.DOTALL)
@@ -19,7 +21,7 @@ _NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\Z")
 _ATOM = re.compile(r'[^\s()"]+\Z')
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Syntax:
     text: str
     start: int
@@ -30,10 +32,22 @@ class _Syntax:
     column: int
 
 
-def loads(text: str, *, source: str | None = None, document_factory=Document) -> Document:
+@lru_cache(maxsize=4096)
+def _plain_value(token):
+    """Share immutable token values when source positions are not requested."""
+    if token.startswith('"'):
+        return Value(token[1:-1], 'string', lexeme=token)
+    if _NUMBER.fullmatch(token):
+        unit = '%' if token.endswith('%') else ''
+        number = token.rstrip('%')
+        return Value(Decimal(number) if '.' in number else int(number), 'number', unit, token)
+    return Value(token, 'symbol', lexeme=token)
+
+
+def loads(text: str, *, source: str | None = None, document_factory=Document, retain_source=True) -> Document:
     doc = document_factory(representation='asc')
     stack = [doc.root]
-    frames = [[0, 0, []]]
+    frames = [[0, 0, []]] if retain_source else None
     expecting_name = False
     cursor = 0
     for match in _TOKEN.finditer(text):
@@ -47,30 +61,36 @@ def loads(text: str, *, source: str | None = None, document_factory=Document) ->
             if not _NAME.fullmatch(token):
                 raise ValueError(f"expected element name at character {match.start()}")
             stack[-1]._kind = token
-            frames[-1][1] = match.end()
+            if retain_source:
+                frames[-1][1] = match.end()
             expecting_name = False
         elif token == "(":
             node = Element("")
             node._parent = stack[-1]
             stack[-1]._items.append(node)
             stack.append(node)
-            frames.append([match.start(), match.end(), []])
+            if retain_source:
+                frames.append([match.start(), match.end(), []])
             expecting_name = True
         elif token == ")":
             if len(stack) == 1:
                 raise ValueError(f"unexpected ')' at character {match.start()}")
             node = stack.pop()
-            start, head_end, spans = frames.pop()
-            node.source = SourceSpan("asc", start, match.end(), source)
-            node._syntax = _Syntax(text, start, match.end(), head_end, tuple(spans), match.start(),
-                                   start - text.rfind("\n", 0, start) - 1)
+            if retain_source:
+                start, head_end, spans = frames.pop()
+                node.source = SourceSpan("asc", start, match.end(), source)
+                node._syntax = _Syntax(text, start, match.end(), head_end, tuple(spans), match.start(),
+                                       start - text.rfind("\n", 0, start) - 1)
             node._dirty = node._reordered = False
-            frames[-1][2].append((start, match.end()))
+            if retain_source:
+                frames[-1][2].append((start, match.end()))
         else:
             if len(stack) == 1:
                 raise ValueError(f"value outside an ASC element at character {match.start()}")
-            span = SourceSpan("asc", match.start(), match.end(), source)
-            if token.startswith('"'):
+            span = SourceSpan("asc", match.start(), match.end(), source) if retain_source else None
+            if not retain_source:
+                value = _plain_value(token)
+            elif token.startswith('"'):
                 value = Value(token[1:-1], "string", lexeme=token, source=span)
             elif _NUMBER.fullmatch(token):
                 unit = "%" if token.endswith("%") else ""
@@ -82,20 +102,22 @@ def loads(text: str, *, source: str | None = None, document_factory=Document) ->
                 # the identifier grammar; scalar atoms have a wider grammar.
                 value = Value(token, "symbol", lexeme=token, source=span)
             stack[-1]._items.append(value)
-            frames[-1][2].append((match.start(), match.end()))
+            if retain_source:
+                frames[-1][2].append((match.start(), match.end()))
     if cursor != len(text):
         raise ValueError(f"unterminated string at character {cursor}")
     if expecting_name or len(stack) != 1:
         raise ValueError("unclosed ASC element")
-    spans = frames[0][2]
-    doc.root._syntax = _Syntax(text, 0, len(text), 0, tuple(spans), len(text), 0)
+    if retain_source:
+        spans = frames[0][2]
+        doc.root._syntax = _Syntax(text, 0, len(text), 0, tuple(spans), len(text), 0)
     doc.root._dirty = doc.root._reordered = False
-    doc._source_text = text
+    doc._source_text = text if retain_source else None
     doc.metadata.update(source_format="asc", source_path=source)
     return doc
 
 
-def loads_bytes(data, *, source=None, encoding=None, document_factory=Document) -> Document:
+def loads_bytes(data, *, source=None, encoding=None, document_factory=Document, retain_source=True) -> Document:
     """Decode an ASC byte buffer using the same policy as file input."""
     if not isinstance(data, (bytes, bytearray, memoryview)):
         raise TypeError('ASC input must be bytes, bytearray or memoryview')
@@ -108,8 +130,8 @@ def loads_bytes(data, *, source=None, encoding=None, document_factory=Document) 
         text = decode(data)
     else:
         text = data.decode(encoding)
-    doc = loads(text, source=source, document_factory=document_factory)
-    doc._source_bytes, doc._source_encoding = data, encoding
+    doc = loads(text, source=source, document_factory=document_factory, retain_source=retain_source)
+    doc._source_bytes, doc._source_encoding = data if retain_source else None, encoding
     return doc
 
 
@@ -122,7 +144,7 @@ def _value(value: Value, preserve: bool):
     if preserve and value.lexeme is not None:
         return value.lexeme
     if value.kind == "number":
-        return (str(value.value) if isinstance(value.value, int) else format(value.value, "f")) + value.unit
+        return fixed_number_text(value.value) + value.unit
     if value.kind == "symbol":
         text = str(value.value)
         if not _ATOM.fullmatch(text):

@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps, loads_bytes
 from lib.common.conversion import ConversionReport
 from lib.common.references import Property, ReferenceError
@@ -52,7 +53,7 @@ class MainLengthClassTests(unittest.TestCase):
             main = result.document.one('/Board/MainLengthRule')
             selected = result.classes[1]
             self.assertIs(main['Class'], selected)
-            self.assertEqual((main['FixedLength'], main['Delta']), expected)
+            assert_float_facts(self,(main['FixedLength'], main['Delta']), expected)
             self.assertNotEqual(main['FixedLength'], selected['FixedLength'])
             self.assertIsNotNone(selected.child('LengthResults'))
             self.assertIsNone(main.child('Type'))
@@ -113,7 +114,7 @@ class MainLengthClassTests(unittest.TestCase):
             write_length_rules(writer, board)
             reader = Reader(bytes(writer.buffer))
             self.assertEqual(reader.text(), 'Working copy')
-            self.assertEqual((reader.number(), reader.number()), (17, Decimal('.2')))
+            self.assertEqual((reader.number(), reader.number()), (17, 0.2))
             self.assertEqual((reader.boolean(), reader.boolean()), (True, True))
             self.assertEqual((reader.integer(), reader.integer()), (0, 1))
         raw = loads_bytes(io.serialize(document, format='asc', report=ConversionReport()))
@@ -133,7 +134,7 @@ class MainLengthClassTests(unittest.TestCase):
                 main = rebuilt.one('/Board/MainLengthRule')
                 self.assertIs(main['Class'], rebuilt.one('/Board/NetClasses/NetClass[2]'))
                 self.assertEqual((main['Name'], main['FixedLength'], main['Delta']),
-                                 ('Working copy', 17, Decimal('.2')))
+                                 ('Working copy', 17, 0.2))
                 self.assertTrue(main['AnyError'])
                 self.assertIsNot(main.one('Rules/Rule')['Net']['Class'], main['Class'])
                 self.assertEqual(dumps(document, preserve=False), before)

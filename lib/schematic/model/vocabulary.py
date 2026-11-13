@@ -136,7 +136,7 @@ PadMask_SegmentGap PadMask_SegmentSide PadMask_TopSegments PadMask_BotSegments''
 # Compatibility occurrences belong to import modernization and destination
 # projection. They are not independent editable properties of the current model.
 GLOBAL_COMPATIBILITY_FIELDS = ('ShowText', 'ShowText2', 'TextAlign', 'TextAlign2',
-                               'FieldName1', 'FieldName2')
+                               'FieldName1', 'FieldName2', 'PictureCount')
 COMPONENT_COMPATIBILITY_FIELDS = ('ShowText', 'TextAlign', 'ShowText2', 'TextAlign2',
                                   'TextPosX', 'TextPosY', 'TextPosX2', 'TextPosY2',
                                   'FieldIndex1', 'FieldIndex2', 'Orientation')

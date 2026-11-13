@@ -60,7 +60,7 @@ def project_title_block(grid, *, name, units, fractional_font=True):
     result = Element(name)
     field(result, 'Name', grid.arguments[1])
     for key in ('Width', 'Height'):
-        set_attribute(result, key, numeric(units.length(grid.one(key).arguments[0])))
+        set_attribute(result, key, numeric(units.length(grid._field_arguments(key)[0])))
     columns, rows = grid.select('ColWidths/pt'), grid.select('RowHeights/pt')
     for public, values in (('ColumnWidths', columns), ('RowHeights', rows)):
         if values:
@@ -93,7 +93,7 @@ def project_title_block(grid, *, name, units, fractional_font=True):
             font(source, item, units=units, fractional_font=fractional_font)
             set_attribute(item, 'TextShow', enum_text(source.scalar('FontType'), ('Text', 'Sheet', 'File')))
             set_attribute(item, 'TextAlign', enum_text(source.scalar('Align'), TEXT_ALIGN))
-            bounds(item, source.one('Placement').arguments, units)
+            bounds(item, source._field_arguments('Placement'), units)
     return result
 
 

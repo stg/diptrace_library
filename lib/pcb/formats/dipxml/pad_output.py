@@ -1,6 +1,7 @@
 """Electrical and layer-specific placed-pad XML over current identities."""
 from decimal import Decimal
 
+from ....common.model import Element
 from ....common.xml import set_attribute
 from ....common.xml_output import field, numeric
 from ....common.xml_pad_output import project_mask_paste
@@ -10,7 +11,7 @@ from ...model.pad_records import TEARDROP
 from ..output_validation import field_value
 
 
-def project_options(pad, result, *, units, via=False, report=None):
+def project_options(pad, result, *, units, via=False, report=None, _factory=Element):
     """Project pad overlays; static vias carry mask/paste on their placement."""
     set_attribute(result, 'DefStyle', field_value(pad, 'Standard'))
     if via:
@@ -24,7 +25,7 @@ def project_options(pad, result, *, units, via=False, report=None):
             warn(report, 'xml-via-pad-data', 'dipxml',
                  'XML via initialization replaces independent template-pad data', (pad,),
                  recoverability='placed connectivity and mask/thermal options remain; pad labels and defaults regenerate')
-        result.append(project_mask_paste(pad, units=units, complete=True))
+        result.append(project_mask_paste(pad, units=units, complete=True, _factory=_factory))
     set_attribute(result, 'SignalDelay', field_value(pad, 'SignalDelay'))
     if field_value(pad, 'ShieldGroup') >= 0:
         set_attribute(result, 'ShieldGroup', field_value(pad, 'ShieldGroup'))

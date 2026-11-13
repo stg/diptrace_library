@@ -18,7 +18,7 @@ def read_extensions(reader, schematic):
     complete_options(simulator)
     version = reader.header.version
     if version >= 49:
-        reader.field(schematic.one('Settings'), 'NetNameFontSize', 'integer', replace=True)
+        reader.field_into(schematic.one('Settings'), 'NetNameFontSize', 'integer', replace=True)
     if version >= 50:
         rows = simulator.one('sim_digital')
         for row in list(rows.children()):
@@ -26,10 +26,10 @@ def read_extensions(reader, schematic):
         from .tail import read_simulation_arguments
         read_simulation_arguments(reader, rows)
         for group, name, kind, default in OPTION_FIELDS:
-            reader.field(simulator.one(group), name, kind, replace=True)
+            reader.field_into(simulator.one(group), name, kind, replace=True)
     if version >= 51:
         for shape in schematic.select('Shapes/Shape'):
-            reader.field(shape, 'PictureFlipped', 'boolean', replace=True)
+            reader.field_into(shape, 'PictureFlipped', 'boolean', replace=True)
     if version >= 52:
         read_font_properties(reader, binary_fonts(schematic))
 

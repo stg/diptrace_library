@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.binary import BinaryWriter
 from lib.common.library_codec import CachedDefinitionInput
 from lib.common.model import Element
@@ -80,7 +81,7 @@ class RevisionSectionTests(unittest.TestCase):
                 self.assertEqual(core['Lay'], -1)
                 self.assertEqual(core.one('Material')['Name'], 'Core')
                 self.assertTrue(core.one('Material')['VariableThickness'])
-                self.assertEqual(board.one('Components/Component/Pattern/Pads/Pad[2]')['SignalDelay'], Decimal('.2'))
+                self.assertEqual(board.one('Components/Component/Pattern/Pads/Pad[2]')['SignalDelay'], 0.2)
                 self.assertTrue(board.one('MainLengthRule')['AnyError'])
                 self.assertEqual(board.one('MainLengthRule/Rules/Rule')['Comp2'], 3)
                 self.assertEqual(board.one('LengthRules/LengthRule')['Name'], 'Clock group')
@@ -100,11 +101,11 @@ class RevisionSectionTests(unittest.TestCase):
         reader = Reader(bytes(writer.buffer))
         read_camera_extension(reader, root)
         read_grid_extension(reader, board)
-        self.assertEqual(root['Xpos'], Decimal('.1234'))
-        self.assertEqual(root['Ypos'], Decimal('-.5678'))
+        self.assertEqual(root['Xpos'], 0.1234)
+        assert_float_facts(self,root['Ypos'], Decimal('-.5678'))
         self.assertEqual(len(root.children('Xpos')), 1)
-        self.assertEqual(board.one('Settings')['GridSize'], Decimal('.15'))
-        self.assertEqual(board.one('Components/Component')['PlacementClearance'], Decimal('.9'))
+        assert_float_facts(self,board.one('Settings')['GridSize'], Decimal('.15'))
+        assert_float_facts(self,board.one('Components/Component')['PlacementClearance'], Decimal('.9'))
         self.assertEqual(reader.integer(), 17)
 
     def test_mask_extensions_share_placed_and_cached_pad_state_vocabulary(self):
@@ -133,7 +134,7 @@ class RevisionSectionTests(unittest.TestCase):
         for pad in pads:
             self.assertEqual([pad[name] for name in names], [1, 2, 0, 1])
             self.assertEqual(len(pad.children('DisableTopMask')), 1)
-        self.assertEqual(board.one('DRC/LayClearances/LayClearance')['SameSmdToPad'], Decimal('.3'))
+        self.assertEqual(board.one('DRC/LayClearances/LayClearance')['SameSmdToPad'], 0.3)
         self.assertTrue(board.one('LastDRC')['CheckSameComponentPads'])
 
     def test_meanders_extend_net_pair_and_removed_pair_geometry(self):
@@ -170,7 +171,7 @@ class RevisionSectionTests(unittest.TestCase):
         read_meanders(reader, board)
         self.assertEqual(reader.integer(), 17)
         self.assertEqual(reader.pos, len(reader.data))
-        self.assertEqual(board.one('Nets/Net')['MeanderGap'], Decimal('.3'))
+        self.assertEqual(board.one('Nets/Net')['MeanderGap'], 0.3)
         self.assertEqual(net_points.one('Point[2]')['MeanderAngle'], 45)
         self.assertEqual(board.one('DifferentialPairs/DifferentialPair/NegSeparateTraces/NegTrace/Points/Point')['MeanderAngle'], -30)
         self.assertEqual(board.one('RemovedDifferentialPairs/RemovedDifferentialPair/Segments/Segment/CenterPoints/CenterPoint/PosPoints/PosPoint')['Meander'], 1)

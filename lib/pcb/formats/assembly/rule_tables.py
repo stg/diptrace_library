@@ -149,7 +149,7 @@ def assemble_tables(result):
                         links.append((rule, 'copper-layer', result.layers[index]))
                 matrix.append(cell)
                 links.extend(((cell, 'net-class-1', first), (cell, 'net-class-2', second)))
-        for node in board.walk(include_self=True):
+        for node in board._record_walk(include_self=True):
             if (schema := rule_records.definition(node)) is not None:
                 node.bind_schema(schema)
         with document.references.binding_batch():

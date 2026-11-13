@@ -1,9 +1,11 @@
 """Attachment modernization preserves physical facts and usable identities."""
 import unittest
 from decimal import Decimal
+import math
 
 from lib import Element, Index, Segment, ReferenceError
-from lib.schematic.editing.route_normalization import (upgrade_short_junctions)
+from lib.common.units import XmlUnits
+from lib.schematic.editing.route_normalization import (upgrade_short_junctions, _coherent_pin_endpoint)
 from lib.schematic.model.refs import (bind_schematic_references)
 from lib.tests.test_legacy_routes import junction
 
@@ -35,6 +37,76 @@ def dependent(*, hint=0, bend=False, reordered=False):
 
 
 class JunctionBoundaryTests(unittest.TestCase):
+    def test_independent_unit_rounding_keeps_the_pinned_endpoint_and_identity(self):
+        units = XmlUnits('mm')
+        endpoint_y = units.internal_length(48.26)
+        document, host, branch = junction(parallel=3, perpendicular=endpoint_y,
+                                          pinned=True, orientation=1)
+        part = document.one('/Schematic/Components/Part')
+        pin = part.one('Pins/Pin')
+        part.set_field('Y', units.internal_length(50.8))
+        pin.set_argument(2, units.internal_length(-.508))
+        pin.set_field('Length', units.internal_length(2.032))
+        endpoint = branch.one('Points/pt[2]')
+        # The physical sum and independently converted endpoint are adjacent
+        # floats. Neither endpoint nor pin geometry is moved to make them equal.
+        calculated = math.fsum((part.scalar('Y'), pin.values[2], -pin.scalar('Length')))
+        self.assertNotEqual(calculated, endpoint_y)
+        self.assertEqual(math.nextafter(calculated, endpoint_y), endpoint_y)
+        original = endpoint.values, pin.values, tuple(document.references)
+        self.assertTrue(_coherent_pin_endpoint(document.references, branch, 1, endpoint))
+        self.assertEqual(upgrade_short_junctions(document), (branch,))
+        self.assertIs(branch.select('Points/pt')[-1], endpoint)
+        self.assertEqual((endpoint.values, pin.values, tuple(document.references)), original)
+        self.assertAttached(document)
+        for _ in range(5):
+            self.assertEqual(upgrade_short_junctions(document), ())
+            self.assertEqual((endpoint.values, pin.values), original[:2])
+
+    def test_pin_coherence_rejects_a_displacement_beyond_rounding_resolution(self):
+        for y, coherent in ((math.nextafter(9.0, math.inf), True), (9.000001, False)):
+            with self.subTest(y=y):
+                document, _, branch = junction(parallel=3, perpendicular=9, pinned=True)
+                endpoint = branch.one('Points/pt[2]')
+                endpoint.set_argument(1, y)
+                original = endpoint.values
+                self.assertEqual(_coherent_pin_endpoint(document.references, branch, 1, endpoint), coherent)
+                self.assertEqual(upgrade_short_junctions(document), (branch,) if coherent else ())
+                self.assertEqual(endpoint.values, original)
+
+    def test_cancelled_coordinates_do_not_absorb_a_small_authored_displacement(self):
+        document, _, branch = junction(parallel=3, perpendicular=0, pinned=True)
+        part = document.one('/Schematic/Components/Part')
+        part.set_field('Y', 10000.25)
+        part.one('Pins/Pin').set_argument(2, -10000.25)
+        endpoint = branch.one('Points/pt[2]')
+        endpoint.set_argument(1, .000001)
+        self.assertFalse(_coherent_pin_endpoint(document.references, branch, 1, endpoint))
+
+    def test_pin_coherence_accounts_for_independent_unit_projection(self):
+        for unit in ('mm', 'mil', 'inch'):
+            scale = XmlUnits(unit)
+            for magnitude in ('.1', '3.75', '123.456'):
+                for orientation in range(4):
+                    with self.subTest(unit=unit, magnitude=magnitude, orientation=orientation):
+                        document, _, branch = junction(pinned=True, orientation=orientation)
+                        part = document.one('/Schematic/Components/Part')
+                        pin, endpoint = part.one('Pins/Pin'), branch.one('Points/pt[2]')
+                        x, y, length = Decimal(magnitude), -Decimal(magnitude), Decimal('.003')
+                        local_x, local_y = -x+Decimal('.017'), -y+Decimal('.029')
+                        dx, dy = ((-1, 0), (0, -1), (1, 0), (0, 1))[orientation]
+                        # Independently converted source quantities describe
+                        # exactly the same tip before rounding into floats.
+                        part.set_field('X', scale.internal_length(x))
+                        part.set_field('Y', scale.internal_length(y))
+                        pin.set_values(0, scale.internal_length(local_x), scale.internal_length(local_y))
+                        pin.set_field('Length', scale.internal_length(length))
+                        endpoint.set_values(scale.internal_length(x+local_x+dx*length),
+                                            scale.internal_length(y+local_y+dy*length), 1)
+                        self.assertTrue(_coherent_pin_endpoint(document.references, branch, 1, endpoint))
+                        endpoint.set_argument(1, endpoint.values[1]+.000001)
+                        self.assertFalse(_coherent_pin_endpoint(document.references, branch, 1, endpoint))
+
     def assertAttached(self,document):
         for reference in document.references:
             if reference.role not in ('wire-segment-1','wire-segment-2'):
@@ -78,7 +150,7 @@ class JunctionBoundaryTests(unittest.TestCase):
         document,_,branch = junction(parallel=3,perpendicular=.1,pinned=True)
         branch.one('Points/pt[2]').set_argument(2,1)
         upgrade_short_junctions(document)
-        self.assertEqual(positions(branch),[(3,0),(3,Decimal('.1'))])
+        self.assertEqual(positions(branch),[(3,0),(3,0.1)])
         self.assertAttached(document)
         document,_,branch = junction(parallel=3,perpendicular=17)
         branch.one('Points/pt[2]').set_argument(2,0)

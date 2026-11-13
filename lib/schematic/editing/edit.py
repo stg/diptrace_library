@@ -1,9 +1,10 @@
 """Schematic editing operations expressed through our elements and references."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import groupby
 
 from ...common.model import (Element)
 from ...common.references import (Segment)
+from ...common.validation_scope import _finish_removals
 
 
 @dataclass(frozen=True)
@@ -54,8 +55,12 @@ def coalesce_routes(document, *, enabled_only=False):
     Unresolved links in unrelated domains remain intact. A related or unknown
     reference domain blocks the planned removals before any point is detached.
     """
+    from ...common.unit_views import UnitDocument
+    if isinstance(document, UnitDocument):
+        return [replace(item, line=document._scope.wrap(item.line), point=document._scope.wrap(item.point))
+                for item in coalesce_routes(document.model, enabled_only=enabled_only)]
     graph = document.references
-    document.rebuild(force=False)
+    document._synchronize(force=False)
     protected = _referenced_route_points(graph)
 
     removed = []
@@ -85,8 +90,9 @@ def coalesce_routes(document, *, enabled_only=False):
                 if point not in keep:
                     removed.append(RemovedRoutePoint(line, point, position))
     graph._check_collection_changes(item.point.parent for item in removed)
+    changed_parents = {item.point.parent for item in removed}
     for item in removed:
         item.point.detach()
     if removed:
-        document.rebuild()
+        _finish_removals(document, changed_parents)
     return tuple(removed)

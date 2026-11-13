@@ -14,6 +14,7 @@ constructors, contexts and adapters. Generic I/O selects their family from conte
 | --- | --- |
 | [Input and output](#reading-and-writing) | `read`, `parse`, `write`, `serialize`, document output methods |
 | [Documents](#document) | State, identity lookup, validation and cloning |
+| [Measurement views](#measurement-views) | mm/mil/inch access, edits and default preferences |
 | [Records](#fields-and-reflection) | Named field access, child navigation, schema reflection |
 | [Queries](#searching) | `select`, `one`, `find_all`, selectors and `where` |
 | [Reference designators](#reference-designators) | Family matching, numbering and allocation |
@@ -251,6 +252,70 @@ Queries are described under [Searching](#searching); copying/removal under
 Ordinary edits and saves require no rebuild. Validation may accept intact
 unresolved identities; it does not guess targets. Neither validation nor
 rebuilding performs geometric repair.
+
+## Measurement views
+
+```text
+document.in_units(units=None) -> UnitDocument
+element.in_units(units=None) -> UnitElement
+```
+
+Read and edit declared lengths in `"mm"`, `"mil"` or `"inch"` (`"in"` is an
+alias). Areas use the square of that unit. Omitting `units` uses the current
+preference, initially mm. A view refers to the same design; it does not convert
+or copy the stored geometry. The canonical API remains three shared units/mm.
+
+| View operation | Behavior |
+| --- | --- |
+| `view.model` | Underlying canonical `Document` or `Element` |
+| `view.units` | Read-only unit name captured when the view was created |
+| Named access, `values`, `arguments`, field handles | Convert declared physical quantities |
+| Queries and `where` | Compare values in the view's units |
+| Children, resolved references, graph inspection, RefDes matches | Return records in the same view |
+| `copy(..., fields=...)`, named and positional edits | Interpret supplied quantities in the caller's units; retain ordinary validation/reference coordination |
+| `clone()` | Independent design or record, retaining the view's units |
+| `write`, `serialize`, document output methods | Export canonical facts using the destination context |
+
+```python
+from lib import using_units
+
+with using_units("mm"):
+    metric = design.in_units()
+    component = metric.one("/Schematic/Components/Part")
+    component["X"] = 10.0
+    assert part["X"] == 30.0  # The original record sees the same edit.
+```
+
+Integers used as identities, angles, ratios, percentages, font sizes and inherited
+style selections keep their own domains. `None` stays `None`; a missing-field
+fallback is returned literally. Axes and stored display settings do not change.
+Floating conversions can differ at the last place; equality predicates retain
+normal numeric equality. Assigning an unchanged visible value preserves the
+current canonical number, avoiding drift in repeated read/assign cycles.
+If a projected negative quantity coincides with a reserved selection value,
+that same-value rule takes precedence; use `view.model` to select the canonical
+reserved value explicitly.
+
+Existing records passed to `append`, `insert` or `move_to` retain their canonical
+data. Constructors also use canonical units: attach a constructed record, then
+edit it through the view. `add` converts arguments using the prospective owning
+schema; ordinary incremental construction still requires any remaining fields.
+Source-syntax documents retain the format's own units and reject `in_units`.
+`symbol_bounds` and `pattern_bounds` return physical bounds in the supplied
+record view's units. For lower-level functions that require canonical objects,
+pass `view.model`.
+
+```text
+get_default_units() -> str
+set_default_units(units) -> None
+using_units(units) -> context manager
+```
+
+These preferences apply to newly created views in the current execution context.
+`using_units` restores the previous preference on exit, including after an
+exception. Existing views and stored facts remain unchanged. Immutable schema
+reflection continues to describe the canonical field domains, including tuple
+members, unit-independent selections and conditional units.
 
 ## Fields and reflection
 
@@ -712,7 +777,7 @@ listed under [PCB contexts](#pcb-contexts). Context classes belong to their fami
 ### `ImportContext`
 
 ```text
-ImportContext(font_size=2, font_name="", text_layout=None)
+ImportContext(font_size=2, font_name="", text_layout=None, retain_source=False)
 ```
 
 Supply environment choices needed to modernize older DCH input.
@@ -722,10 +787,14 @@ Supply environment choices needed to modernize older DCH input.
 | `font_size` | Positive integer fallback for missing old font settings |
 | `font_name` | Environment font family for legacy placement; does not replace a stored drawing family |
 | `text_layout` | Optional `TextLayout` service |
+| `retain_source` | Keep available input positions/spelling for investigation; default `False` |
 | `layout` (property) | Supplied layout service, or the default service |
 
 Stored settings take precedence. Other normal input formats accept the common
-`context` argument but do not currently need these DCH modernization choices.
+`context` argument. The font choices concern DCH modernization; `retain_source`
+applies to every input format. It changes optional detail, not design values or
+conversion diagnostics. `parse_source()`/`read_source()` retain detailed source
+views by default; ordinary imports omit it after consuming the input syntax.
 
 ### `ExportContext`
 
@@ -767,8 +836,10 @@ rather than being silently ignored.
 | `AscExportContext` | `legacy_text_slots` | `None`, or six values: two modes, two alignments, two field names |
 | `DchXmlExportContext` | `active_sheet` | `None` follows stored selection, then page zero; explicit index must be nonnegative |
 
-Compaction cannot discard referenced content. Reports identify omitted inactive
-records and other consequences.
+Compaction checks incoming references before omitting inactive records. XML can
+keep a pin's assignment to an omitted pad as an unresolved key, with a warning.
+Removals that cannot preserve the relationship raise `ReferenceError`. Reports
+identify omitted records and other consequences.
 
 ### `resolved()`
 
@@ -800,7 +871,7 @@ Import these optional immutable classes from `lib.pcb`.
 
 ```text
 ImportContext(units="mm", text_layout=None, background_color=0,
-              show_component_fiducials=True)
+              show_component_fiducials=True, retain_source=False)
 ExportContext(units=None, project_dir=None, font_size=2, vector_font=True,
               grid_size=Decimal(".3"), line_width=Decimal(".3"),
               sheet_size=(891, 630), default_main_supplier=False,
@@ -813,6 +884,7 @@ ExportContext(units=None, project_dir=None, font_size=2, vector_font=True,
 | `text_layout` | Optional common `TextLayout` service |
 | `background_color` | Default black canvas (`0`); `None` retains stored drawing colors |
 | `show_component_fiducials` | Fallback for including common fiducials in footprint bounds |
+| `retain_source` | Keep available input positions/spelling; default `False`, as for schematic input |
 
 The canvas choice participates in import's visible-color normalization, without
 affecting later color edits. Geometry always uses shared length units.
@@ -858,6 +930,12 @@ Resolution/scale must be finite and positive.
 Vector layout is self-contained. The default service loads Windows measurement
 lazily only when system text needs it. If required measurement is unavailable,
 conversion raises `NotImplementedError` instead of inventing text bounds.
+
+Some older PCB files store automatic label choices. Import resolves their
+positions using font measurements; different metrics can change the chosen
+edge and rotate a label by a quarter turn. For repeatable results, supply
+`ImportContext(text_layout=...)` with consistent font and DPI settings, using
+`TextLayout` and a measurement provider such as `WindowsFontMetrics(dpi=...)`.
 
 ### `PathVariables`
 
@@ -1127,9 +1205,11 @@ Value.of(value, *, symbol=False, unit="") -> Value
 SourceSpan(format, start, end, source=None)
 ```
 
-Both types are immutable. `Value.of()` validates primitive values and turns
-finite floats into decimals. Source spans/lexemes are optional descriptions;
-they do not make original bytes authoritative after editing.
+Both types are immutable. `Value.of()` validates primitive values and keeps
+finite Python floats as floats. Explicit syntax values can also carry `Decimal`.
+Canonical record fields normalize decimal numeric inputs to floating-point
+values, or exact integers for integer fields. Source spans/lexemes are optional
+descriptions; they do not make original bytes authoritative after editing.
 
 ## Extensions and failures
 

@@ -20,6 +20,10 @@ class Document(BaseDocument):
     _representations = (*BaseDocument._representations, 'pcb', 'dipxml')
     _named_representations = ('pcb',)
 
+    def _record_definition(self, node):
+        from .definitions import definition
+        return definition(node)
+
     def __init__(self, root=None, *, representation='pcb'):
         super().__init__(root, representation=representation)
         if representation == 'pcb':

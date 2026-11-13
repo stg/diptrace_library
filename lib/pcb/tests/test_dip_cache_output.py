@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport
 from lib.common.font_codec import read_font_properties, write_font_properties
@@ -87,8 +88,8 @@ class DipCacheOutputTests(unittest.TestCase):
         expected, before = signature(document.one('/Board/CacheLib')), dumps(document, preserve=False)
         report = ConversionReport()
         rebuilt = reopen(document, report=report)
-        self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), expected)
-        self.assertEqual(signature(reopen(rebuilt).one('/Board/CacheLib')), expected)
+        assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), expected)
+        assert_float_facts(self,signature(reopen(rebuilt).one('/Board/CacheLib')), expected)
         self.assertEqual(sections(rebuilt), sections(document))
         self.assertEqual(dumps(document, preserve=False), before)
         self.assertEqual(report.notices, [])
@@ -109,7 +110,7 @@ class DipCacheOutputTests(unittest.TestCase):
         self.assertEqual((saved['Number'], saved['Group']), (2, 1))
         self.assertEqual(raw.one('DesignCache_Links/Link').values, (1,))
         rebuilt = reopen(document)
-        self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), signature(board.one('CacheLib')))
+        assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), signature(board.one('CacheLib')))
 
     def test_full_font_angles_multiline_text_masks_shields_and_model_placement_survive(self):
         document = design()
@@ -127,7 +128,7 @@ class DipCacheOutputTests(unittest.TestCase):
         pattern.one('Model3D/Rotate')['Z'] = Decimal('38.25')
         pattern.one('Model3D/Offset')['X'] = Decimal('1.25')
         expected = signature(document.one('/Board/CacheLib'))
-        self.assertEqual(signature(reopen(document).one('/Board/CacheLib')), expected)
+        assert_float_facts(self,signature(reopen(document).one('/Board/CacheLib')), expected)
 
     def test_unprepared_section_writer_does_not_silently_retarget_pin_domains(self):
         document = design()
@@ -174,8 +175,8 @@ class DipCacheOutputTests(unittest.TestCase):
         pattern.one('Holes/Hole[1]').move_to(pattern.one('Holes'))
         expected = signature(pattern)
         rebuilt = reopen(document)
-        self.assertEqual(signature(rebuilt.one(pattern.path)), expected)
-        self.assertEqual(signature(reopen(rebuilt).one(pattern.path)), expected)
+        assert_float_facts(self,signature(rebuilt.one(pattern.path)), expected)
+        assert_float_facts(self,signature(reopen(rebuilt).one(pattern.path)), expected)
 
     def test_known_template_omissions_warn_and_leave_authored_data_untouched(self):
         document = design()
@@ -209,7 +210,7 @@ class DipCacheOutputTests(unittest.TestCase):
             terminal[name] = value
         before = dumps(document, preserve=False)
         rebuilt = reopen(document)
-        self.assertEqual(signature(rebuilt.one(pattern.path)), signature(pattern))
+        assert_float_facts(self,signature(rebuilt.one(pattern.path)), signature(pattern))
         self.assertEqual(sections(rebuilt), sections(document))
         self.assertEqual(dumps(document, preserve=False), before)
 

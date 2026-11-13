@@ -40,17 +40,45 @@ class SheetViewTests(unittest.TestCase):
         self.assertEqual(cloned.one('/Schematic')['ActiveSheet'], 0)
         self.assertEqual(doc.one('/Schematic')['ActiveSheet'], 1)
 
-    def test_record_destinations_report_selection_omission_without_mutation(self):
+    def test_binary_selection_survives_versions_and_xml_conversion(self):
         doc = self.design()
-        for kind in ('dch', 'asc'):
-            with self.subTest(kind=kind):
+        for version in range(46, 53):
+            with self.subTest(version=version):
                 report = ConversionReport()
-                restored = parse(serialize(doc, format=kind, report=report), format=kind)
-                self.assertNotIn('ActiveSheet', restored.one('/Schematic'))
+                raw = serialize(doc, format='dch', version=version, report=report)
+                restored = parse(raw)
+                self.assertEqual(restored.one('/Schematic')['ActiveSheet'], 1)
+                self.assertNotIn('PictureCount', restored.one('/Schematic'))
+                self.assertFalse(any(n.rule == 'active-sheet' for n in report.notices))
+                self.assertEqual(serialize(restored, format='dch', version=version), raw)
+                xml = parse(serialize(restored, format='dchxml'))
+                page = xml.one('/Schematic/Pages/Page[Name="Second"]')
+                page.move_to(page.parent, 0)
+                rebuilt = parse(serialize(xml, format='dch', version=version))
+                self.assertEqual(rebuilt.one('/Schematic')['ActiveSheet'], 0)
+                self.assertEqual(rebuilt.one('/Schematic/Pages').children('Page')[0]['Name'],
+                                 'Second')
                 self.assertEqual(doc.one('/Schematic')['ActiveSheet'], 1)
-                notices = [notice for notice in report.notices if notice.rule == 'active-sheet']
-                self.assertEqual(len(notices), 1)
-                self.assertEqual(notices[0].severity, 'info')
+
+    def test_asc_reports_selection_omission_without_mutation(self):
+        doc = self.design()
+        report = ConversionReport()
+        restored = parse(serialize(doc, format='asc', report=report))
+        self.assertNotIn('ActiveSheet', restored.one('/Schematic'))
+        self.assertNotIn('PictureCount', restored.one('/Schematic'))
+        self.assertEqual(doc.one('/Schematic')['ActiveSheet'], 1)
+        notices = [notice for notice in report.notices if notice.rule == 'active-sheet']
+        self.assertEqual(len(notices), 1)
+        self.assertEqual(notices[0].severity, 'info')
+
+    def test_absent_selection_uses_first_sheet_on_binary_output(self):
+        doc = new_schematic()
+        schematic = doc.one('/Schematic')
+        if 'ActiveSheet' in schematic:
+            del schematic['ActiveSheet']
+        restored = parse(serialize(doc, format='dch'))
+        self.assertEqual(restored.one('/Schematic')['ActiveSheet'], 0)
+        self.assertNotIn('ActiveSheet', schematic)
 
     def test_selection_can_be_removed_and_invalid_positions_remain_explicit(self):
         doc = self.design()
@@ -61,5 +89,6 @@ class SheetViewTests(unittest.TestCase):
         self.assertEqual(DchXmlExportContext().resolved(doc).active_sheet, 0)
         schematic['ActiveSheet'] = 9
         self.assertTrue(any(issue.message.startswith('active-sheet:') for issue in doc.references.issues))
-        with self.assertRaises(ValueError):
-            serialize(doc, format='dchxml', report=ConversionReport())
+        for kind in ('dch', 'dchxml'):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                serialize(doc, format=kind, report=ConversionReport())

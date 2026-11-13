@@ -45,7 +45,8 @@ def _marking(record, target, prefix, *, units):
         record.finish()
 
 
-def read_component(record, *, patterns, units, vias=None, layers=None, common_fiducials=True):
+def read_component(record, *, patterns, units, vias=None, layers=None, common_fiducials=True,
+                   grid_alignment_default='Origin'):
     via_key = record.integer('ViaStyle', -1)
     if via_key >= 0 and (vias is None or via_key not in vias):
         raise PcbError(f'{record.node.path}: unresolved via style {via_key}')
@@ -75,7 +76,7 @@ def read_component(record, *, patterns, units, vias=None, layers=None, common_fi
     for name in ('Selected', 'Locked', 'PanelExclude', 'CustomMarkingFont', 'MarkingFontAll'):
         component.add(name, record.boolean(name, False))
     component.add('MarkingFontSize', read_size(record, 'MarkingFontSize', 5, floating='MarkingFontSizeFloat'))
-    component.add('GsType', enum_value(record.value('GridAlign', 'Origin'), ('Pad', 'Origin')))
+    component.add('GsType', enum_value(record.value('GridAlign', grid_alignment_default), ('Pad', 'Origin')))
     component.add('ShowFiducial', enum_value(record.value('ShowFiducials', 'Common'), SHOW))
     component.add('Group', record.integer('Group', -1))
     component.add('ShieldGroup', record.integer('ShieldGroup', -1))

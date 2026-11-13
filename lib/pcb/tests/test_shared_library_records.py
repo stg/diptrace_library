@@ -72,7 +72,7 @@ class SharedLibraryTests(unittest.TestCase):
         self.assertEqual(actual.one('Pattern')['Pattern_Manufacturer'], 'Footprint supplier')
         self.assertEqual(actual.one('Pattern/PadTerminal/ShapePoints/pt').values, (1, 2))
         self.assertEqual(actual.one('Pattern/PadMask_TopSegments/pt').values, (1, 2, 3, 4))
-        self.assertEqual(actual.one('Pattern/Shapes/Shape[1]')['TextAngle'], Decimal('.1234'))
+        self.assertEqual(actual.one('Pattern/Shapes/Shape[1]')['TextAngle'], 0.1234)
         self.assertEqual(actual.one('Pattern/Shapes/Shape[1]/TextLine/pt').values, ('Reference text',))
 
     def test_cache_is_absent_before_the_board_cache_revision(self):

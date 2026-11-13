@@ -60,9 +60,21 @@ def _connections(component, result, keys):
 
 
 @in_xml_frame
-def project_component(component, *, style, units, report=None):
+def project_component(component, *, style, units, report=None, _factory=Element):
     """Project a placement; its style owns the complete current physical data."""
     check_tree(component, definitions.COMPONENT, destination='DIPXML')
+    return _build_component(component, style=style, units=units, report=report, _factory=_factory)
+
+
+@in_xml_frame
+def _project_with_checked_pattern(component, *, style, units, report=None, _factory=Element):
+    """Audit placement data after its footprint was checked by this export."""
+    check_tree(component, definitions.COMPONENT, destination='DIPXML',
+               _checked_children=(component.one('Pattern'),))
+    return _build_component(component, style=style, units=units, report=report, _factory=_factory)
+
+
+def _build_component(component, *, style, units, report=None, _factory=Element):
     if not field_value(component, 'Enabled'):
         raise PcbError(f'{component.path}: inactive component needs output normalization')
     pattern = component.one('Pattern')
@@ -84,7 +96,7 @@ def project_component(component, *, style, units, report=None):
         warn(report, 'placed-supplier-data', 'dipxml', 'XML omits independent placed supplier data', (suppliers,))
     if suppliers is not None and suppliers.select('Prices/Quote'):
         warn(report, 'placed-supplier-prices', 'dipxml', 'XML omits placed supplier price breaks', (suppliers,))
-    result = Element('Component')
+    result = _factory('Component')
     if style.name is not None:
         set_attribute(result, 'PatternStyle', style.name)
     elif pattern['Type'] != 16 or component['ViaStyle'] < 0:
@@ -112,7 +124,7 @@ def project_component(component, *, style, units, report=None):
     path = result.add('LibPath')
     field(path, 'Path', field_value(component, 'LibPath'))
     field(path, 'Var', field_value(component, 'LibPath_Variable'))
-    if category := project_category(component):
+    if category := project_category(component, _factory=_factory):
         result.append(category)
     if path := linkage_path(component):
         target = result.add('HierarchyPath')
@@ -137,7 +149,7 @@ def project_component(component, *, style, units, report=None):
         set_attribute(row, 'Id', style.pad_keys[pad])
         set_attribute(row, 'NetId', -1 if pad['Net'] is None else pad['Net']['Number'])
         set_attribute(row, 'InternalConnection', pad['InternalConnection'])
-        project_options(pad, row, units=units, via=pattern['Type'] == 16, report=report)
+        project_options(pad, row, units=units, via=pattern['Type'] == 16, report=report, _factory=_factory)
     _connections(component, result, style.pad_keys)
     excluded = component.select('AssemblyExclude/Item')
     if excluded:
@@ -148,10 +160,19 @@ def project_component(component, *, style, units, report=None):
 
 
 def project_components(board, *, library, units, report=None):
-    result = Element('Components')
+    return _components(board, library=library, units=units, report=report, project=project_component)
+
+
+def _project_with_checked_patterns(board, *, library, units, report=None, _factory=Element):
+    """Used only immediately after the whole-document library projection."""
+    return _components(board, library=library, units=units, report=report, project=_project_with_checked_pattern, _factory=_factory)
+
+
+def _components(board, *, library, units, report, project, _factory=Element):
+    result = _factory('Components')
     for component in board.select('Components/Component'):
         pattern = component.one('Pattern')
         if pattern not in library.physical_styles:
             raise PcbError(f'{pattern.path}: include placed physical data in the XML library plan')
-        result.append(project_component(component, style=library.physical_styles[pattern], units=units, report=report))
+        result.append(project(component, style=library.physical_styles[pattern], units=units, report=report, _factory=_factory))
     return result

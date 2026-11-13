@@ -82,14 +82,22 @@ class DecodedBoard:
         normalize_objects(self.board)
         normalize_graphic_colors(self, context)
 
+    def finish_import(self, assembled):
+        """Finish compatibility work requiring current geometry and identities."""
+        from .thermal_upgrade import modernize_thermals
+        core = assembled.rules.routing.core
+        placements = ((component, pads.values()) for component, pads in core.pad_positions.items())
+        modernize_thermals(assembled.document, version=self.header.version, placements=placements)
+
     @property
     def board(self):
         return self.root.one('Board')
 
 
-def decode(data, *, source=None, ansi_encoding='cp1252'):
+def decode(data, *, source=None, ansi_encoding='cp1252', retain_source=True):
     """Decode one supplied stream, rejecting unread or unimplemented content."""
     reader = Reader(data, source=source, ansi_encoding=ansi_encoding)
+    reader.retain_source = retain_source
     root = Element('')
     initial = read_initial_sections(reader, root)
     board = root.one('Board')

@@ -1,7 +1,10 @@
 """Owned library definitions synthesized from old schematic instance data."""
 import math
+from copy import deepcopy
 
 from ...common.model import (Element)
+from ...common.element_storage import RecordItems
+from ...common.symbol_records import SYMBOL, PIN
 from .local_keys import (copy_missing_keys)
 
 
@@ -11,8 +14,19 @@ def reference_prefix(reference):
 
 
 def _copy_fields(source,target,names):
+    original, copied = source._content, target._content
     for name in names.split():
-        target.append(source.one(name).clone())
+        if (type(original) is RecordItems and type(copied) is RecordItems
+                and name in original.storage and copied.can_import(name)):
+            # Copy the selected current facts directly, retaining optional
+            # diagnostics without allocating an intermediate field Element.
+            detail = original.details.get(original.storage.layout.slots[name])
+            copied.import_field(name, source._field_arguments(name),
+                                source=detail.source if detail is not None else None)
+            if detail is not None and detail.notes is not None:
+                copied.detail(copied.storage.layout.slots[name]).notes = deepcopy(detail.notes)
+        else:
+            target._append_import(source.one(name).clone())
 
 
 def _unrotate_symbol(part,angle):
@@ -51,7 +65,7 @@ def _unrotate_symbol(part,angle):
 
 def symbol_definition(component):
     """Create an unplaced symbol from current instance geometry and data."""
-    part=Element('Part',component.values[0],reference_prefix(component.values[1]))
+    part=Element('Part',component.values[0],reference_prefix(component.values[1])).bind_schema(SYMBOL)
     _copy_fields(component,part,'''Enabled PartType PartName ShowNumbers Type Number1
         Number2 Width Height Value LockProperties Origin_X Origin_Y ModelType Datasheet
         ModelString ModelBody Manufacturer Component_CategoryName
@@ -68,7 +82,7 @@ def symbol_definition(component):
         ShowName PinNumXShift PinNumYShift PinNameXShift PinNameYShift ElectricType
         NameFontSize NameFontWidth NameFontScale SignalDelay Group PinNameRotate PinNumRotate'''
     for source in component.select('Pins/Pin'):
-        pin=pins.add('Pin',len(pins.children()),*source.arguments[1:3])
+        pin=pins.add('Pin',len(pins.children()),*source.arguments[1:3]).bind_schema(PIN)
         _copy_fields(source,pin,names)
         copy_missing_keys(source, pin)
     shapes=part.add('Shapes')
@@ -101,7 +115,6 @@ def _definition(component,index):
     for parent,kind in [('Pads','Pad'),('Shapes','Shape')]:
         records=pattern.one(parent).children(kind)
         for index,record in enumerate(records):
-            record.annotations.pop('asc_omit',None)
             # The two footprint drawing boundary slots become empty records
             # when a placed footprint is copied into a definition.
             if parent=='Shapes' and index in (0,len(records)-1):
@@ -135,7 +148,7 @@ def synthesize_legacy_cache(schematic, *, version):
         slot=slots.add('Slot',len(slots.children()),'')
         for index,component in enumerate(group):
             slot.append(_definition(component,index))
-    cache.annotations['derived_from']='pre-34 placed component definitions'
+
     return cache
 
 
@@ -148,9 +161,9 @@ def upgrade_legacy_cache(schematic, *, version):
     for name,value in [('ProjectLibs_Name','Project Libraries'),('ProjectLibs_Type',2),
                        ('ProjectLibs_Content',0),('ProjectLibs_Sorted',False),
                        ('DesignCache_Count',count-1)]:
-        schematic.add(name,value).annotations['default_for_version']=version
+        schematic.add(name,value)
     for name in ('ProjectLibs_Folders','ProjectLibs_Libs'):
-        schematic.add(name,0).annotations['default_for_version']=version
+        schematic.add(name,0)
     links=schematic.add('DesignCache_Links',count)
     for index in range(count):
         links.add('Link',index)

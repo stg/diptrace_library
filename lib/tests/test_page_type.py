@@ -2,6 +2,7 @@
 import unittest
 
 from lib import new_schematic, parse, parse_dch
+from lib.schematic import ImportContext
 
 
 PAGE = '/Schematic/Pages/Page'
@@ -16,7 +17,7 @@ class PageTypeTests(unittest.TestCase):
         source = new_schematic()
         source.one(PAGE).set_field('PageType', 1)
         data = source.to_dch_bytes()
-        parsed = parse_dch(data)
+        parsed = parse_dch(data, context=ImportContext(retain_source=True))
         prefix = parsed.one(PAGE).source.end
         current = parsed.one(PAGE+'/PageType').source.start
         self.assertEqual(data[prefix:prefix+3], integer(1))
@@ -38,7 +39,7 @@ class PageTypeTests(unittest.TestCase):
                 for value in (0, 1, 0):
                     current.one(PAGE).set_field('PageType', value)
                     data = current.to_dch_bytes(version=version)
-                    current = parse_dch(data)
+                    current = parse_dch(data, context=ImportContext(retain_source=True))
                     loaded = current.one(PAGE)
                     self.assertEqual(loaded.scalar('PageType'), value)
                     for offset in (loaded.source.end, loaded.one('PageType').source.start):

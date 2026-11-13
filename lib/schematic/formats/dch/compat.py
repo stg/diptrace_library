@@ -3,6 +3,7 @@ from decimal import Decimal
 from ...model.traversal import (placed_components, cached_definitions, footprints, symbols)
 from ...layout.geometry import (symbol_bounds, pattern_bounds)
 from ....common.model import (Element)
+from ....common.import_tree import assign_fields
 
 
 def complete_properties(schematic):
@@ -13,7 +14,9 @@ def complete_properties(schematic):
     the environment-dependent preference.
     """
     def missing(parent,name,*values):
-        if parent.child(name) is None:
+        if len(values) == 1 and parent.schema is None:
+            assign_fields(parent, ((name, values[0]),), overwrite=False)
+        elif parent.child(name) is None:
             parent.add(name,*values)
 
     missing(schematic,'ProjectDir','')
@@ -44,7 +47,7 @@ def _default(parent, name, *values, version):
     if parent.child(name) is not None:
         raise ValueError(f"version default would overwrite {name}")
     node = parent.add(name, *values)
-    node.annotations["default_for_version"] = version
+
     return node
 
 
@@ -81,7 +84,7 @@ def _pattern_defaults(pattern, version):
         _mask_defaults(pad, version)
     for hole in pattern.child("Holes").children("Hole"):
         hole.set_values(*hole.arguments, -1)
-        hole.annotations["group_default_for_version"] = version
+
     for dimension in pattern.child("Dimensions").children("Dimension"):
         _default(dimension, "Group", -1, version=version)
         for side in (1,2):
@@ -154,14 +157,14 @@ def restore_legacy_dimensions(version, schematic):
         for name, size in (('Width', bounds.width if bounds else 0),
                            ('Height', bounds.height if bounds else 0)):
             field = part.child(name)
-            field.annotations['derived_from'] = 'symbol geometry'
+
             field.set_values(Decimal(str(max(minimum, size))))
     for pattern in footprints(schematic):
         bounds = pattern_bounds(pattern)
         for name, size in (('Width', bounds.width if bounds else 0),
                            ('Height', bounds.height if bounds else 0)):
             field = pattern.child(name)
-            field.annotations['derived_from'] = 'footprint geometry'
+
             field.set_values(Decimal(str(max(.0001, size))))
 
 
@@ -171,7 +174,6 @@ def recenter_legacy_symbols(version, schematic):
         return
     for part in placed_components(schematic):
         recenter_symbol(part)
-        part.annotations.pop('pending_origin_migration', None)
 
 
 def recenter_symbol(part):

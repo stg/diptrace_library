@@ -34,10 +34,11 @@ def _input(data, format, *, context, source=None, encoding=None):
     context = resolve_import_context(context)
     if key == 'dip':
         from .dip.decode import decode
-        decoded = decode(data, source=source, ansi_encoding=encoding or 'cp1252')
+        decoded = decode(data, source=source, ansi_encoding=encoding or 'cp1252',
+                         retain_source=context.retain_source)
     elif key == 'asc':
         from .asc.core import prepare_core
-        decoded = prepare_core(data, source=source, encoding=encoding)
+        decoded = prepare_core(data, source=source, encoding=encoding, retain_source=context.retain_source)
     else:
         if encoding is not None:
             raise TypeError('XML input uses the encoding in its declaration')
@@ -50,7 +51,14 @@ def _input(data, format, *, context, source=None, encoding=None):
     core = assemble_core(decoded, context=context)
     routed = assemble_routing(decoded, core)
     rules = assemble_rules(decoded, routed)
-    return assemble_graphics(decoded, rules).document
+    assembled = assemble_graphics(decoded, rules)
+    if (finish := getattr(decoded, 'finish_import', None)) is not None:
+        finish(assembled)
+    document = assembled.document
+    if not context.retain_source:
+        from ...common.source_details import discard_source
+        discard_source(document.root)
+    return document
 
 
 @import_diagnostics()
@@ -69,6 +77,9 @@ def parse_source(data, *, format=None, context=None, source=None, report=None, l
         raise UnsupportedFileError(family=identity.family, version=identity.version)
     format_capabilities(key)
     if key == 'dip':
+        if context is None:
+            from dataclasses import replace
+            context = replace(resolve_import_context(None), retain_source=True)
         return _input(data, key, context=context, source=source, encoding=encoding)
     if context is not None:
         raise TypeError('text source inspection does not use an import context')
@@ -112,6 +123,8 @@ def _output(document, format, version):
 @export_diagnostics()
 def project(document, *, format, version=None, context=None, report=None, label=None, encoding=None):
     """Create a detached text-format tree using the same output policy as I/O."""
+    from ...common.unit_views import canonical
+    document = canonical(document)
     key, version = _output(document, format, version)
     if key == 'dip':
         raise ValueError('DIP has no text tree; use serialize()')
@@ -130,19 +143,25 @@ def project(document, *, format, version=None, context=None, report=None, label=
 @export_diagnostics()
 def serialize(document, *, format, version=None, context=None, report=None, label=None, encoding=None):
     """Export bytes without mutating the source or depending on its input format."""
+    from ...common.unit_views import canonical
+    document = canonical(document)
     key, version = _output(document, format, version)
     if key == 'dip':
         if encoding is not None:
             raise TypeError('encoding is an ASC output option')
         from .dip.write import encode
         return encode(document, version=version, context=context, report=report)
+    if key == 'dipxml':
+        if encoding is not None:
+            raise TypeError('XML output is UTF-8; encoding is an ASC option')
+        from .dipxml.write import serialize_document
+        view, context = prepare_export(document, context=context, report=report, destination=key)
+        return serialize_document(view, version=version, report=report,
+                                  legacy_picture_files=context.legacy_picture_files)
     output = project(document, format=key, version=version, context=context, report=report, encoding=encoding)
-    if key == 'asc':
-        text = asc_text(output, preserve=False)
-        selected = codecs.lookup(encoding or 'cp1252').name
-        return ansi_bytes(text, best_fit=False) if selected == 'cp1252' else text.encode(selected)
-    from .dipxml.syntax import dumps
-    return dumps(output).encode('utf-8')
+    text = asc_text(output, preserve=False)
+    selected = codecs.lookup(encoding or 'cp1252').name
+    return ansi_bytes(text, best_fit=False) if selected == 'cp1252' else text.encode(selected)
 
 
 @export_diagnostics()

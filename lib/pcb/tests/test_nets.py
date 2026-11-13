@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.binary import BinaryWriter
 from lib.common.model import Element
 from lib.pcb.formats.capabilities import DIP
@@ -108,7 +109,7 @@ class NetTests(unittest.TestCase):
         trace = upgrades[0].traces[0]
         point = trace.points[1]
         self.assertEqual(point['ViaStyle'], 3)
-        self.assertEqual(point['Width'], Decimal('.6'))
+        self.assertEqual(point['Width'], 0.6)
         self.assertTrue(point['Arc'])
         self.assertFalse(point['Selected'])
         self.assertEqual(trace.previous_number, 100)
@@ -129,8 +130,8 @@ class NetTests(unittest.TestCase):
             self.assertEqual(current, expected)
             self.assertEqual(reader.integer(), 17)
             self.assertEqual(reader.pos, len(reader.data))
-            self.assertEqual(net.net['Width'], Decimal('.6'))
-            self.assertEqual(net.net['Clearance'], Decimal('.3'))
+            self.assertEqual(net.net['Width'], 0.6)
+            assert_float_facts(self,net.net['Clearance'], Decimal('.3'))
             self.assertIsNone(net.net.child('ViaSize'))
 
 

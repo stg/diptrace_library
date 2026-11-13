@@ -26,26 +26,26 @@ def read_variable_paths(reader, board):
     if reader.header.version <= 52:
         _legacy_variable_paths(board)
         return False
-    reader.field(board, 'RelSchem_Variable', 'text')
+    reader.field_into(board, 'RelSchem_Variable', 'text')
     for component in board.select('Components/Component'):
-        reader.field(component, 'LibPath_Variable', 'text')
-        reader.field(component.one('Pattern/Model3D'), 'Model3DFile_Variable', 'text')
+        reader.field_into(component, 'LibPath_Variable', 'text')
+        reader.field_into(component.one('Pattern/Model3D'), 'Model3DFile_Variable', 'text')
     for shape in board.select('Shapes/Shape'):
-        reader.field(shape, 'Picture_File_Variable', 'text')
+        reader.field_into(shape, 'Picture_File_Variable', 'text')
     for container, kind in (('ProjectLibs_Folders', 'Folder'), ('ProjectLibs_Libs', 'Lib')):
         for path in board.select(container+'/'+kind):
-            reader.field(path, 'VariablePath', 'text')
+            reader.field_into(path, 'VariablePath', 'text')
     for slot in board.select('CacheLib/Slots/Slot'):
-        reader.field(slot, 'VariablePath', 'text')
+        reader.field_into(slot, 'VariablePath', 'text')
         definitions = slot.children('Definition')
         owner = definitions[0].one('Pattern/Model3D') if definitions else slot
-        reader.field(owner, 'Model3DFile_Variable', 'text')
-    reader.field(board, 'ProjectDir', 'text')
-    reader.field(board.one('Panel'), 'PanelizeSingle', 'boolean')
+        reader.field_into(owner, 'Model3DFile_Variable', 'text')
+    reader.field_into(board, 'ProjectDir', 'text')
+    reader.field_into(board.one('Panel'), 'PanelizeSingle', 'boolean')
     return reader.boolean()
 
 
 def read_column_titles(reader, board):
     if reader.header.version > 53:
         for column in board.select('Tables/Table/AutoUpdate/Columns/Column'):
-            reader.field(column, 'Title', 'text')
+            reader.field_into(column, 'Title', 'text')

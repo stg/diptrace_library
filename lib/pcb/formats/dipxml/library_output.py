@@ -1,20 +1,21 @@
 """Generate PCB XML component libraries from the current owned definitions."""
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass, field as dataclass_field, replace
 
 from ....common.conversion import info
 from ....common.model import Element
 from ....common.xml import set_attribute
-from ....common.xml_catalog import CategoryCatalog, StyleTable, record_key
+from ....common.xml_catalog import CategoryCatalog, StylePlans
+from ....common.xml_plan import XmlBuilder, XmlPlan
 from ....common.xml_library_output import project_category, project_subfolders, report_slot_omissions
 from ....common.xml_output import field
-from ....common.xml_pad_output import project_pad_style
+from ....common.xml_pad_output import plan_pad_style
 from ...model import library_records, static_via
 from ...model.definitions import PATTERN
 from ...model.cache_links import validate_prefix
 from ..errors import PcbError
 from ..output_validation import check_tree
-from .pattern_output import project_pattern
-from .symbol_output import project_symbol
+from .pattern_output import project_pattern, _project_validated_pattern
+from .symbol_output import _project_validated_symbol
 from .versions import XmlVersion
 from .output_revision import adapt_library
 
@@ -30,9 +31,16 @@ class PhysicalStyle:
 
 @dataclass(frozen=True)
 class LibraryProjection:
-    element: Element
+    plan: XmlPlan
     component_styles: dict
     physical_styles: dict
+    _element: Element | None = dataclass_field(default=None, init=False, compare=False, repr=False)
+
+    @property
+    def element(self):
+        if self._element is None:
+            object.__setattr__(self, '_element', self.plan.element())
+        return self._element
 
 
 class _Builder:
@@ -40,56 +48,62 @@ class _Builder:
         self.board, self.units, self.report = board, units, report
         self.profile = profile
         self.cache = board.child('CacheLib')
-        self.physical = tuple(dict.fromkeys((*library_records.patterns(board), *physical)))
+        cached = library_records.patterns(board)
+        self._cached_patterns = frozenset(cached)
+        self.physical = tuple(dict.fromkeys((*cached, *physical)))
         self.parts = tuple(board.select('CacheLib/Slots/Slot/Definition/Part'))
         self.component_categories = CategoryCatalog()
         self.pattern_categories = CategoryCatalog(key='Number')
-        self.pads = StyleTable('PadStyles', 'PadStyle', 'Name', 'Pad')
-        self.patterns = StyleTable('Patterns', 'Pattern', 'PatternStyle', 'Pattern')
-        self.components = Element('Components')
+        self.pads = StylePlans('PadStyles', 'PadStyle', 'Name', 'Pad')
+        self.patterns = StylePlans('Patterns', 'Pattern', 'PatternStyle', 'Pattern')
+        self.components = XmlBuilder('Components')
         self.component_styles, self.physical_styles = {}, {}
         self.independent_pads, self.independent_patterns = set(), set()
         self.placement_patterns = {}
 
     def header(self, family):
-        result = Element('Library')
+        result = XmlBuilder('Library')
         for name, value in (('Type', 'DipTrace-'+family+'Library'),
                             ('Version', self.profile.application_text), ('Units', self.units.units)):
             set_attribute(result, name, value)
         return result
 
     def pattern(self, source, *, independent=False):
+        project = _project_validated_pattern if source in self._cached_patterns else project_pattern
         placed = source.parent is not None and source.parent.kind == 'Component'
         if placed and source['Type'] == 16 and source.parent['Via'] is not None:
             check_tree(source, PATTERN, destination='DIPXML')
+            project = _project_validated_pattern
             if static_via.matches(source, source.parent['Via']):
                 pads = source.select('Pads/Pad')
                 self.physical_styles[source] = PhysicalStyle(None, {pads[0]: 1}, ())
                 return
-        projected = project_pattern(source, style='', units=self.units,
+        projected = project(source, style='', units=self.units,
                                     explicit_pad_style=self.profile.current_fields,
                                     physical_font_width=self.profile.physical_font_width, report=self.report)
-        default = projected.element.one('DefPad')['Style']
+        plan = projected.plan
+        default_pad = plan.child('DefPad')
+        default = default_pad.attribute('Style')
         remapped = {}
-        for row in projected.styles.children('PadStyle'):
-            local = row['Name']
+        for local, style_plan in projected.pad_styles.entries:
             # Older XML uses style identity for inheritance. Avoid merging a
             # separate local style with this pattern's default style.
             excluded = self.independent_pads
             if not self.profile.current_fields and local != default:
                 excluded = excluded | {remapped[default]}
-            remapped[local] = self.pads.include(row.clone(), exclude=excluded)
-        set_attribute(projected.element.one('DefPad'), 'Style', remapped[default])
-        for pad in projected.element.select('Pads/Pad'):
-            set_attribute(pad, 'Style', remapped[pad['Style']])
-        if (category := projected.element.child('Category')) is not None:
-            self.pattern_categories.include(category)
-        excluded = (tuple(row['PatternStyle'] for row in self.patterns.element.children())
+            remapped[local] = self.pads.include_plan(style_plan, exclude=excluded)
+        plan = plan.with_child(default_pad, default_pad.with_attribute('Style', remapped[default]))
+        pads = plan.child('Pads')
+        plan = plan.with_child(pads, replace(pads, children=tuple(
+            pad.with_attribute('Style', remapped[pad.attribute('Style')]) for pad in pads.children)))
+        if (category := plan.child('Category')) is not None:
+            plan = plan.with_child(category, self.pattern_categories.include_plan(category))
+        excluded = (self.patterns._names
                     if independent else self.independent_patterns)
-        key = _placement_key(projected.element)
+        key = _placement_key(plan)
         name = self.placement_patterns.get(key) if placed else None
         if name is None:
-            name = self.patterns.include(projected.element, exclude=excluded)
+            name = self.patterns.include_plan(plan, exclude=excluded)
         self.placement_patterns.setdefault(key, name)
         if independent:
             self.independent_patterns.add(name)
@@ -99,7 +113,7 @@ class _Builder:
                                                       projected.shape_keys, projected.hole_keys)
 
     def component(self, slot):
-        name = 'Component'+str(len(self.components.children()))
+        name = 'Component'+str(len(self.components.children))
         result = self.components.add('Component')
         set_attribute(result, 'ComponentStyle', name)
         self.component_styles[slot] = name
@@ -112,16 +126,19 @@ class _Builder:
                 raise PcbError(f'{definition.path}: cached physical definition needs an owning XML symbol')
             physical = definition.child('Pattern')
             projected = self.physical_styles[physical] if physical is not None else None
-            symbol = project_symbol(part, units=self.units, pad_keys=keys,
+            # build() has freshly audited this slot's entire cache subtree.
+            symbol = _project_validated_symbol(part, units=self.units, pad_keys=keys,
                                     pattern_style=projected.name if projected else None,
                                     connections=projected.connections if projected else (),
-                                    physical_font_width=self.profile.physical_font_width, report=self.report)
-            if (category := symbol.child('Category')) is not None:
-                self.component_categories.include(category)
+                                    physical_font_width=self.profile.physical_font_width, report=self.report,
+                                    _factory=XmlBuilder)
             path = symbol.add('LibPath')
             field(path, 'Path', slot['LibPath'])
             field(path, 'Var', slot.get('VariablePath', ''))
-            result.append(symbol)
+            plan = symbol.freeze()
+            if (category := plan.child('Category')) is not None:
+                plan = plan.with_child(category, self.component_categories.include_plan(category))
+            result.append(plan)
         report_slot_omissions((slot,), destination='dipxml', report=self.report)
 
     def build(self):
@@ -130,7 +147,7 @@ class _Builder:
             self.component_categories.seed(self.cache.child('Categories'))
             self.pattern_categories.seed(self.cache.child('PatternCategories'))
             for style in self.cache.select('PadStyles/PadStyle'):
-                name = self.pads.include(project_pad_style(style, name=style['Name'], units=self.units), name=style['Name'])
+                name = self.pads.include_plan(plan_pad_style(style, name=style['Name'], units=self.units), name=style['Name'])
                 self.independent_pads.add(name)
         self.component_categories.reserve(project_category(part) for part in self.parts)
         self.pattern_categories.reserve(project_category(pattern) for pattern in self.physical)
@@ -154,18 +171,18 @@ class _Builder:
                  recoverability='all owned definitions remain; selection order and spare capacity are regenerated')
         result = self.header('Component')
         if self.component_categories.element.children():
-            result.append(self.component_categories.element)
+            result.append(XmlPlan.from_element(self.component_categories.element))
         if (folders := project_subfolders(self.cache)) is not None:
-            result.append(folders)
+            result.append(XmlPlan.from_element(folders))
         inner = self.header('Pattern')
         if self.pattern_categories.element.children():
-            inner.append(self.pattern_categories.element)
-        inner.append(self.pads.element)
-        inner.append(self.patterns.element)
+            inner.append(XmlPlan.from_element(self.pattern_categories.element))
+        inner.append(self.pads.plan)
+        inner.append(self.patterns.plan)
         result.append(inner)
         result.append(self.components)
-        adapt_library(result, version=self.profile, report=self.report)
-        return LibraryProjection(result, self.component_styles, self.physical_styles)
+        plan = adapt_library(result.freeze(), version=self.profile, report=self.report)
+        return LibraryProjection(plan, self.component_styles, self.physical_styles)
 
 
 def _placement_key(pattern):
@@ -175,11 +192,8 @@ def _placement_key(pattern):
     exactly. Template defaults remain in the independently owned definition;
     the component writer supplies all its current metadata and custom fields.
     """
-    comparable = pattern.clone()
-    for name in ('RefDes', 'Value', 'Manufacturer', 'Datasheet', 'AddFields', 'Type'):
-        if (field := comparable.child(name)) is not None:
-            field.detach()
-    return record_key(comparable, omit_attribute='PatternStyle')
+    comparable = pattern.without_fields(('RefDes', 'Value', 'Manufacturer', 'Datasheet', 'AddFields', 'Type'))
+    return comparable.key(omit_attribute='PatternStyle')
 
 
 def project_library(board, *, units, physical=(), profile=None, report=None):

@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
+from .element_storage import RecordItems
 
 
 _ordinals = ContextVar('design_prospective_ordinals', default=None)
@@ -28,6 +29,9 @@ def children_override(node, kind):
 
 @contextmanager
 def preview_ordinals(values):
+    if not values:
+        yield
+        return
     token = _ordinals.set({**(_ordinals.get() or {}), **values})
     try:
         yield
@@ -37,6 +41,10 @@ def preview_ordinals(values):
 
 @contextmanager
 def preview_structure(children, parents, ordinals):
+    if not children and not parents:
+        with preview_ordinals(ordinals):
+            yield
+        return
     previous = _structure.get() or ({}, {})
     token = _structure.set(({**previous[0], **children}, {**previous[1], **parents}))
     try:
@@ -73,10 +81,22 @@ class DetachedSnapshot:
 
     def restore(self):
         for node, items, schema, children, positions, dirty, reordered, parent, kind in self.rows:
-            node._items, node._schema = items, schema
+            node._schema = schema
+            if type(node._content) is RecordItems:
+                if schema is None:
+                    node._content.replace(())
+                    node._content = []
+                elif node._content.storage.layout.schema is not schema:
+                    node._content.rebind(schema)
+            node._items = items
             node._children_cache, node._positions_cache = children, positions
             node._dirty, node._reordered, node._parent = dirty, reordered, parent
             node._kind = kind
+        # A child restored from a proposed schema may be a plain field again.
+        # Repack after all rows, retaining the original observed field objects.
+        for node, *_ in self.rows:
+            if type(node._content) is RecordItems:
+                node._content.replace(list(node._content))
 
 
 def validate_child_change(parent, children, kind):

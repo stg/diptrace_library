@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.model import Document
@@ -185,7 +186,7 @@ class XmlLibraryOutputTests(unittest.TestCase):
                 self.assertEqual(actual.keys(), expected.keys())
                 for path, value in expected.items():
                     if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
-                        self.assertLessEqual(abs(Decimal(str(actual[path]))-Decimal(str(value))), Decimal('1e-28'), path)
+                        assert_float_facts(self, actual[path], value, path)
                     else:
                         self.assertEqual(actual[path], value, path)
                 self.assertEqual(rebuilt.one(SLOT)['VariablePath'], '')

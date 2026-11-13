@@ -4,6 +4,7 @@ This is a section writer, through the component count. It cannot produce a
 complete DIP file by itself. Later sections supply full geometry and settings.
 """
 from decimal import Decimal
+from ....common.numbers import decimal_scale
 
 from ....common.picture_sources import picture_reference_index
 from ...model import definitions, board_rules, rule_records, graphic_records, hierarchy_records
@@ -166,10 +167,7 @@ def write_initial_sections(writer, document, *, indices=None):
     _check_collections(board)
     indices = indices or OutputIndices(board)
     writer.header()
-    factor = Decimal(str(document.root.get('Scale', 100)))
-    if factor.is_finite():
-        sign, digits, exponent = factor.as_tuple()
-        factor = Decimal((sign, digits, exponent-2))
+    factor = decimal_scale(document.root.get('Scale', 100), -2)
     writer.number(factor)
     for name in ('Xpos', 'Ypos'):
         writer.integer(round(document.root.get(name, 0)))

@@ -201,9 +201,11 @@ design you can share.
 
 ### Speed and memory
 
-Large designs can be slow to read and convert, with high memory use. The current
-model creates many small objects and makes repeated passes through them.
-A larger refactoring is planned to improve both speed and memory use.
+I've reduced storage and conversion overhead substantially, but large designs
+can still be slow and use considerable memory. I think the Python implementation
+is now close to its practical limits. My longer-term goal is a native core for
+importing, exporting and the data model, with a Python layer on top for scripts
+and applications.
 
 ## Accuracy and responsibility
 

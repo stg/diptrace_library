@@ -31,9 +31,11 @@ def read_electrical(record, board, *, patterns, units, version, common_fiducials
     classes = read_classes(record, board, layers=layers, vias=vias, units=units)
     read_design_rules(record, board, classes=classes, layers=layers, units=units, version=version)
     components = board.add('Components')
+    grid_alignment_default = 'Origin' if version.current_fields else 'Pad'
     for row in record.rows('Components', 'Component'):
         placed = read_component(row, patterns=patterns, units=units, vias=vias, layers=layers,
-                                common_fiducials=common_fiducials)
+                                common_fiducials=common_fiducials,
+                                grid_alignment_default=grid_alignment_default)
         key = placed.component['Number']
         if key in placements:
             raise PcbError(f'{row.node.path}: duplicate component Id {key}')

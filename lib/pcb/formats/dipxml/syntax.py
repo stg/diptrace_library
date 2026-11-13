@@ -90,8 +90,9 @@ DIALECT = xml.XmlDialect(format='dipxml', source_type='DipTrace-PCB', representa
                              ('Settings', 'SolderMaskSwell PasteMaskShrink')) for name in names.split()}))
 
 
-def loads(data, *, source=None):
-    return xml.loads(data, source=source, dialect=DIALECT, document_factory=Document)
+def loads(data, *, source=None, retain_source=True):
+    return xml.loads(data, source=source, dialect=DIALECT, document_factory=Document,
+                     retain_source=retain_source)
 
 
 def read(path):
@@ -99,5 +100,5 @@ def read(path):
     return loads(path.read_bytes(), source=str(path))
 
 
-def dumps(document, *, newline='\n'):
-    return xml.dumps(document, newline=newline, dialect=DIALECT)
+def dumps(document, *, newline='\n', canonical_numbers=False):
+    return xml.dumps(document, newline=newline, dialect=DIALECT, canonical_numbers=canonical_numbers)

@@ -41,7 +41,7 @@ def validate_document(document):
     for name in definitions.BOARD.fields:
         if name in board and name not in fields:
             raise PcbError(f'{board.path}: {name} needs a PCB XML output mapping')
-    for child in board.children():
+    for child in board._record_children():
         if child.kind not in definitions.BOARD.fields and child.kind not in CHILD_OWNERS:
             raise PcbError(f'{child.path}: section needs a PCB XML output mapping')
     return board

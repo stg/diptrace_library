@@ -16,48 +16,47 @@ class DrawingUpgrade:
 
 def read_base_drawings(reader, board):
     """Decode the initial board drawing section for subsequent modernization."""
-    drawings = board.add('Shapes')
+    drawings = reader.add(board, 'Shapes')
     upgrades = []
     for index in range(reader.count('board shapes')):
         start = reader.pos
-        drawing = drawings.add('Shape', index)
+        drawing = reader.add(drawings, 'Shape', index)
         _fields(reader, drawing, 'boolean', 'Enabled Selected')
         orientation = reader.integer()
-        reader.field(drawing, 'AllLayers', 'boolean')
+        reader.field_into(drawing, 'AllLayers', 'boolean')
         # Layer is the layer family; LayId identifies a layer in that family.
         _fields(reader, drawing, 'integer', 'Layer LayId Type FontSize')
         bitmap_index = reader.integer()
-        reader.field(drawing, 'Group', 'integer')
+        reader.field_into(drawing, 'Group', 'integer')
         _fields(reader, drawing, 'color', 'Color BrushColor FontColor')
-        reader.field(drawing, 'PenWidth', 'number')
-        points = drawing.add('Points_New' if reader.header.version >= 47 else 'Points')
-        for _ in range(reader.count('board drawing points')):
-            reader.record(points, 'pt', 'number', 'number')
-        drawing.add('TextLine').add('pt', reader.argument('text'))
-        reader.field(drawing, 'FontName', 'text')
-        reader.field(drawing, 'Locked', 'boolean')
-        reader.field(drawing, 'NetNumber', 'integer')
-        reader.field(drawing, 'VectorFont', 'boolean')
+        reader.field_into(drawing, 'PenWidth', 'number')
+        points = reader.add(drawing, 'Points_New' if reader.header.version >= 47 else 'Points')
+        reader.points(points, reader.count('board drawing points'))
+        reader.add_into(reader.add(drawing, 'TextLine'), 'pt', reader.argument('text'))
+        reader.field_into(drawing, 'FontName', 'text')
+        reader.field_into(drawing, 'Locked', 'boolean')
+        reader.field_into(drawing, 'NetNumber', 'integer')
+        reader.field_into(drawing, 'VectorFont', 'boolean')
         _fields(reader, drawing, 'number', 'FontWidth FontScale')
         previous_number = reader.integer()
-        reader.field(drawing, 'PanelExclude', 'boolean')
+        reader.field_into(drawing, 'PanelExclude', 'boolean')
         drawing.source = SourceSpan('dip', start, reader.pos, reader.source)
         upgrades.append(DrawingUpgrade(drawing, orientation, bitmap_index, previous_number))
     return tuple(upgrades)
 
 
 def read_board_dimensions(reader, board):
-    dimensions = board.add('Dimensions')
+    dimensions = reader.add(board, 'Dimensions')
     for index in range(reader.count('board dimensions')):
         start = reader.pos
-        dimension = dimensions.add('Dimension', index)
+        dimension = reader.add(dimensions, 'Dimension', index)
         _fields(reader, dimension, 'boolean', 'Enabled Selected Locked')
         read_dimension_properties(reader, dimension)
-        reader.field(dimension, 'Group', 'integer')
-        reader.field(dimension, 'PanelExclude', 'boolean')
+        reader.field_into(dimension, 'Group', 'integer')
+        reader.field_into(dimension, 'PanelExclude', 'boolean')
         if reader.header.version > 32:
-            reader.field(dimension, 'NonSignal', 'integer')
+            reader.field_into(dimension, 'NonSignal', 'integer')
         else:
-            dimension.add('NonSignal', 0)
+            reader.add_into(dimension, 'NonSignal', 0)
         dimension.source = SourceSpan('dip', start, reader.pos, reader.source)
     return dimensions

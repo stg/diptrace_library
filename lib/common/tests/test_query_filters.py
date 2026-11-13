@@ -5,6 +5,22 @@ from lib.common.model import Document
 
 
 class QueryFilterTests(unittest.TestCase):
+    def test_numeric_predicates_use_float_values_and_exact_integer_identities(self):
+        self.first.set_field('X', .1)
+        self.second.set_field('X', .2)
+        self.assertEqual(self.parts.select('Part[X=0.1]'), [self.first])
+        self.first.add('Id', 9007199254740993)
+        self.second.add('Id', 9007199254740992)
+        self.assertEqual(self.parts.select('Part[Id=9007199254740993]'), [self.first])
+
+    def test_selection_does_not_allocate_persistent_identities(self):
+        root = Document().root
+        item = root.add('Items').add('Item')
+        self.assertIs(root.one('Items/Item'), item)
+        self.assertIs(root.child('Items').one('Item'), item)
+        self.assertIsNone(item._uid)
+        self.assertIsNone(item.parent._uid)
+
     def setUp(self):
         self.document = Document()
         self.parts = self.document.root.add("Components")

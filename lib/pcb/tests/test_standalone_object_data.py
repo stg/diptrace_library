@@ -3,6 +3,7 @@ import unittest
 from decimal import Decimal
 from xml.etree import ElementTree as ET
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport, import_diagnostics, _set_import_format
 from lib.pcb.formats import io
@@ -118,7 +119,7 @@ class StandaloneObjectDataTests(unittest.TestCase):
         current = document.one(COMPONENT+'/Pattern')
         self.assertEqual(current['Type'], 0)  # Several physical objects remain.
         # Constructor origin is cleared; the final ordinary footprint recenters.
-        self.assertEqual((current['OriginX'], current['OriginY']), (Decimal('2.4'), 0))
+        assert_float_facts(self,(current['OriginX'], current['OriginY']), (2.4, 0))
         self.assertEqual(current.one('Model3D')['Model3DFile'], '')
         cached = document.one('/Board/CacheLib/Slots/Slot/Definition/Pattern')
         self.assertEqual((cached['OriginX'], cached['OriginY']), (9, -12))

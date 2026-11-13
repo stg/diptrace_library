@@ -90,17 +90,32 @@ class PadStandardStyleTests(unittest.TestCase):
         self.assertNotIn('pad-standard-style', {notice.rule for notice in report.notices})
         self.assertEqual(report.warnings, [])
 
-    def test_xml_reconstructs_the_choice_when_explicit_geometry_differs_from_default(self):
+    def test_old_xml_warns_when_it_cannot_keep_the_independent_choice(self):
         current = source()
         pads(current)[0].set_field('PadWidth_New', 6)
         report = ExportReport()
         loaded = parse(current.to_dchxml_bytes(report=report), format='dchxml')
         self.assertEqual([pad.scalar('Standard') for pad in pads(loaded)], [False, False])
-        self.assertIn('pad-standard-style', {notice.rule for notice in report.infos})
+        self.assertIn('pad-standard-style', {notice.rule for notice in report.warnings})
         self.assertEqual(report.errors, [])
-        self.assertEqual(report.warnings, [])
         self.assertEqual([pad.scalar('Standard') for pad in pads(current)], [True, False])
         self.assertEqual([pad.scalar('PadWidth_New') for pad in pads(loaded)], [6, 4])
+
+    def test_inactive_points_keep_the_choice_in_current_xml_and_warn_in_older_xml(self):
+        current = source()
+        first = pads(current)[0]
+        points = ((0, 0), (1, 0), (0, 1))
+        for point in points:
+            first.one('PadPoints_New').add('pt', *point)
+        for version in (46, 51, 52):
+            with self.subTest(version=version):
+                report = ExportReport()
+                loaded = parse(current.to_dchxml_bytes(version=version, report=report), format='dchxml')
+                self.assertEqual(pads(loaded)[0].scalar('Standard'), version >= 52)
+                self.assertEqual(tuple(row.values for row in pads(loaded)[0].select('PadPoints_New/pt')), points)
+                notices = [notice for notice in report.notices if notice.rule == 'pad-standard-style']
+                self.assertEqual([notice.severity for notice in notices], ['warning'] if version < 52 else [])
+                self.assertTrue(first.scalar('Standard'))
 
 
 if __name__ == '__main__':

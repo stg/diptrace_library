@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 from ....common.conversion import import_notice
+from ....common.import_tree import assign_fields
 from ...model.length_matching import DEFAULT_FIXED_LENGTH, DEFAULT_DELTA
 
 
@@ -15,12 +16,8 @@ def modernize_rules(decoded):
     changed = []
 
     def missing(record, values):
-        added = False
-        for name, value in values.items():
-            if record.child(name) is None:
-                record.add(name, value)
-                added = True
-        if added:
+        if any(name not in record for name in values):
+            assign_fields(record, values.items(), overwrite=False)
             changed.append(record)
 
     for net_class in board.select('NetClasses/NetClass'):

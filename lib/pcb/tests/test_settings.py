@@ -40,7 +40,7 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(sheet['DisplaySheet'])
         self.assertIsNone(upgrade.settings.child('DisplayTitles'))
         self.assertEqual(upgrade.settings['LayerDisplayMode'], 2)
-        self.assertEqual(upgrade.settings['TitlesLineWidth'], Decimal('.9'))
+        self.assertEqual(upgrade.settings['TitlesLineWidth'], 0.9)
 
     def test_rule_matrix_exposes_one_named_value_per_symmetric_clearance(self):
         writer = BinaryWriter()

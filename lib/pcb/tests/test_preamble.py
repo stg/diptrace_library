@@ -2,6 +2,7 @@
 from decimal import Decimal, localcontext
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.binary import BinaryWriter
 from lib.common.model import Element
 from lib.pcb.formats.dip.read import Reader
@@ -124,7 +125,7 @@ class PreambleTests(unittest.TestCase):
         self.assertEqual(board.one('NetClasses/NetClass/LayProperties/LayProperty')['MaxWidth'], 300)
         self.assertAlmostEqual(float(board.one('NetClasses/NetClass/LayProperties/LayProperty')['MinWidth']), .03)
         self.assertEqual(board.one('NetClasses/NetClass')['PriorityValue'], 4)
-        self.assertEqual(board.one('ClassClearances/Row/Cell/Values/Item[2]').values[0], Decimal('.6'))
+        self.assertEqual(board.one('ClassClearances/Row/Cell/Values/Item[2]').values[0], 0.6)
         self.assertEqual((state.component_count, state.legacy_picture_count), (2, 0))
         self.assertEqual(state.legacy_markings, (1, 0, 2, 6))
         self.assertIsNone(board.child('ShowText'))
@@ -159,7 +160,7 @@ class PreambleTests(unittest.TestCase):
                     root = Element('')
                     read_initial_sections(Reader(data), root)
                     scale = root.one('/Scale').arguments[0]
-                    self.assertEqual((scale.value, scale.unit), (percent, '%'))
+                    assert_float_facts(self,(scale.value, scale.unit), (percent, '%'))
 
 
 if __name__ == '__main__':

@@ -99,7 +99,7 @@ class ProjectExtensionTests(unittest.TestCase):
         self.assertEqual(reader.pos, len(reader.data))
         self.assertEqual(pad.one('TeardropParams')['Smd'], 2)
         self.assertEqual(pad.one('TeardropParams')['TJunc'], -1)
-        self.assertEqual(net.one('TeardropParams')['PadViaWidth'], Decimal('.7'))
+        self.assertEqual(net.one('TeardropParams')['PadViaWidth'], 0.7)
         self.assertEqual(net.one('Traces/Trace/ConnectedTeardrops/Item').values, (0,))
         self.assertEqual(net.one('Teardrops/Teardrop')['Lay'], 1)
         self.assertEqual(net.one('Teardrops/Teardrop/Points/Point[2]')['Y'], 7)

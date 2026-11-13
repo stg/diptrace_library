@@ -4,7 +4,7 @@ from .schema import Child, Field, Record
 
 QUOTE = Record('Quote', {
     'Quantity': Field('Quantity', 'integer', required=True, default=0),
-    'Price': Field('Price', 'number', required=True, default=0,
+    'Price': Field('Price', 'number', required=True, default=0, unit='currency',
                    description='Unit price in the supplier currency.'),
 }, parameters=('Quantity', 'Price'))
 PRICES = Record('Prices', {}, description='An ordered collection of Quote records.',

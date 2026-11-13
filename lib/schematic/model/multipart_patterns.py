@@ -56,7 +56,7 @@ def prepare_patterns(document):
         position = part.children().index(pattern)
         pattern.detach()
         replacement = selected.clone()
-        replacement.annotations['derived_from'] = 'selected footprint of the same multipart component'
+
         part.insert(replacement, position)
     if changes:
         from .refs import (bind_schematic_references)

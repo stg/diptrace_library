@@ -60,8 +60,7 @@ def read_nets(record, schematic, *, units, sheets, classes):
                Width=-1, Clearance=-1, NetClass=_class(source, classes),
                CustomColor=source.boolean('CustomColor', False), WireColor=source.integer('WireColor', 0),
                Global=source.boolean('Global', False))
-        hidden = net.add('HiddenId', source.integer('HiddenId', index))
-        hidden.annotations.update(default_value=index, asc_omit='not present in ASC')
+        net.add('HiddenId', source.integer('HiddenId', index))
         members = net.add('Parts')
         for item in source.rows('Pins', 'Item'):
             members.add('pt', item.integer('Part'), item.integer('Pin'))

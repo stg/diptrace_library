@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.references import Property
@@ -73,6 +74,11 @@ def geometry(pattern):
         holes=[(hole['X'], hole['Y']) for hole in pattern.select('Holes/Hole')],
         dimensions=[tuple(row[name] for name in ('X1', 'Y1', 'X2', 'Y2', 'XD', 'YD'))
                     for row in pattern.select('Dimensions/Dimension')])
+
+
+def assert_geometry(case, actual, expected):
+    # Bound cancellation using this fixture's local-coordinate operand scale.
+    assert_float_facts(case, actual, expected, absolute=4*math.ulp(16.0))
 
 
 class XmlPlacementFrameTests(unittest.TestCase):
@@ -179,12 +185,12 @@ class XmlPlacementFrameTests(unittest.TestCase):
                         document = read(fixture(side=side, flipped=flipped, horizontal=horizontal))
                         component = document.one(COMPONENT)
                         pad = component.one('Pattern/Pads/Pad[1]')
-                        self.assertEqual(pad['X'], Decimal('2.4') if side == 'Top' else Decimal('-2.4'))
+                        self.assertEqual(pad['X'], 2.4 if side == 'Top' else -2.4)
                         self.assertEqual((component['Flipped'], component['HorizontalFlip']), (flipped, horizontal))
-                        self.assertEqual((component['X'], component['Y'], component['Angle']), (30, 60, Decimal('7.8')))
+                        assert_float_facts(self,(component['X'], component['Y'], component['Angle']), (30, 60, Decimal('7.8')))
                         self.assertIs(pad['Net'], document.one('/Board/Nets/Net'))
                         rebuilt = read(io.serialize(document, format='dipxml', version=62, report=ConversionReport()))
-                        self.assertEqual(geometry(rebuilt.one(PATTERN)), geometry(component.one('Pattern')))
+                        assert_geometry(self,geometry(rebuilt.one(PATTERN)), geometry(component.one('Pattern')))
                         self.assertEqual((rebuilt.one(COMPONENT)['Flipped'], rebuilt.one(COMPONENT)['HorizontalFlip']),
                                          (flipped, horizontal))
                         document.validate()
@@ -194,28 +200,28 @@ class XmlPlacementFrameTests(unittest.TestCase):
         pattern = document.one(PATTERN)
         pad = pattern.one('Pads/Pad[1]')
         # The physical envelope has center (4.2, 5.1) before reflection.
-        self.assertEqual((pattern['OriginX'], pattern['OriginY']), (Decimal('.6'), Decimal('-1.8')))
-        self.assertEqual((pad['PadShape_X'], pad['PadShape_Y']), (Decimal('-1.2'), Decimal('-2.1')))
-        self.assertEqual(pad.one('PadPoints_New/pt[1]').values, (-3, -6))
+        assert_geometry(self,(pattern['OriginX'], pattern['OriginY']), (0.6, -1.8))
+        assert_geometry(self,(pad['PadShape_X'], pad['PadShape_Y']), (Decimal('-1.2'), Decimal('-2.1')))
+        assert_geometry(self,pad.one('PadPoints_New/pt[1]').values, (-3, -6))
         terminal = pad.one('PadTerminal')
-        self.assertEqual((terminal['X'], terminal['Y']), (Decimal('-0.6'), Decimal('-0.9')))
-        self.assertEqual(terminal['Angle'], Decimal(str(math.tau))-Decimal('.25'))
-        self.assertEqual(terminal.one('ShapePoints/pt[1]').values, (-3, -6))
-        self.assertEqual(pad.one('PadMask_TopSegments/pt').values,
+        assert_geometry(self,(terminal['X'], terminal['Y']), (Decimal('-0.6'), Decimal('-0.9')))
+        assert_geometry(self,terminal['Angle'], Decimal(str(math.tau))-Decimal('.25'))
+        assert_geometry(self,terminal.one('ShapePoints/pt[1]').values, (-3, -6))
+        assert_geometry(self,pad.one('PadMask_TopSegments/pt').values,
                          (Decimal('-2.1'), Decimal('-0.9'), Decimal('-0.6'), Decimal('-1.2')))
         text = pattern.select('Shapes/Shape', where=lambda shape: shape['Type'] == 7)[0]
-        self.assertEqual((text['TextHorz'], text['TextVert'], text['TextAlign']), (-1, 1, -1))
-        self.assertEqual(text['TextAngle'], Decimal(str(math.tau))-Decimal('.5'))
-        self.assertEqual(text.one('Points_New/pt').values, (Decimal('13.2'), Decimal('-9.9')))
-        self.assertEqual(pattern.one('Holes/Hole')['X'], Decimal('-1.8'))
+        assert_geometry(self,(text['TextHorz'], text['TextVert'], text['TextAlign']), (-1, 1, -1))
+        assert_geometry(self,text['TextAngle'], Decimal(str(math.tau))-Decimal('.5'))
+        assert_geometry(self,text.one('Points_New/pt').values, (Decimal('13.2'), Decimal('-9.9')))
+        assert_geometry(self,pattern.one('Holes/Hole')['X'], Decimal('-1.8'))
         dimension = pattern.one('Dimensions/Dimension')
-        self.assertEqual(tuple(dimension[name] for name in ('X1', 'X2', 'XD')),
+        assert_geometry(self,tuple(dimension[name] for name in ('X1', 'X2', 'XD')),
                          (Decimal('1.2'), Decimal('-4.8'), Decimal('-10.8')))
         template = document.one('/Board/CacheLib/Slots/Slot/Definition/Pattern')
-        self.assertEqual(template['OriginX'], Decimal('3.6'))
-        self.assertEqual(template.one('Pads/Pad[1]')['X'], 3)
-        self.assertEqual(pattern.one('Model3D/Offset')['X'], 3)
-        self.assertEqual(document.one(COMPONENT)['RefDes_SilkX'], 3)
+        assert_geometry(self,template['OriginX'], Decimal('3.6'))
+        assert_geometry(self,template.one('Pads/Pad[1]')['X'], 3)
+        assert_geometry(self,pattern.one('Model3D/Offset')['X'], 3)
+        assert_geometry(self,document.one(COMPONENT)['RefDes_SilkX'], 3)
         document.validate()
 
     def test_export_projects_library_and_mask_overlays_without_touching_the_source(self):
@@ -226,11 +232,11 @@ class XmlPlacementFrameTests(unittest.TestCase):
         component = output.find('Board/Components/Component')
         style = component.get('PatternStyle')
         pattern = next(row for row in output.findall('Library/Library/Patterns/Pattern') if row.get('PatternStyle') == style)
-        self.assertEqual(Decimal(pattern.find('Pads/Pad').get('X')), Decimal('-.4'))
+        assert_geometry(self,Decimal(pattern.find('Pads/Pad').get('X')), -0.4)
         pad_style = pattern.find('Pads/Pad').get('Style')
         definition = next(row for row in output.findall('Library/Library/PadStyles/PadStyle') if row.get('Name') == pad_style)
         segment = definition.find('MaskPaste/TopSegments/Item')
-        self.assertEqual((Decimal(segment.get('X1')), Decimal(segment.get('X2'))), (Decimal('.2'), Decimal('.7')))
+        assert_geometry(self,(Decimal(segment.get('X1')), Decimal(segment.get('X2'))), (Decimal('.2'), Decimal('.7')))
         self.assertEqual((model_text(document, preserve=False), tuple(document.references)), before)
         document.references.validate()
 
@@ -240,10 +246,10 @@ class XmlPlacementFrameTests(unittest.TestCase):
         configure(document.one(PAD))
         output = ET.fromstring(io.serialize(document, format='dipxml', version=62, report=ConversionReport()))
         segment = output.find('Board/Components/Component/Pads/Pad/MaskPaste/TopSegments/Item')
-        self.assertEqual((Decimal(segment.get('X1')), Decimal(segment.get('X2'))),
-                         (Decimal('-.0762'), Decimal('-.0254')))
+        assert_float_facts(self,(Decimal(segment.get('X1')), Decimal(segment.get('X2'))),
+                         (-0.0762, -0.0254))
         rebuilt = read(ET.tostring(output, encoding='unicode'))
-        self.assertEqual(rebuilt.one(PAD+'/PadMask_TopSegments/pt').values,
+        assert_float_facts(self,rebuilt.one(PAD+'/PadMask_TopSegments/pt').values,
                          document.one(PAD+'/PadMask_TopSegments/pt').values)
 
     def test_failed_projection_restores_the_original_coordinate_view(self):
@@ -262,7 +268,7 @@ class XmlPlacementFrameTests(unittest.TestCase):
             for version in support.write_versions:
                 with self.subTest(format=format, version=version):
                     rebuilt = read(io.serialize(document, format=format, version=version, report=ConversionReport()))
-                    self.assertEqual(geometry(rebuilt.one(PATTERN)), expected)
+                    assert_geometry(self,geometry(rebuilt.one(PATTERN)), expected)
                     rebuilt.validate()
 
     def test_standalone_physical_projection_retains_graph_managed_coordinates(self):
@@ -282,9 +288,9 @@ class XmlPlacementFrameTests(unittest.TestCase):
         for version in FORMATS['dipxml'].write_versions:
             with self.subTest(version=version):
                 rebuilt = read(io.serialize(document, format='dipxml', version=version, report=ConversionReport()))
-                self.assertEqual(geometry(rebuilt.one(PATTERN)), expected)
+                assert_geometry(self,geometry(rebuilt.one(PATTERN)), expected)
                 again = read(io.serialize(rebuilt, format='dipxml', version=version, report=ConversionReport()))
-                self.assertEqual(geometry(again.one(PATTERN)), expected)
+                assert_geometry(self,geometry(again.one(PATTERN)), expected)
                 self.assertEqual((model_text(document, preserve=False), tuple(document.references)), before)
                 rebuilt.validate()
                 again.validate()

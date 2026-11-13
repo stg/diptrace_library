@@ -3,9 +3,27 @@ import unittest
 from unittest.mock import patch
 
 from lib import Document, Element, Index, ReferenceError
+from lib.common.schema import Field, Record
 
 
 class ValidationTests(unittest.TestCase):
+    def test_schema_audit_rejects_duplicate_fields_behind_warm_lookups(self):
+        schema = Record('Row', {'Name': Field('Name', 'text', required=True)})
+        for compact in (False, True):
+            with self.subTest(compact=compact):
+                document = Document()
+                row = Element('Row').bind_schema(schema)
+                row['Name'] = 'first'
+                document.root.append(row)
+                if compact:
+                    row._compact_fields()
+                document.validate()
+                duplicate = Element('Name', 'second')
+                row._items.append(duplicate)
+                duplicate._parent = row
+                with self.assertRaisesRegex(ValueError, 'more than once'):
+                    document.validate()
+
     def linked(self):
         doc = Document()
         targets = doc.root.add('Targets')
@@ -38,7 +56,7 @@ class ValidationTests(unittest.TestCase):
 
     def test_repeated_identity_reads_use_one_private_index(self):
         doc, _, first, _, _ = self.linked()
-        with patch.object(doc, 'rebuild_index', wraps=doc.rebuild_index) as audit:
+        with patch.object(doc, '_observed_index', wraps=doc._observed_index) as audit:
             self.assertIs(doc.get(first.uid), first)
             self.assertIs(doc.get(first.uid), first)
             self.assertEqual(audit.call_count, 1)

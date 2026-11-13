@@ -1,7 +1,8 @@
 """PCB drawings, copper pours and groups over the common editable tree."""
 from dataclasses import replace
 
-from ...common.schema import Child, Field, Record
+from ...common.schema import Child, Field, Record, with_units
+from ...common.measurements import nonnegative_length
 from ...common.drawing_records import POINT, TEXT_LINE, POINTS, TEXT_LINES
 from ...common import footprint_records
 from .relationships import reference_field, index_field, linked
@@ -62,6 +63,11 @@ SHAPE = Record('PcbBoardDrawing', {
     'Points': Child('Points', POINTS.name),
     'TextLine': Child('TextLine', TEXT_LINES.name), 'PictureVector': Child('PictureVector', 'PcbVectorPicture'),
 })
+SHAPE = with_units(SHAPE, {
+    **dict.fromkeys(('PenWidth', 'FontWidth', 'PictureWidth', 'PictureHeight'), 'shared length'),
+    'FontSize': 'font size', 'FontScale': 'ratio', 'LineSpacing': 'ratio',
+    'TextAngle': 'radians', 'PictureTransparent': 'opacity',
+}, selectors={'PenWidth': nonnegative_length, 'FontWidth': nonnegative_length})
 POUR = Record('PcbCopperPour', {
     'Id': _order(), **GROUP_FIELDS, **NET_FIELDS,
     'Layer': reference_field('Layer', 'copper-layer'), 'Lay': index_field('Lay', 'copper-layer'),
@@ -101,6 +107,7 @@ VECTOR_POLYGON = Record('PcbVectorPolygon', {'Id': _order()}, parameters=('Id',)
 VECTOR = Record('PcbVectorPicture', _fields('number', 'Width Height', 0), children={
     'Polygons': Child('Polygons', 'PcbVectorPolygons'),
 })
+VECTOR = with_units(VECTOR, dict.fromkeys(('Width', 'Height'), 'shared length'))
 OUTLINE_POINT = replace(POINT, name='PcbOutlinePoint',
     fields={**POINT.fields, 'Arc': Field('Arc', 'boolean', required=True, default=False)},
     parameters=('X', 'Y', 'Arc'))

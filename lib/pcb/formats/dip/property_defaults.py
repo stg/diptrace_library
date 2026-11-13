@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 from ....common.conversion import import_notice
+from ....common.import_tree import assign_fields
 
 
 def modernize_properties(decoded):
@@ -14,12 +15,8 @@ def modernize_properties(decoded):
     changed = []
 
     def missing(owner, values):
-        added = False
-        for name, value in values.items():
-            if owner.child(name) is None:
-                owner.add(name, value)
-                added = True
-        if added:
+        if any(name not in owner for name in values):
+            assign_fields(owner, values.items(), overwrite=False)
             changed.append(owner)
 
     patterns = board.select('Components/Component/Pattern')

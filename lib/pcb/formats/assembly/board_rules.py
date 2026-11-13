@@ -67,7 +67,7 @@ def assemble_rules(decoded, routed=None):
             start, end = bounds
             links.extend(((style, 'via-span-from', layers[start]), (style, 'via-span-to', layers[end])))
 
-    for node in board.walk(include_self=True):
+    for node in board._record_walk(include_self=True):
         if node.schema is COMPONENT:
             consume(node, 'ConnectedLayer', layers, 'copper-layer')
             consume(node, 'ViaStyle', vias, 'via-style')
@@ -93,7 +93,7 @@ def assemble_rules(decoded, routed=None):
             style.set_values(name)
             style.add('Size', size)
             style.add('HoleSize', hole)
-        for node in board.walk(include_self=True):
+        for node in board._record_walk(include_self=True):
             schema = board_rules.definition(node)
             if schema is not None:
                 if schema is board_rules.STACK_ITEM:

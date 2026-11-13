@@ -22,8 +22,7 @@ def named_field(node, argument):
     return None
 
 
-@contextmanager
-def preview_values(changes):
+def _preview_values(changes):
     values = dict(_values.get() or ())
     for node, supplied in changes:
         supplied = tuple(supplied)
@@ -34,21 +33,60 @@ def preview_values(changes):
                     child = node.child(name)
                     if child is not None:
                         values[child] = (supplied[index],)
-    token = _values.set(values)
+    return values or None
+
+
+@contextmanager
+def preview_values(changes):
+    # An empty preview must not force ordinary reads through the projection
+    # machinery. An enclosing nonempty preview is already included in values.
+    token = _values.set(_preview_values(changes))
     try:
         yield
     finally:
         _values.reset(token)
 
 
-@contextmanager
-def preview_slots(overrides):
+def _slot_changes(overrides):
     changes = {}
     for (node, argument), value in overrides.items():
-        arguments = changes.setdefault(node, list(node.arguments))
+        arguments = changes.get(node)
+        if arguments is None:
+            arguments = changes[node] = list(node.arguments)
         arguments[argument] = value
-    with preview_values(changes.items()):
+    return changes.items()
+
+
+@contextmanager
+def preview_slots(overrides):
+    with preview_values(_slot_changes(overrides)):
         yield
+
+
+class PreparedSlots:
+    """Reuse one prospective value set while a dependency plan is unchanged.
+
+    This is local to one preflight, never a document cache. The planner must
+    invalidate it when an override changes. Each entry restores its enclosing
+    preview on exit; actual model values remain untouched.
+    """
+    def __init__(self, overrides):
+        self.overrides = overrides
+        self._prepared = False
+        self._snapshot = None
+
+    def invalidate(self):
+        self._prepared = False
+
+    def __enter__(self):
+        if not self._prepared:
+            self._snapshot = _preview_values(_slot_changes(self.overrides))
+            self._prepared = True
+        self._token = _values.set(self._snapshot)
+        return self
+
+    def __exit__(self, error_type, error, traceback):
+        _values.reset(self._token)
 
 
 @contextmanager

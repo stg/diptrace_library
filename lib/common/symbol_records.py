@@ -1,5 +1,6 @@
 """Unplaced component-symbol definitions shared by design document families."""
-from .schema import Child, Field, Record
+from .schema import Child, Field, Record, with_units
+from .measurements import nonnegative_length
 
 
 def _required(name, kind):
@@ -66,6 +67,12 @@ PIN = Record('CachedPin', {
     'Y': Field('Y', 'number', required=True, default=0, unit='shared length'),
 }, parameters=('Index', 'X', 'Y'), children={'UnresolvedKeys': Child('UnresolvedKeys', 'UnresolvedKeys')})
 
+SYMBOL = with_units(SYMBOL, dict.fromkeys(('Width', 'Height', 'Origin_X', 'Origin_Y'), 'shared length'))
+PIN = with_units(PIN, {
+    **dict.fromkeys('Length PinNumXShift PinNumYShift PinNameXShift PinNameYShift NameFontWidth'.split(), 'shared length'),
+    'NameFontSize': 'font size', 'NameFontScale': 'ratio',
+    'PinNameRotate': 'angle', 'PinNumRotate': 'angle', 'SignalDelay': 'delay',
+}, selectors={'NameFontWidth': nonnegative_length})
 PINS = Record('CachedPins', {}, children={'Pin': Child('Pin', PIN.name, maximum=None)})
 
 DRAWING = Record('SymbolDrawing', {
@@ -87,5 +94,8 @@ DRAWING = Record('SymbolDrawing', {
         ('Points_New', 'Points'), ('TextLine', 'TextLines'), ('UnresolvedKeys', 'UnresolvedKeys'))
 })
 
+DRAWING = with_units(DRAWING, {
+    'FontSize': 'font size', 'LineSpacing': 'ratio', 'FontWidth': 'shared length', 'FontScale': 'ratio',
+}, selectors={'FontWidth': nonnegative_length, 'PenWidth': nonnegative_length})
 DRAWINGS = Record('SymbolDrawings', {}, description='An ordered collection of SymbolDrawing records.',
                   children={'Shape': Child('Shape', DRAWING.name, maximum=None)})

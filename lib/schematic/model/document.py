@@ -8,6 +8,10 @@ class Document(BaseDocument):
     _representations = (*BaseDocument._representations, 'schematic', 'dchxml')
     _named_representations = ('schematic',)
 
+    def _record_definition(self, node):
+        from .definitions import definition
+        return definition(node)
+
     def refdes(self, prefix):
         """Return a live numbered-family view of enabled physical components.
 
@@ -236,9 +240,6 @@ class Document(BaseDocument):
             raise ValueError('normalize XML with as_schematic() before ASC semantic projection')
         if context is not None or not allow_partial and self.representation == 'schematic':
             return self.as_asc(context=context,version=version,report=report).to_asc(preserve=preserve,version=version)
-        if not allow_partial and (self.representation == 'schematic' or
-                any(node.annotations.get('requires_asc_projection') for node in self.root.walk(include_self=True))):
-            raise IncompleteDocumentError('shared schematic data requires an ASC export context')
         from ..formats.asc.syntax import (dumps)
         if not allow_partial:
             gaps = self.unresolved()
@@ -293,9 +294,10 @@ class Document(BaseDocument):
 
     @export_diagnostics('dchxml')
     def to_dchxml(self, *, newline='\n', context=None, version=DCHXML.default_write_version, report=None, label=None) -> str:
-        if context is not None or self.representation == 'schematic':
-            return self.as_dchxml(context=context, version=version, report=report).to_dchxml(newline=newline)
         from ..formats.dchxml.syntax import (dumps)
+        if context is not None or self.representation == 'schematic':
+            from ..formats.dchxml.write import serialize_document
+            return serialize_document(self, newline=newline, context=context, version=version, report=report)
         return dumps(self, newline=newline)
 
     @export_diagnostics('dchxml')

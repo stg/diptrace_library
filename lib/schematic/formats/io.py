@@ -40,7 +40,11 @@ def _source(data, key, **options):
 @import_diagnostics()
 def parse_source(data, *, format=None, source=None, report=None, label=None, **options):
     """Read an explicit source view without changing its representation."""
-    return _source(data, _key(data, format), source=source, **options)
+    key = _key(data, format)
+    if key == 'dch' and options.get('context') is None:
+        from dataclasses import replace
+        options['context'] = replace(resolve_import_context(None), retain_source=True)
+    return _source(data, key, source=source, **options)
 
 
 @import_diagnostics()
@@ -49,8 +53,18 @@ def parse(data, *, format=None, context=None, source=None, report=None, label=No
     resolved = resolve_import_context(context)
     if key == 'dch':
         options['context'] = resolved
+    else:
+        options['retain_source'] = resolved.retain_source
     document = _source(data, key, source=source, **options)
-    return document.as_schematic() if key in ('asc', 'dchxml') else document
+    if key == 'asc':
+        from .asc.read import import_schematic
+        document = import_schematic(document, _take_root=True)
+    elif key == 'dchxml':
+        document = document.as_schematic()
+    if not resolved.retain_source and key != 'dch':
+        from ...common.source_details import discard_source
+        discard_source(document.root)
+    return document
 
 
 def _output_key(format, version):
@@ -62,12 +76,16 @@ def _output_key(format, version):
 
 @export_diagnostics()
 def serialize(document: Document, *, format, context=None, report=None, label=None, **options):
+    from ...common.unit_views import canonical
+    document = canonical(document)
     key = _output_key(format, options.get('version'))
     return getattr(document, 'to_'+key+'_bytes')(context=context, report=report, **options)
 
 
 @export_diagnostics()
 def write(document: Document, path, *, format=None, context=None, report=None, label=None, **options):
+    from ...common.unit_views import canonical
+    document = canonical(document)
     key = _output_key(format or Path(path).suffix, options.get('version'))
     if context is not None:
         options['context'] = context

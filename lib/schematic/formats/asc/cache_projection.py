@@ -91,13 +91,13 @@ def project_cached_pad(pad, pattern, *, index=None):
     if index is not None:
         result.set_argument(0, index)
     # ASC emits the current number, then its legacy compatibility view.
-    result.add('cl_Number', *map(_value, pad.one('Number_New').arguments))
+    result.add('cl_Number', *map(_value, pad._field_arguments('Number_New')))
     for field in view.children():
         result.append(_prefix(field, rename={'Points': 'Point'}))
         if field.kind == 'PadTerminalCount':
             # Footprint defaults repeat after each pad's individual fields.
             for name in ('TopMask_State', 'BotMask_State', 'TopPaste_State', 'BotPaste_State'):
-                result.add('cl_'+name, _value(pattern.one(name).arguments[0]))
+                result.add('cl_'+name, _value(pattern._field_arguments(name)[0]))
             for name in ('CustomSwell_New', 'CustomShrink_New'):
                 result.append(_prefix(_plain(pattern.one(name))))
     return result
@@ -115,9 +115,8 @@ def project_cached_pattern(pattern, *, datasheet='', line_width=None, text_bound
             continue
         field = _scalar_field(pattern, name)
         if name == 'Pads':
-            # Cached footprints retain both array-boundary pads. The same
-            # owned pattern may have been authored/imported for placed use,
-            # where those records carry an omission annotation.
+            # Cached footprints retain both array-boundary pads; placed ASC
+            # footprints omit them according to their destination role.
             projected = _head(field, 'cl_Pads')
             for index, pad in enumerate(field.children()):
                 if pad.kind != 'Pad':
@@ -128,7 +127,7 @@ def project_cached_pattern(pattern, *, datasheet='', line_width=None, text_bound
             for shape in _visible(field):
                 for record in project_pattern_drawing(shape, pattern, line_width=line_width, text_bounds=text_bounds):
                     if record.kind == 'Shape':
-                        record.set_argument(0, _value(shape.one('Type').arguments[0]))
+                        record.set_argument(0, _value(shape._field_arguments('Type')[0]))
                     projected.append(_prefix(record, rename={'Points': 'Point'}))
         elif name == 'Dimensions':
             projected = Element('cl_Dimensions')

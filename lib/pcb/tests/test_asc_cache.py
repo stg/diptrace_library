@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import loads, dumps
 from lib.common.references import ReferenceError
 from lib.common import library_metadata
@@ -112,17 +113,17 @@ class AscCacheTests(unittest.TestCase):
         self.assertEqual(pattern['TopMask_State'], 2)
         pads = pattern.select('Pads/Pad')
         self.assertEqual([pad['DisableTopMask'] for pad in pads], [1, 1])
-        self.assertEqual([pad['CustomSwell_New'] for pad in pads], [Decimal('.6')]*2)
+        self.assertEqual([pad['CustomSwell_New'] for pad in pads], [0.6]*2)
         self.assertTrue(all(pad.child('CustomSwell') is None for pad in pads))
         self.assertIsNone(pads[0].child('Number_New'))
         self.assertNotIn('Net', pads[0].schema.fields)
         self.assertEqual(pads[0].one('PadPoints_New/pt').values, (1, 2))
         drawing = pattern.one('Shapes/Shape')
-        self.assertEqual(drawing['TextAngle'], Decimal('.35'))
+        assert_float_facts(self,drawing['TextAngle'], Decimal('.35'))
         self.assertEqual(drawing.one('Points_New/pt').values, (12, 6))
         self.assertEqual(drawing.one('TextLine/pt')['Text'], 'Current footprint text')
         symbol_drawing = part.one('Shapes/Shape')
-        self.assertEqual(symbol_drawing['TextAngle'], Decimal('.35'))
+        assert_float_facts(self,symbol_drawing['TextAngle'], Decimal('.35'))
         self.assertEqual(symbol_drawing.one('Points_New/pt').values, (6, 9))
         self.assertEqual(symbol_drawing.one('TextLine/pt')['Text'], 'Current symbol text')
         self.assertIsNone(symbol_drawing.child('Name'))
@@ -157,7 +158,7 @@ class AscCacheTests(unittest.TestCase):
         self.assertIs(symbol.schema, user_fields.COMPONENT_USER_FIELD)
         self.assertIs(footprint.schema, schematic.USER_FIELD)
         self.assertEqual((symbol['Name'], symbol['Value'], symbol['Align']), ('Supplier', 'Example', 8))
-        self.assertEqual((symbol['X'], symbol['Y'], symbol['Angle']), (3, 4, Decimal('.2')))
+        self.assertEqual((symbol['X'], symbol['Y'], symbol['Angle']), (3, 4, 0.2))
         symbol['Value'] = 'Other supplier'
         symbol['X'] = 6
         footprint['Value'] = 'Bottom side'

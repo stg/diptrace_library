@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.model import Element
 from lib.common.units import XmlUnits
 from lib.common.xml_records import XmlRecord
@@ -81,8 +82,8 @@ class PcbXmlElectricalTests(unittest.TestCase):
         self.assertEqual(component['RefDes_SilkShow'], 0)
         self.assertEqual(component['Datasheet_AssyAlign'], 0)
         self.assertEqual(component.one('Pattern')['Type'], 16)
-        self.assertEqual((pad['PadWidth_New'], pad['PadHeight_New'], pad['PadHole']),
-                         (Decimal('1.8'), Decimal('1.8'), Decimal('0.9')))
+        assert_float_facts(self,(pad['PadWidth_New'], pad['PadHeight_New'], pad['PadHole']),
+                         (1.8, 1.8, 0.9))
         self.assertIs(pad['Net'], result.core.nets[7])
         self.assertEqual(pad.one('CustomSpokes/CustomSpoke').values, (-1, 0, 0, Decimal('1.5')))
         self.assertEqual(component.one('ViaStyle').values, (0,))
@@ -100,7 +101,7 @@ class PcbXmlElectricalTests(unittest.TestCase):
         self.assertIsNone(first['Target2'])
         self.assertIs(other['Target1'], first.one('Points/Point[2]'))
         self.assertEqual(other['Point1'], 1)
-        self.assertEqual(net['MeanderGap'], Decimal('0.9'))
+        assert_float_facts(self,net['MeanderGap'], 0.9)
         self.assertEqual(first.one('Points/Point[2]')['Y'], -12)
         self.assertTrue(first.one('Points/Point[2]')['Arc'])
         self.assertEqual(net.one('Teardrops/Teardrop/DrawY').values, (-6,))

@@ -212,7 +212,7 @@ def assemble_graphics(decoded, rules=None):
             if node.kind == 'CacheLib':
                 continue
             _bind_record(node)
-            pending.extend(reversed(node._child_sequence()))
+            pending.extend(reversed(node._record_children()))
         renamed, added = complete_user_markings(board)
         if renamed:
             import_notice('info', 'empty-user-field-name',
@@ -238,7 +238,7 @@ def assemble_graphics(decoded, rules=None):
         plans = label_text.plan_text(document, text_shapes)
         label_text.apply_text(plans)
         for shape, *_ in plans:
-            for node in shape.walk(include_self=True):
+            for node in shape._record_walk(include_self=True):
                 _bind_record(node)
         if plans:
             import_notice('info', 'bound-pattern-text', 'Refreshed text bound to current component fields',

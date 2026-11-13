@@ -1,6 +1,4 @@
 """Read current XML font facts and consume redundant calculated extents."""
-from decimal import Decimal, ROUND_HALF_EVEN
-
 from .model import Value
 from .xml_records import length
 
@@ -14,7 +12,7 @@ def read_width(record, *, units, physical, name='FontWidth', default=-1):
     if physical or value in (-1, -2, -3):
         return width
     scaled = length(width, units).value
-    return Value(min(Decimal(-1), max(Decimal(-3), scaled)).to_integral_value(rounding=ROUND_HALF_EVEN), 'number')
+    return Value(round(min(-1, max(-3, scaled))), 'number')
 
 
 def read_size(record, legacy='FontSize', default=6, *, floating='FontSizeFloat'):

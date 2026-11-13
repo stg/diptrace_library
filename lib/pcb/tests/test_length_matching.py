@@ -46,7 +46,7 @@ class LengthMatchingTests(unittest.TestCase):
         self.assertIs(policy.schema, length_matching.POLICY)
         self.assertIs(row.schema, length_matching.CONNECTION)
         self.assertEqual((policy['Name'], policy['Delta'], row['Length']),
-                         ('Matched', Decimal('.2'), Decimal('3.5')))
+                         ('Matched', 0.2, 3.5))
         self.assertIs(row['Net'], core.nets[73])
         self.assertIs(row['Pad1'], core.pads[41, 5])
         self.assertIs(row['Pad2'], core.pads[41, 12])

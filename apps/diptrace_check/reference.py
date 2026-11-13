@@ -1,4 +1,5 @@
 """User-supplied export references, without normalizing away their syntax."""
+import gc
 from dataclasses import dataclass, replace
 from importlib import import_module
 from pathlib import Path
@@ -6,39 +7,66 @@ from pathlib import Path
 from lib import Element, format_capabilities, input_identity, parse
 from lib.common import asc, xml
 from apps.common.cli import PROCESSING_ERRORS
-from .comparison import compare, snapshot
+from .comparison import compare, compare_ordered, snapshot
 
 
-def source_document(data, *, format, family):
-    """Use lexical codecs only: retain fields unknown to the editable model."""
+def source_document(data, *, format, family, retain_source=False):
+    """Retain unknown fields and ordered values, without unused spelling spans."""
     if format == 'asc':
-        return asc.loads_bytes(data)
+        return asc.loads_bytes(data, retain_source=retain_source)
     dialect = import_module(f'lib.{family}.formats.{format}.syntax').DIALECT
-    return xml.loads(data, dialect=replace(dialect, representation='xml'))
+    return xml.loads(data, dialect=replace(dialect, representation='xml'), retain_source=retain_source)
+
+
+def _node_facts(node, path):
+    if xml.syntax_role(node) in ('comment', 'instruction'):
+        return
+    yield path, ('record', '', node.kind)
+    content = []
+    argument = 0
+    for item in node.items:
+        if isinstance(item, Element):
+            if xml.syntax_role(item) not in ('attribute', 'comment', 'instruction'):
+                content.append(('element', item.kind))
+        else:
+            content.append(('value', argument))
+            argument += 1
+    yield path+'/@content', ('order', '', tuple(content))
+    for index, value in enumerate(node.arguments):
+        kind = 'serialized-number' if value.kind == 'number' else value.kind
+        unit = value.unit or ('serialized units' if value.kind == 'number' else '')
+        yield path+f'/@{index}', (kind, unit, value.value)
 
 
 def source_snapshot(document):
     """Ignore spelling/indentation and attribute order; retain ordered content."""
-    result = {}
-    for node in document.root.walk(include_self=True):
-        if node.annotations.get('xml_role') in ('comment', 'instruction'):
-            continue
-        result[node.path] = ('record', '', node.kind)
-        content = []
-        argument = 0
-        for item in node.items:
-            if isinstance(item, Element):
-                if item.annotations.get('xml_role') not in ('attribute', 'comment', 'instruction'):
-                    content.append(('element', item.kind))
+    return dict(fact for node in document.root.walk(include_self=True)
+                for fact in _node_facts(node, node.path))
+
+
+def source_rows(document):
+    """Yield the same lexical facts in path order, retaining only local rows.
+
+    Count every sibling when deriving paths, including XML metadata nodes.
+    Sorting each node's immediate entries also orders two-digit ordinals and
+    argument indices correctly, without building a complete fact dictionary.
+    """
+    def visit(node, path):
+        entries = [(key, False, fact) for key, fact in _node_facts(node, path)]
+        counts = {}
+        for child in node.items:
+            if isinstance(child, Element):
+                counts[child.kind] = ordinal = counts.get(child.kind, 0)+1
+                child_path = path.rstrip('/')+'/'+child.kind+f'[{ordinal}]'
+                entries.append((child_path, True, child))
+        entries.sort(key=lambda entry: entry[0])
+        for key, subtree, value in entries:
+            if subtree:
+                yield from visit(value, key)
             else:
-                content.append(('value', argument))
-                argument += 1
-        result[node.path+'/@content'] = ('order', '', tuple(content))
-        for index, value in enumerate(node.arguments):
-            kind = 'serialized-number' if value.kind == 'number' else value.kind
-            unit = value.unit or ('serialized units' if value.kind == 'number' else '')
-            result[node.path+f'/@{index}'] = (kind, unit, value.value)
-    return result
+                yield key, value
+
+    yield from visit(document.root, '/')
 
 
 @dataclass
@@ -70,7 +98,12 @@ class Reference:
         units = raw.root.one('Units').values if identity.format == 'asc' else (raw.metadata.get('units'),)
         if len(units) != 1 or not isinstance(units[0], str):
             raise ValueError(f'{path}: reference must declare its display units')
-        return cls(path, identity.format, selected, identity.version, candidates, units[0], data)
+        result = cls(path, identity.format, selected, identity.version, candidates, units[0], data)
+        # Only bytes and header choices survive loading. Release the temporary
+        # lexical tree before the caller prepares another complete design.
+        del raw, units
+        gc.collect()
+        return result
 
     def context(self, family):
         # Match the reference's declared display units, without borrowing its
@@ -81,7 +114,9 @@ class Reference:
     def check(self, generated, *, actual, family, tolerance, source_tolerance, report):
         expected = source_document(self.data, format=self.format, family=family)
         output = source_document(generated, format=self.format, family=family)
-        structure = compare(source_snapshot(expected), source_snapshot(output), tolerance=source_tolerance)
+        structure = compare_ordered(source_rows(expected), source_rows(output), tolerance=source_tolerance)
+        del expected, output
+        gc.collect()
         model, error = None, None
         try:
             reference = parse(self.data, report=report, label=str(self.path))

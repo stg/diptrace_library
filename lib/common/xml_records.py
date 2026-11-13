@@ -135,9 +135,9 @@ def length(value, units, *, reverse=False):
     value = value if isinstance(value, Value) else Value.of(value)
     if value.kind != 'number' or value.unit:
         raise ValueError('XML length requires an unqualified number')
-    result = units.internal_length(Decimal(str(value.value)))
+    result = units.internal_length(value.value)
     if reverse:
-        result = result.copy_negate()
+        result = -result
     return Value(result, 'number')
 
 
@@ -146,7 +146,7 @@ def area(value, units):
     value = value if isinstance(value, Value) else Value.of(value)
     if value.kind != 'number' or value.unit:
         raise ValueError('XML area requires an unqualified number')
-    return Value(units.internal_area(Decimal(str(value.value))), 'number')
+    return Value(units.internal_area(value.value), 'number')
 
 
 def point(record, units, names=('X', 'Y'), default=MISSING):

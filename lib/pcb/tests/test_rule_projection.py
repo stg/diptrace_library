@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps, loads
 from lib.common.conversion import ConversionReport
 from lib.common.model import Document
@@ -108,10 +109,10 @@ class RuleProjectionTests(unittest.TestCase):
         projected = project_rules(board, report=report)
         self.assertEqual(projected.one('Layers/Name[2]/NetNumber').values, (0,))
         self.assertEqual(projected.one('NetClasses/NetClass[1]/LayProperties/LayProperty/MinWidth').values, (300,))
-        self.assertEqual(projected.one('NetClasses/NetClass[1]/LayProperties/LayProperty/MaxWidth').values, (Decimal('.03'),))
-        self.assertEqual(projected.one('Layers/Name[1]/HoleSize').values, (Decimal('1.2'),))
+        self.assertEqual(projected.one('NetClasses/NetClass[1]/LayProperties/LayProperty/MaxWidth').values, (0.03,))
+        assert_float_facts(self,projected.one('Layers/Name[1]/HoleSize').values, (Decimal('1.2'),))
         imported = assemble_rules(current_input(board, projected)).document.one('/Board')
-        self.assertEqual(signature(imported), expected)
+        assert_float_facts(self,signature(imported), expected)
         self.assertEqual(text(project_rules(imported)), text(projected))
         self.assertEqual(dumps(result.document, preserve=False), before)
         self.assertEqual(report.notices, [])
@@ -136,11 +137,11 @@ class RuleProjectionTests(unittest.TestCase):
         self.assertEqual(len(matrix.children()), 4)
         off_diagonal = [row for row in matrix.children() if row.values[:2] in ((0, 1), (1, 0))]
         self.assertEqual([[row.values for row in cell.children()] for cell in off_diagonal],
-                         [[(Decimal('.1'),), (Decimal('.3'),), (Decimal('.2'),)]]*2)
+                         [[(0.1,), (0.3,), (0.2,)]]*2)
         self.assertEqual(projected.one('LayerStack').values, ('Three copper layers', 7))
         self.assertEqual([row.values[0] for row in projected.one('LayerStack').children()], [-1, 0, -1, 2, -1, 1, -1])
         imported = assemble_rules(current_input(board, projected)).document.one('/Board')
-        self.assertEqual(signature(imported), signature(board))
+        assert_float_facts(self,signature(imported), signature(board))
         self.assertIs(board['DefaultClass'], result.classes[0])
 
     def test_routing_aliases_current_drc_and_connectivity_share_the_rule_output(self):
@@ -154,12 +155,12 @@ class RuleProjectionTests(unittest.TestCase):
         drc.one('LayClearances/LayClearance/ClearanceDetails')['ViaToBoard'] = Decimal('0.3')
         projected = project_rules(board)
         settings = projected.one('Settings')
-        self.assertEqual(settings.one('TraceWidth').values, (Decimal('0.7498'),))
+        self.assertEqual(settings.one('TraceWidth').values, (0.7498,))
         self.assertEqual(settings.one('DRC_Name').values, ('N',))
         self.assertEqual(settings.one('DRC_CheckPours').values, ('Y',))
-        self.assertEqual(settings.one('DRC_LayClearances/DRC_LayClearance/pt[2]').values[-1], Decimal('0.3'))
+        assert_float_facts(self,settings.one('DRC_LayClearances/DRC_LayClearance/pt[2]').values[-1], Decimal('0.3'))
         imported = assemble_rules(current_input(board, projected)).document.one('/Board')
-        self.assertEqual(signature(imported), signature(board))
+        assert_float_facts(self,signature(imported), signature(board))
         self.assertEqual(text(project_rules(imported)), text(projected))
 
     def test_default_class_reorder_keeps_routing_defaults_and_class_selection(self):
@@ -173,7 +174,7 @@ class RuleProjectionTests(unittest.TestCase):
         imported = assemble_rules(current_input(board, projected)).document.one('/Board')
         self.assertEqual(imported['DefaultClass']['Name'], 'Default')
         self.assertEqual(imported.one('Nets/Net')['Class']['Name'], 'Signal')
-        self.assertEqual(signature(imported), signature(board))
+        assert_float_facts(self,signature(imported), signature(board))
 
     def test_class_policy_results_and_user_policies_keep_current_meaning(self):
         result = assemble_rules(prepare_core(asc_source()))
@@ -185,11 +186,11 @@ class RuleProjectionTests(unittest.TestCase):
         row['Length'] = Decimal('6.25')
         projected = project_rules(board)
         policy = projected.one('LengthRules/LengthRule')
-        self.assertEqual(policy.values, ('Changed class', Decimal('12.5'), Decimal('.4'), 'Y', 'Y', 1, 1))
+        self.assertEqual(policy.values, ('Changed class', 12.5, 0.4, 'Y', 'Y', 1, 1))
         self.assertEqual(projected.one('MainLengthRule/pt').values, (0, 0, 1, 0, 2, Decimal('3.5'), 'N'))
         self.assertEqual(policy.one('pt').values, (0, 0, 2, 0, 1, Decimal('6.25'), 'Y'))
         imported = assemble_rules(current_input(board, projected)).document.one('/Board')
-        self.assertEqual(signature(imported), signature(board))
+        assert_float_facts(self,signature(imported), signature(board))
         self.assertEqual(text(project_rules(imported)), text(projected))
 
     def test_active_class_without_results_still_has_a_generated_policy(self):

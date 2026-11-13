@@ -1,13 +1,14 @@
 """Assemble public XML libraries with our own exact data-sharing policy."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 from ...model.cache import (symbol_definition)
 from .syntax import (set_attribute)
-from ....common.xml_catalog import CategoryCatalog, StyleTable, record_key
-from ....common.xml_pad_output import project_pad_style
+from ....common.xml_catalog import CategoryCatalog, StylePlans
+from ....common.xml_plan import XmlBuilder, XmlPlan
+from ....common.xml_pad_output import plan_pad_style
 from ....common.xml_library_output import project_subfolders, report_slot_omissions
-from .patterns import (project_pattern)
-from .symbols import (project_symbol)
+from .patterns import plan_pattern
+from .symbols import plan_symbol
 from ....common.model import (Element)
 from ...model.refs import (_integer)
 from ...model.pad_keys import (public_pad_keys)
@@ -16,9 +17,16 @@ from ...model.traversal import (footprint_name)
 
 @dataclass(frozen=True)
 class XmlLibrary:
-    element: Element
+    plan: XmlPlan
     component_styles: dict
     cache_count: int
+    _element: Element | None = field(default=None, init=False, compare=False, repr=False)
+
+    @property
+    def element(self):
+        if self._element is None:
+            object.__setattr__(self, '_element', self.plan.element())
+        return self._element
 
 
 class _Builder:
@@ -26,17 +34,17 @@ class _Builder:
         from ..dch.versions import (xml_application_version)
         self.units, self.version = units, version
         self.header_version = xml_application_version(version)
-        self.components = Element('Components')
+        self.components = XmlBuilder('Components')
         self.component_categories = CategoryCatalog()
         self.pattern_categories = CategoryCatalog(key='Number')
-        self.pad_styles = StyleTable('PadStyles', 'PadStyle', 'Name', 'PadT')
-        self.patterns = StyleTable('Patterns', 'Pattern', 'PatternStyle', 'PatType')
+        self.pad_styles = StylePlans('PadStyles', 'PadStyle', 'Name', 'PadT')
+        self.patterns = StylePlans('Patterns', 'Pattern', 'PatternStyle', 'PatType')
         self.symbols = {}
         self.associations = {}
         self.standard_changes = set()
 
     def header(self, kind):
-        result = Element('Library')
+        result = XmlBuilder('Library')
         for name, value in (('Type', 'DipTrace-'+kind+'Library'), ('Version', self.header_version), ('Units', self.units.units)):
             set_attribute(result, name, value)
         return result
@@ -45,51 +53,50 @@ class _Builder:
         if pattern is None:
             return None
         footprint_name(pattern)
-        default_record = project_pad_style(pattern, name='', units=self.units)
-        default_key = record_key(default_record, omit_attribute='Name')
-        default = self.pad_styles.include(default_record)
+        default_record = plan_pad_style(pattern, name='', units=self.units)
+        default_key = default_record.key(omit_attribute='Name')
+        default = self.pad_styles.include_plan(default_record)
         pads = {}
         for index, pad in enumerate(pattern.select('Pads/Pad')[1:-1], 1):
-            record = project_pad_style(pad, name='', units=self.units)
+            record = plan_pad_style(pad, name='', units=self.units)
             standard = bool(pad.scalar('Standard'))
             comparable = record
             if standard:
                 # The placed pad has its own Side attribute. Selecting the
                 # default style need not replace that independent placement.
-                comparable = record.clone()
-                set_attribute(comparable, 'Side', default_record.scalar('Side'))
-            if standard and record_key(comparable, omit_attribute='Name') == default_key:
+                comparable = record.with_attribute('Side', default_record.attribute('Side'))
+            if standard and comparable.key(omit_attribute='Name') == default_key:
                 pads[index] = default
             else:
                 # Equal attributes do not make these relationships equivalent:
                 # selecting the default style reconstructs Standard=True.
-                pads[index] = self.pad_styles.include(record, exclude=() if self.version >= 52 else (default,))
+                pads[index] = self.pad_styles.include_plan(record, exclude=() if self.version >= 52 else (default,))
             if self.version < 52 and (pads[index] == default) != standard:
                 self.standard_changes.add(pad)
-        result = project_pattern(pattern, style='', default_pad_style=default, pad_styles=pads,
+        result = plan_pattern(pattern, style='', default_pad_style=default, pad_styles=pads,
                                  units=self.units, pad_ids=self.version >= 48,
                                  pad_keys=public_pad_keys(pattern) if pad_keys is None else pad_keys, version=self.version)
         category = result.child('Category')
         if category is not None:
-            self.pattern_categories.include(category)
-        return self.patterns.include(result)
+            result = result.with_child(category, self.pattern_categories.include_plan(category))
+        return self.patterns.include_plan(result)
 
     def symbol(self, part, pattern):
         keys = public_pad_keys(pattern, part) if pattern is not None and part.scalar('PartType') == 0 else None
         style = self.footprint(pattern, pad_keys=keys)
-        result = project_symbol(part, units=self.units, pattern=pattern, pattern_style=style, pad_keys=keys, version=self.version)
+        result = plan_symbol(part, units=self.units, pattern=pattern, pattern_style=style, pad_keys=keys, version=self.version)
         category = result.child('Category')
         if category is not None:
-            self.component_categories.include(category)
+            result = result.with_child(category, self.component_categories.include_plan(category))
         return result
 
     def component(self, definitions):
-        name = 'CompType'+str(len(self.components.children()))
+        name = 'CompType'+str(len(self.components.children))
         result = self.components.add('Component')
         set_attribute(result, 'ComponentStyle', name)
         for index, definition in enumerate(definitions):
             result.append(definition)
-            self.symbols.setdefault(record_key(definition), (name, index))
+            self.symbols.setdefault(definition.key(), (name, index))
         return name
 
     def cached(self, schematic):
@@ -127,7 +134,7 @@ class _Builder:
         self.component_categories.reserve(project_category(part) for part in symbols(schematic))
         self.pattern_categories.reserve(project_category(pattern) for pattern in footprints(schematic) if pattern is not None)
         for style in cache.select('PadStyles/PadStyle'):
-            self.pad_styles.include(project_pad_style(style, name='', units=self.units))
+            self.pad_styles.include_plan(plan_pad_style(style, name='', units=self.units))
         for pattern in cache.select('Patterns/Pattern'):
             self.footprint(pattern)
         cache_count = self.cached(schematic)
@@ -135,35 +142,38 @@ class _Builder:
             if not part.scalar('Enabled'):
                 continue
             definition = self.symbol(symbol_definition(part), part.one('Pattern'))
-            key = record_key(definition)
+            key = definition.key()
             if key not in self.symbols:
                 self.component([definition])
             self.associations[part] = self.symbols[key]
         result = self.header('Component')
         if self.component_categories.element.children():
-            result.append(self.component_categories.element)
+            result.append(XmlPlan.from_element(self.component_categories.element))
         if (folders := project_subfolders(cache)) is not None:
-            result.append(folders)
+            result.append(XmlPlan.from_element(folders))
         patterns = self.header('Pattern')
         if self.pattern_categories.element.children():
-            patterns.append(self.pattern_categories.element)
-        patterns.append(self.pad_styles.element)
-        patterns.append(self.patterns.element)
+            patterns.append(XmlPlan.from_element(self.pattern_categories.element))
+        patterns.append(self.pad_styles.plan)
+        patterns.append(self.patterns.plan)
         result.append(patterns)
         # Definitions precede their users, including in single-pass readers.
         result.append(self.components)
+        plan = result.freeze()
         if self.version >= 47:
-            # The 4.9 library vocabulary uses the same geometry names as the
-            # schematic section: Point and TextLines/TextLine.
-            for node in result.walk():
-                if node.kind == 'Points':
-                    for point in node.children('Item'):
-                        point.kind = 'Point'
-                elif node.kind == 'Lines' and node.parent.kind == 'Shape':
-                    node.kind = 'TextLines'
-                    for line in node.children('Item'):
-                        line.kind = 'TextLine'
-        return XmlLibrary(result, self.associations, cache_count)
+            plan = _current_geometry_names(plan)
+        return XmlLibrary(plan, self.associations, cache_count)
+
+
+def _current_geometry_names(plan, parent=''):
+    """Use the selected library dialect without changing shared definitions."""
+    kind = ('Point' if plan.kind == 'Item' and parent == 'Points' else
+            'TextLine' if plan.kind == 'Item' and parent == 'TextLines' else
+            'TextLines' if plan.kind == 'Lines' and parent == 'Shape' else plan.kind)
+    children = tuple(_current_geometry_names(child, kind) for child in plan.children)
+    if kind == plan.kind and all(new is old for new, old in zip(children, plan.children)):
+        return plan
+    return replace(plan, kind=kind, children=children)
 
 
 def project_library(schematic, *, units, version=46, report=None):
@@ -198,8 +208,7 @@ def project_library(schematic, *, units, version=46, report=None):
     builder = _Builder(units=units, version=version)
     result = builder.build(schematic)
     if builder.standard_changes:
-        from ....common.conversion import (info)
-        info(report, 'pad-standard-style', 'dchxml',
+        warn(report, 'pad-standard-style', 'dchxml',
              'XML reconstructs Standard from shared default and individual pad styles',
              sorted(builder.standard_changes, key=lambda pad: pad.path),
              recoverability='explicit pad geometry is retained; the original choice remains in the authoring model')

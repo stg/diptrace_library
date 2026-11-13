@@ -11,13 +11,40 @@ from .settings import SHOW, ALIGN
 from ....common.xml_output import enum_text, field, numeric
 from ....common.model import (Element)
 from ....common.xml_library_output import project_category
+from ....common.conversion import info, warn
+from ...model.cache import reference_prefix
 
 
-def project_marking(name, values, *, units, show_part=False):
+def report_base_names(schematic, *, version, report=None):
+    """Describe placed strings that the selected XML dialect cannot express."""
+    parts = schematic.select('Components/Part')
+    for name, label in (('BaseName', 'name'), ('BaseRefDes', 'reference')):
+        if name == 'BaseName' and version >= 52:
+            continue
+        independent, redundant = [], []
+        for part in parts:
+            value = part.scalar(name, '')
+            if not value:
+                continue
+            current = part['Name'] if name == 'BaseName' else part['RefDes']
+            choices = (current,) if name == 'BaseName' else (current, reference_prefix(current))
+            (redundant if value in choices else independent).append(part.one(name))
+        rule = 'component-base-'+label
+        if redundant:
+            info(report, rule+'-default', 'dchxml',
+                 'XML omits component base '+label+' text derivable from the current label', redundant,
+                 recoverability='current component names and references remain; missing placed base fields import as empty')
+        if independent:
+            warn(report, rule, 'dchxml',
+                 'XML omits independent component base '+label+' text', independent,
+                 recoverability='current labels and library definitions remain; independent placed base text is omitted')
+
+
+def project_marking(name, values, *, units, show_part=False, _factory=Element):
     expected = 8 if show_part else 7
     if len(values) != expected:
         raise ValueError(f'{name}: marking requires {expected} values')
-    result = Element(name)
+    result = _factory(name)
     modes = [('Show', SHOW)]
     if show_part:
         modes.append(('ShowPart', SHOW))
@@ -31,8 +58,8 @@ def project_marking(name, values, *, units, show_part=False):
     return result
 
 
-def project_component(part, *, units, component_style, component_part=0, version=46):
-    result = Element('Part')
+def project_component(part, *, units, component_style, component_part=0, version=46, _factory=Element):
+    result = _factory('Part')
     for public, value in (('Id', part.scalar('Number')), ('UpdateId', part.scalar('HiddenId'))):
         set_attribute(result, public, value)
     if part.scalar('PartType') == 4:
@@ -40,8 +67,8 @@ def project_component(part, *, units, component_style, component_part=0, version
     set_attribute(result, 'ComponentStyle', component_style)
     set_attribute(result, 'ComponentPart', component_part)
     for name, own in (('AllowParts', 'AllowParts'), ('PartNumber', 'PartNumber'), ('Sheet', 'Page')):
-        set_attribute(result, name, part.one(own).arguments[0])
-    x, y = units.point(part.one('X').arguments[0], part.one('Y').arguments[0])
+        set_attribute(result, name, part._field_arguments(own)[0])
+    x, y = units.point(part._field_arguments('X')[0], part._field_arguments('Y')[0])
     set_attribute(result, 'X', numeric(x))
     set_attribute(result, 'Y', numeric(y))
     angle = math.radians(float(part.scalar('Angle')))
@@ -66,7 +93,7 @@ def project_component(part, *, units, component_style, component_part=0, version
             set_attribute(result, name, True)
     field(result, 'RefDes', part.arguments[1])
     for public, own in (('PartRefDes', 'PartDescriptor'), ('PartName', 'PartName'), ('Value', 'Value')):
-        field(result, public, part.one(own).arguments[0])
+        field(result, public, part._field_arguments(own)[0])
     field(result, 'Name', part.arguments[0])
     if version >= 52:
         for name in ('BaseName', 'Manufacturer', 'Datasheet', 'PartString'):
@@ -75,15 +102,15 @@ def project_component(part, *, units, component_style, component_part=0, version
     field(path, 'Path', part.scalar('LibPath'))
     field(path, 'Var', part.scalar('LibPath_Variable', part.scalar('LibPath')))
     for name in ('RefDes', 'Name', 'Value', 'Manufacturer', 'Datasheet'):
-        result.append(project_marking(name+'Marking', part.one('Show'+name).arguments,
-                                     units=units, show_part=name in ('RefDes', 'Name')))
+        result.append(project_marking(name+'Marking', part._field_arguments('Show'+name),
+                                     units=units, show_part=name in ('RefDes', 'Name'), _factory=_factory))
     users = part.select('UserFields/UserField')
     if users:
         target = result.add('AddFields')
         for user in users:
             if len(user.arguments) != 10:
                 raise ValueError(f'{user.path}: user field requires name, text, type and seven marking values')
-            item = project_marking('AddField', user.arguments[3:], units=units)
+            item = project_marking('AddField', user.arguments[3:], units=units, _factory=_factory)
             # XML attribute order is immaterial. Keep all attributes before text
             # children in the editable representation, as in the raw adapter.
             set_attribute(item, 'Type', enum_text(user.values[2], ('Text', 'Link')))
@@ -96,7 +123,7 @@ def project_component(part, *, units, component_style, component_part=0, version
         set_attribute(item, 'NetId', pin.scalar('NetNumber'))
         if pin.scalar('NoConnect'):
             set_attribute(item, 'NotConnected', True)
-    category = project_category(part)
+    category = project_category(part, _factory=_factory)
     if category is not None:
         result.append(category)
     return result

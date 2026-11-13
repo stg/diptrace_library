@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.references import Property, ReferenceError
 from lib.common.title_records import TITLE_FIELD, new_title_blocks
@@ -53,8 +54,8 @@ class PcbTitleTests(unittest.TestCase):
                          (0, 'Revision', 60, 18))
         self.assertEqual([row['Height'] for row in block.select('RowHeights/pt')], [9, 9])
         self.assertEqual(first['Text'], 'Revision\nA')
-        self.assertEqual((first['FontSize'], first['FontWidth'], first['FontScale']),
-                         (Decimal('5.5'), Decimal('.6'), Decimal('1.1')))
+        assert_float_facts(self,(first['FontSize'], first['FontWidth'], first['FontScale']),
+                         (5.5, 0.6, 1.1))
         self.assertEqual(first['Placement'], (3, -6, 9, -12))
         self.assertEqual((first['Align'], second['FontType']), (2, 1))
         self.assertIs(cell(document)['Field'], first)

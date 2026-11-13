@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.pcb.formats.assembly.board_rules import assemble_rules
 from lib.pcb.tests.test_dipxml_components import SOURCE
 from lib.pcb.tests.test_dipxml_electrical import NETS, prepared
@@ -50,13 +51,13 @@ class PcbXmlLayerTests(unittest.TestCase):
         self.assertIs(point['Layer'], top)
         self.assertIs(point['Via'], result.via_styles[1])
         self.assertIs(thermal['Layer'], inner)
-        self.assertEqual(thermal['Width'], Decimal('0.45'))
+        assert_float_facts(self,thermal['Width'], 0.45)
         self.assertEqual(inner['HoleRing'], Decimal('0.75'))
         self.assertIs(inner['Net'], result.routing.core.nets[7])
         self.assertEqual((top['Number'], inner['Number'], bottom['Number']), (0, 1, 2))
         stack = board.select('LayerStackItems/LayerStackItem')
         self.assertEqual([row['Layer'] for row in stack], [top, inner, bottom])
-        self.assertEqual(stack[1].one('Material')['Thickness'], Decimal('0.21'))
+        assert_float_facts(self,stack[1].one('Material')['Thickness'], Decimal('0.21'))
         self.assertEqual(stack[1].one('Material')['Type'], inner['Type'])
         self.assertFalse(doc.complete)
 

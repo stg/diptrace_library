@@ -37,7 +37,7 @@ def _cache(source, report):
         raise PcbError(str(error)) from error
     for name in ('Categories','Subfolders'):
         if (section := source.child(name)) is not None:
-            for node in section.walk(include_self=True):
+            for node in section._record_walk(include_self=True):
                 if node.schema is not None:
                     check(node,node.schema)
     components = output.add('cl_Components')

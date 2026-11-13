@@ -9,6 +9,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.model import Document
 from lib.pcb.formats.asc.core import prepare_core
@@ -97,7 +98,7 @@ class DipInitialOutputTests(unittest.TestCase):
         self.assertEqual([row.values[0] for row in classes], ['Default', 'Signal'])
         first = classes[0].one('LayProperties/LayProperty')
         self.assertEqual((first.one('MinWidth').values[0], first.one('MaxWidth').values[0]),
-                         (Decimal('.03'), 300))
+                         (0.03, 300))
         self.assertEqual(first.one('ClearDetails/pt[4]').values, (-1, -1, -1, 13, 14))
         self.assertEqual([row.one('Width').values[0] for row in classes[1].select('LayProperties/LayProperty')],
                          [1, 3, 2])
@@ -106,7 +107,7 @@ class DipInitialOutputTests(unittest.TestCase):
         matrix = result.one('/Board/ClassClearances')
         expected = [Decimal('.1'), Decimal('.3'), Decimal('.2')]
         for row, column in ((1, 2), (2, 1)):
-            self.assertEqual([item.values[0] for item in matrix.select(f'Row[{row}]/Cell[{column}]/Values/Item')],
+            assert_float_facts(self,[item.values[0] for item in matrix.select(f'Row[{row}]/Cell[{column}]/Values/Item')],
                              expected)
         self.assertEqual(dumps(document, preserve=False), before)
         document.references.validate()

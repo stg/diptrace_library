@@ -42,52 +42,51 @@ def normalize_legacy_linkage(component, version):
 
 
 def _component_head(reader, component):
-    pattern = component.add('Pattern')
+    pattern = reader.add(component, 'Pattern')
     _fields(reader, component, 'boolean', 'Enabled Selected')
     _fields(reader, pattern, 'integer', 'Type Number1 Number2')
     orientation = reader.integer()
-    component.add('Angle', orientation*math.pi/2)
+    reader.add_into(component, 'Angle', orientation*math.pi/2)
     _fields(reader, component, 'integer', 'Group Number')
-    reader.field(pattern, 'PadShape', 'integer')
-    reader.field(pattern, 'SurfacePad', 'boolean')
+    reader.field_into(pattern, 'PadShape', 'integer')
+    reader.field_into(pattern, 'SurfacePad', 'boolean')
     markings = tuple(reader.integer() for _ in range(4))
     positions = tuple(reader.number() for _ in range(4))
-    reader.field(component, 'BottomSide', 'boolean')
-    reader.field(component, 'ConnectedLayer', 'integer')
-    reader.field(component, 'Flipped', 'boolean')
-    reader.field(component, 'HiddenId', 'integer')
+    reader.field_into(component, 'BottomSide', 'boolean')
+    reader.field_into(component, 'ConnectedLayer', 'integer')
+    reader.field_into(component, 'Flipped', 'boolean')
+    reader.field_into(component, 'HiddenId', 'integer')
     _fields(reader, pattern, 'number', 'OriginX OriginY')
     origin = reader.argument('boolean')
-    pattern.add('OriginCommon', Value(0 if origin.value else 1, 'number', source=origin.source))
-    reader.field(component, 'HorizontalFlip', 'boolean')
-    fields = component.add('UserFields')
+    reader.add_into(pattern, 'OriginCommon', Value(0 if origin.value else 1, 'number', source=origin.source))
+    reader.field_into(component, 'HorizontalFlip', 'boolean')
+    fields = reader.add(component, 'UserFields')
     for _ in range(reader.count('component user fields')):
         reader.record(fields, 'UserField', 'text', 'text', 'integer')
     field_bindings = (reader.integer(), reader.integer(), reader.number())
-    reader.field(component, 'Locked', 'boolean')
-    reader.field(component, 'LibPath', 'text')
-    reader.field(component, 'GsType', 'integer')
-    points = pattern.add('PadPoints')
-    for _ in range(reader.count('default pad contour points')):
-        reader.record(points, 'pt', 'number', 'number')
+    reader.field_into(component, 'Locked', 'boolean')
+    reader.field_into(component, 'LibPath', 'text')
+    reader.field_into(component, 'GsType', 'integer')
+    points = reader.add(pattern, 'PadPoints')
+    reader.points(points, reader.count('default pad contour points'))
     _fields(reader, pattern, 'boolean', 'VariableParameter1 VariableParameter2 VariableParameter3 VariableParameter4')
     _fields(reader, component, 'number', 'X Y')
     _fields(reader, pattern, 'number', 'Spacing1 Spacing2')
-    reader.field(pattern, 'VariableParameter5', 'boolean')
-    reader.field(pattern, 'Spacing3', 'number')
-    reader.field(pattern, 'LockProperties', 'boolean')
-    reader.field(component, 'PanelExclude', 'boolean')
-    reader.field(pattern, 'PatternOrientation', 'integer')
-    reader.field(component, 'ViaStyle', 'integer')
+    reader.field_into(pattern, 'VariableParameter5', 'boolean')
+    reader.field_into(pattern, 'Spacing3', 'number')
+    reader.field_into(pattern, 'LockProperties', 'boolean')
+    reader.field_into(component, 'PanelExclude', 'boolean')
+    reader.field_into(pattern, 'PatternOrientation', 'integer')
+    reader.field_into(component, 'ViaStyle', 'integer')
     pattern.set_values(reader.argument('text'))
     width, height = reader.argument('number'), reader.argument('number')
     if orientation % 2:
         width, height = height, width
-    pattern.add('Width', width)
-    pattern.add('Height', height)
+    reader.add_into(pattern, 'Width', width)
+    reader.add_into(pattern, 'Height', height)
     _fields(reader, pattern, 'number', 'PadWidth PadHeight PadHole PadHoleH')
-    reader.field(pattern, 'PadHoleType', 'integer')
-    hierarchy = component.add('HierarchyPath')
+    reader.field_into(pattern, 'PadHoleType', 'integer')
+    hierarchy = reader.add(component, 'HierarchyPath')
     if reader.header.version > 31:
         for _ in range(reader.count('component hierarchy path')):
             reader.record(hierarchy, 'Item', 'integer')
@@ -97,58 +96,57 @@ def _component_head(reader, component):
 
 
 def read_pads(reader, pattern, count):
-    pads = pattern.add('Pads')
+    pads = reader.add(pattern, 'Pads')
     for index in range(count):
         start = reader.pos
         inverted = reader.argument('boolean')
         number, net = reader.argument('integer'), reader.argument('integer')
         x, y = reader.argument('number'), reader.argument('number')
         label, name = reader.argument('text'), reader.argument('text')
-        pad = pads.add('Pad', index, label, name, x, y)
-        pad.add('Number_New', number)
-        pad.add('NetNumber', net)
-        pad.add('PadAngle', Value(Decimal(str(math.pi/2)) if inverted.value else Decimal(0),
+        pad = reader.add(pads, 'Pad', index, label, name, x, y)
+        reader.add_into(pad, 'Number_New', number)
+        reader.add_into(pad, 'NetNumber', net)
+        reader.add_into(pad, 'PadAngle', Value(Decimal(str(math.pi/2)) if inverted.value else Decimal(0),
                                  'number', source=inverted.source))
         read_pad_geometry(reader, pad)
         reader.boolean()  # Obsolete pad selection slot; current output writes false.
         for name in ('HideLayer', 'BlindLayer'):
-            layers = pad.add(name)
+            layers = reader.add(pad, name)
             for _ in range(reader.count(name)):
                 reader.record(layers, 'Item', 'integer')
-        spokes = pad.add('CustomSpokes')
+        spokes = reader.add(pad, 'CustomSpokes')
         for _ in range(reader.count('custom thermal settings')):
             reader.record(spokes, 'CustomSpoke', 'integer', 'integer', 'integer', 'number')
-        reader.field(pad, 'Locked', 'boolean')
+        reader.field_into(pad, 'Locked', 'boolean')
         read_pad_mask_states(reader, pad)
         _fields(reader, pad, 'number', 'CustomSwell_New CustomShrink_New')
-        reader.field(pad, 'Sided', 'boolean')
+        reader.field_into(pad, 'Sided', 'boolean')
         pad.source = SourceSpan('dip', start, reader.pos, reader.source)
     return pads
 
 
 def _graphics(reader, pattern, *, text_markers=True):
-    shapes = pattern.add('Shapes')
+    shapes = reader.add(pattern, 'Shapes')
     upgrades = []
     for index in range(reader.count('footprint drawings')):
         start = reader.pos
-        shape = shapes.add('Shape', index)
+        shape = reader.add(shapes, 'Shape', index)
         kind = reader.integer()
         marker = text_markers and kind == 700
-        shape.add('Type', 7 if marker else kind)
+        reader.add_into(shape, 'Type', 7 if marker else kind)
         geometry = tuple(reader.number() for _ in range(6))
-        reader.field(shape, 'Locked', 'boolean')
-        reader.field(shape, 'Layer', 'integer')
-        shape.add('TextLine').add('pt', reader.argument('text'))
-        reader.field(shape, 'FontName', 'text')
-        reader.field(shape, 'VectorFont', 'boolean')
-        reader.field(shape, 'FontSize', 'integer')
+        reader.field_into(shape, 'Locked', 'boolean')
+        reader.field_into(shape, 'Layer', 'integer')
+        reader.add_into(reader.add(shape, 'TextLine'), 'pt', reader.argument('text'))
+        reader.field_into(shape, 'FontName', 'text')
+        reader.field_into(shape, 'VectorFont', 'boolean')
+        reader.field_into(shape, 'FontSize', 'integer')
         _fields(reader, shape, 'number', 'FontScale FontWidth')
         orientation = reader.integer()
-        reader.field(shape, 'TextShow', 'integer')
-        reader.field(shape, 'Width', 'number')
-        points = shape.add('Points_New')
-        for _ in range(reader.count('footprint drawing points')):
-            reader.record(points, 'pt', 'number', 'number')
+        reader.field_into(shape, 'TextShow', 'integer')
+        reader.field_into(shape, 'Width', 'number')
+        points = reader.add(shape, 'Points_New')
+        reader.points(points, reader.count('footprint drawing points'))
         shape.source = SourceSpan('dip', start, reader.pos, reader.source)
         upgrades.append(DrawingUpgrade(shape, geometry, orientation, marker))
     read_holes(reader, pattern)
@@ -162,11 +160,11 @@ def read_base_components(reader, board, count):
     Revision extensions and compatibility upgrades must run before this boundary
     data can become a complete editable PCB document.
     """
-    components = board.add('Components')
+    components = reader.add(board, 'Components')
     upgrades = []
     for _ in range(count):
         start = reader.pos
-        component = components.add('Component')
+        component = reader.add(components, 'Component')
         pattern, pad_count, markings, positions, user = _component_head(reader, component)
         read_pads(reader, pattern, pad_count)
         drawings = _graphics(reader, pattern)

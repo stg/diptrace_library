@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import loads, dumps
 from lib.pcb.formats.asc.core import prepare_core
 from lib.pcb.formats.assembly.board_rules import assemble_rules
@@ -122,9 +123,9 @@ class AscRuleTests(unittest.TestCase):
         self.assertEqual([(c['Class1'], c['Class2']) for c in cells],
                          [(default, default), (signal, default), (signal, signal)])
         self.assertIsNone(cells[0]['Clearance'])
-        self.assertEqual(cells[2]['Clearance'], Decimal('0.7'))
+        self.assertEqual(cells[2]['Clearance'], 0.7)
         layer_rows = cells[1].select('LayerClearances/LayerClearance')
-        self.assertEqual([row['Clearance'] for row in layer_rows], list(map(Decimal, ('0.1', '0.2', '0.3'))))
+        assert_float_facts(self,[row['Clearance'] for row in layer_rows], list(map(Decimal, ('0.1', '0.2', '0.3'))))
         self.assertEqual([row['Layer'] for row in layer_rows], list(result.layers.values()))
         self.assertTrue(all(not cell.values and cell.child('Values') is None for cell in cells))
         signal.move_to(signal.parent, 0)
@@ -137,9 +138,9 @@ class AscRuleTests(unittest.TestCase):
         self.assertIsNone(rows[0]['Layer'])
         self.assertEqual(rows[0].one('ClearanceDetails')['TraceToSmd'], 4)
         self.assertEqual(rows[0].one('ClearanceDetails')['SmdToCopper'], 14)
-        self.assertEqual((rows[0]['MinWidth'], rows[0]['MaxWidth']), (Decimal('0.03'), 300))
+        self.assertEqual((rows[0]['MinWidth'], rows[0]['MaxWidth']), (0.03, 300))
         self.assertIsNone(rows[0].child('ClearDetails'))
-        self.assertEqual(result.layers[0]['HoleRing'], Decimal('0.6'))
+        assert_float_facts(self,result.layers[0]['HoleRing'], Decimal('0.6'))
         self.assertIsNone(result.layers[0].child('HoleSize'))
 
     def test_bad_compact_records_fail_instead_of_guessing(self):
@@ -165,7 +166,7 @@ class AscRuleTests(unittest.TestCase):
         ):
             with self.subTest(after=after):
                 result = assemble_rules(prepare_core(source.replace(before, after)))
-                self.assertEqual(result.layers[0]['HoleRing'], expected)
+                assert_float_facts(self,result.layers[0]['HoleRing'], expected)
                 self.assertIsNone(result.layers[0].child('HoleSize'))
         syntax = loads(source)
         layer = syntax.one('/Board/Layers/Name[1]')
@@ -184,11 +185,11 @@ class AscRuleTests(unittest.TestCase):
         board = result.document.one('/Board')
         settings = board.one('Settings')
         row = result.classes[0].one('LayProperties/LayProperty')
-        self.assertEqual((row['Width'], row['Clearance']), (Decimal('0.8'), Decimal('0.7')))
+        self.assertEqual((row['Width'], row['Clearance']), (0.8, 0.7))
         self.assertIsNone(settings.child('TraceWidth'))
         self.assertIsNone(settings.one('Routing').child('TraceWidth'))
         settings.one('Routing')['TraceWidth'] = Decimal('0.9')
-        self.assertEqual(row['Width'], Decimal('0.9'))
+        assert_float_facts(self,row['Width'], Decimal('0.9'))
         self.assertTrue(settings['GridEnabled'])
         drc = board.one('DRC')
         self.assertEqual(drc['Name'], 'N')  # Authored strings retain their meaning.
@@ -200,7 +201,7 @@ class AscRuleTests(unittest.TestCase):
         self.assertEqual(len(drc.select('LayClearances/LayClearance')), 1)
         clearances = drc.one('LayClearances/LayClearance')
         self.assertIsNone(clearances['Layer'])
-        self.assertEqual(clearances['SameTraceToTrace'], Decimal('0.4'))
+        assert_float_facts(self,clearances['SameTraceToTrace'], Decimal('0.4'))
         self.assertEqual(clearances.one('ClearanceDetails')['TraceToBoard'], 7)
         self.assertEqual(clearances.one('ClearanceDetails')['ViaToVia'], 12)
         self.assertEqual(drc.one('LaySizes/LaySize')['MaxNonPlatedHole'], 6)

@@ -3,6 +3,7 @@ import math
 from functools import lru_cache
 
 from ....common.conversion import import_notice
+from ....common.import_tree import assign_fields
 from ....common.legacy_labels import LegacyLabelSlot
 from ....common.text.markings import MarkingStyle, marking_width
 from ...model.markings import NAMES, SIDES
@@ -29,15 +30,16 @@ def _globals(board, choices):
             raise DipError(f'unknown legacy global marking choice {category}')
         if (name := _CATEGORIES.get(category)) is not None:
             placements[name] = [1, alignment]
+    settings = []
     for name, (show, alignment) in placements.items():
         for side in SIDES:
-            board.set_field(name+'_Global_'+side+'Show', show if side == 'Silk' else 2)
-            board.set_field(name+'_Global_'+side+'Align', alignment if side == 'Silk' else 7)
+            settings.append((name+'_Global_'+side+'Show', show if side == 'Silk' else 2))
+            settings.append((name+'_Global_'+side+'Align', alignment if side == 'Silk' else 7))
+    assign_fields(board, settings)
 
 
 def _write(owner, prefix, values):
-    for property_name, value in zip(_PROPERTIES, values):
-        owner.set_field(prefix+property_name, value)
+    assign_fields(owner, ((prefix+name, value) for name, value in zip(_PROPERTIES, values)))
 
 
 def modernize_markings(decoded, *, layout):

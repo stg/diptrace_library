@@ -66,19 +66,16 @@ def _booleans(root):
             _boolean(node, 11)
 
 
-def _default(parent, name, *values, omit=False):
+def _default(parent, name, *values):
     node = parent.add(name, *values)
-    node.annotations['generated_default'] = 'not present in public schematic ASC'
-    if omit:
-        node.annotations['asc_omit'] = 'not present in public schematic ASC'
     return node
 
 
 def _pages(schematic):
     pages = schematic.one('Pages')
     for page in pages.children('Page'):
-        _default(page, 'FontLineWidth', -2, omit=True)
-        titles = _default(page, 'TitleBlocks', omit=True)
+        _default(page, 'FontLineWidth', -2)
+        titles = _default(page, 'TitleBlocks')
         for index in range(6):
             grid = titles.add('TitleBlock', index, '')
             grid.add('Width', 0)
@@ -101,7 +98,7 @@ def _tables(schematic):
             unpack_asc_cell_text(cell)
 
 
-def import_schematic(document):
+def import_schematic(document, *, _take_root=False):
     """Return detached owned data, explicitly filling ASC's omitted fields.
 
     Supports the public schematic-46 dialect only. Unknown fields are retained;
@@ -112,8 +109,19 @@ def import_schematic(document):
         raise ValueError('ASC schematic input is required')
     if document.one('/Source').values != ('DipTrace-Schematic', 46):
         raise ValueError('semantic ASC input supports DipTrace-Schematic version 46')
-    document.rebuild(force=False)
-    view = Document(document.root.clone(), representation='schematic')
+    document._synchronize(force=False)
+    # Normal parse owns its fresh syntax tree exclusively. Explicit source-view
+    # conversion keeps the caller's document independent by cloning it.
+    root = document.root if _take_root else document.root.clone()
+    if _take_root:
+        from ....common.references import References
+        document.root = Element('')
+        document.root._document = document
+        document.references = References(document)
+        document._reference_validator = None
+        document._identity_index = None
+        root._document = None
+    view = Document(root, representation='schematic')
     view._automatic_structure = False
     _booleans(view.root)
     units = view.one('/Units')
@@ -130,8 +138,8 @@ def import_schematic(document):
             unpack_symbol_shape(shape)
         unpack_pattern(part.one('Pattern'))
         supplier = part.one('Suppliers')
-        _default(supplier, 'SourceLocator', '', omit=True)
-        _default(supplier, 'Prices', omit=True)
+        _default(supplier, 'SourceLocator', '')
+        _default(supplier, 'Prices')
     for index, shape in enumerate(schematic.select('Shapes/Shape')):
         shape.set_values(index)
         unpack_symbol_shape(shape)
@@ -139,7 +147,7 @@ def import_schematic(document):
         if orientation is not None:
             orientation.move_to(stored_data(shape))
     for index, node in enumerate(schematic.select('Nets/Net')):
-        field = _default(node, 'HiddenId', index, omit=True)
+        field = _default(node, 'HiddenId', index)
     unpack_cache(schematic)
     from ..dch.labels import (discard_legacy_label_slots)
     discard_legacy_label_slots(schematic)
@@ -164,15 +172,10 @@ def import_schematic(document):
     bind_schematic_references(view)
     from ...model.symbol_text import (refresh_symbol_text)
     refresh_symbol_text(view)
-    view.rebuild(force=False)
+    view._synchronize(force=False)
     from ...editing.route_normalization import (normalize_imported_routes)
     normalize_imported_routes(view)
-    for node in view.root.walk(include_self=True):
-        if node.kind in ('', 'Part', 'Pattern', 'Shape', 'Model3D', 'Definition', 'CacheLib', 'Pad'):
-            node.annotations['requires_asc_projection'] = True
-        node._syntax = None
-        node._dirty = False
-        node._reordered = False
+    view.root._mark_loaded(clear_syntax=True)
     view._automatic_structure = True
     return view
 

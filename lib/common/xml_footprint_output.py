@@ -7,14 +7,14 @@ from .xml_footprint_vocabulary import DRAWING_TYPES, LAYERS, TEXT_SHOW, HORZ, VE
 from .model import Element
 
 
-def project_model3d(model, *, units, variable_fallback=True):
-    result = Element('Model3D')
+def project_model3d(model, *, units, variable_fallback=True, _factory=Element):
+    result = _factory('Model3D')
     for name in ('Mirror', 'NoSearch'):
         set_attribute(result, name, model.scalar(name))
     set_attribute(result, 'Units', enum_text(model.scalar('Units'), ('mm', 'mil', 'inch', 'Wings'), negative='Wings'))
-    point_attributes(result, model.one('IPC_XOff').arguments[0], model.one('IPC_YOff').arguments[0],
+    point_attributes(result, model._field_arguments('IPC_XOff')[0], model._field_arguments('IPC_YOff')[0],
                      units, names=('IPC_XOff', 'IPC_YOff'))
-    set_attribute(result, 'AutoHeight', numeric(units.length(model.one('AutoHeight').arguments[0])))
+    set_attribute(result, 'AutoHeight', numeric(units.length(model._field_arguments('AutoHeight')[0])))
     set_attribute(result, 'AutoColor', model.scalar('AutoColor'))
     set_attribute(result, 'Type', enum_text(model.scalar('Type'), ('File', 'IPC-7351', 'Outline')))
     set_attribute(result, 'KeepPins', model.scalar('KeepPins'))
@@ -29,7 +29,7 @@ def project_model3d(model, *, units, variable_fallback=True):
     for name in ('Rotate', 'Offset', 'Zoom'):
         target = result.add(name)
         for axis in ('X', 'Y', 'Z'):
-            value = model.one(name+'/'+axis).arguments[0]
+            value = model._field_arguments(name+'/'+axis)[0]
             if name == 'Offset':
                 value = units.length(value)
                 if axis == 'Y':
@@ -39,9 +39,9 @@ def project_model3d(model, *, units, variable_fallback=True):
 
 
 def project_drawing(shape, *, index, units, group=-1, pad_id=-1,
-                    fractional_font=True, physical_font_width=True):
+                    fractional_font=True, physical_font_width=True, _factory=Element):
     """Project physical drawing data; callers supply their resolved local keys."""
-    result = Element('Shape')
+    result = _factory('Shape')
     kind = shape.scalar('Type')
     for name, value in (('Id', index), ('Type', enum_text(kind,DRAWING_TYPES)),
                         ('Locked',shape.scalar('Locked')), ('Layer',enum_text(shape.scalar('Layer'),LAYERS))):
@@ -49,12 +49,12 @@ def project_drawing(shape, *, index, units, group=-1, pad_id=-1,
     if kind == 7:
         for public, own in (('FontVector','VectorFont'),('FontName','FontName'),('FontScale','FontScale'),
                             ('LineSpacing','LineSpacing')):
-            set_attribute(result,public,shape.one(own).arguments[0])
-        width = shape.one('FontWidth').arguments[0]
+            set_attribute(result,public,shape._field_arguments(own)[0])
+        width = shape._field_arguments('FontWidth')[0]
         set_attribute(result,'FontWidth',stroke_width(width,units) if physical_font_width else width)
         project_size(shape,result,fractional=fractional_font)
         set_attribute(result,'TextShow',enum_text(shape.scalar('TextShow'),TEXT_SHOW))
-        set_attribute(result,'Angle',shape.one('TextAngle').arguments[0])
+        set_attribute(result,'Angle',shape._field_arguments('TextAngle')[0])
         for public, own, labels in (('HorzAlign','TextHorz',HORZ),('VertAlign','TextVert',VERT),
                                     ('TextAlign','TextAlign',HORZ)):
             set_attribute(result,public,enum_text(shape.scalar(own),labels,negative=labels[-1]))
@@ -62,7 +62,7 @@ def project_drawing(shape, *, index, units, group=-1, pad_id=-1,
             target = result.add('Lines')
             for line in lines:
                 field(target,'Item',line.arguments[0])
-    elif (width := shape.one('Width').arguments[0]).value != -1:
+    elif (width := shape._field_arguments('Width')[0]).value != -1:
         set_attribute(result,'LineWidth',numeric(units.length(width)))
     set_attribute(result,'AllLayers',shape.scalar('AllLayers'))
     for name, key in (('Group',group),('PadId',pad_id)):
@@ -78,9 +78,9 @@ def project_drawing(shape, *, index, units, group=-1, pad_id=-1,
 def project_dimension(dimension, *, units, attachments, group=-1, fractional_font=True,
                       physical_font_width=True, none_label='None',
                       connection_labels=('Pad', 'Shape', 'Hole', 'Terminal'),
-                      font_name_attribute=True):
+                      font_name_attribute=True, _factory=Element):
     """Serialize shared local dimension data after family attachment projection."""
-    result = Element('Dimension')
+    result = _factory('Dimension')
     set_attribute(result,'Locked',dimension.scalar('Locked'))
     set_attribute(result,'Type',enum_text(dimension.scalar('Type'),('Horizontal','Vertical','Free','Radius','Pointer')))
     for side, attachment in zip(('1','2'),attachments):
@@ -90,15 +90,15 @@ def project_dimension(dimension, *, units, attachments, group=-1, fractional_fon
             set_attribute(result,name+side,value)
     set_attribute(result,'Layer',enum_text(dimension.scalar('Layer'),LAYERS))
     for suffix in ('1','2','D'):
-        point_attributes(result,dimension.one('X'+suffix).arguments[0],dimension.one('Y'+suffix).arguments[0],
+        point_attributes(result,dimension._field_arguments('X'+suffix)[0],dimension._field_arguments('Y'+suffix)[0],
                          units,names=('X'+suffix,'Y'+suffix))
-    set_attribute(result,'ArrowSize',numeric(units.length(dimension.one('ArrowSize').arguments[0])))
+    set_attribute(result,'ArrowSize',numeric(units.length(dimension._field_arguments('ArrowSize')[0])))
     set_attribute(result,'Units',enum_text(dimension.scalar('Units'),('Common','inch','mil','mm')))
     for public, own in (('FontVector','VectorFont'),('FontScale','FontScale'),
                         ('ShowUnits','ShowUnits'),('Angle','Angle'),('ExternalRadius','ExternalRadius'),
                         ('PointerMode','PointerMode')):
-        set_attribute(result,public,dimension.one(own).arguments[0])
-    width = dimension.one('FontWidth').arguments[0]
+        set_attribute(result,public,dimension._field_arguments(own)[0])
+    width = dimension._field_arguments('FontWidth')[0]
     set_attribute(result,'FontWidth',stroke_width(width,units) if physical_font_width else width)
     project_size(dimension,result,fractional=fractional_font)
     if group >= 0:

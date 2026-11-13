@@ -3,6 +3,7 @@ from decimal import Decimal
 import math
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport
 from lib.common.text.layout import TextLayout
@@ -159,8 +160,8 @@ class CalculatedMarkingTests(unittest.TestCase):
         self.assertEqual(point(actual[2, 0]), (0, -3))
         self.assertEqual(point(actual[1, 0]), (0, 3))
         self.assertEqual(actual[3, 0].one('TextLine/pt').values, ('',))
-        self.assertEqual(point(actual[3, 0]), (Decimal('6.3'), -3))
-        self.assertEqual(point(actual[7, 0]), (Decimal('6.3'), Decimal('-1.65')))
+        self.assertEqual(point(actual[3, 0]), (6.3, -3))
+        assert_float_facts(self,point(actual[7, 0]), (Decimal('6.3'), Decimal('-1.65')))
         self.assertEqual(calls, [('', 'Example font', 25), ('Vendor', 'Example font', 25)])
         self.assertIs(resolved.text_layout, context.text_layout)
         self.assertEqual(labels(document), {})
@@ -175,7 +176,7 @@ class CalculatedMarkingTests(unittest.TestCase):
         view, _ = prepare_export(document, destination='asc', report=ConversionReport())
         actual = labels(view)
         self.assertEqual(point(actual[2, 0]), (1, 0))
-        self.assertEqual(actual[2, 0]['TextAngle'], Decimal(str(-math.pi/2)))
+        assert_float_facts(self,actual[2, 0]['TextAngle'], Decimal(str(-math.pi/2)))
         self.assertEqual(point(actual[2, 1]), (-1, -10))
         self.assertEqual(actual[2, 0]['FontSize'], 5.5)
         self.assertEqual(actual[2, 1]['FontSize'], 5.5)
@@ -196,7 +197,7 @@ class CalculatedMarkingTests(unittest.TestCase):
                 enable(component, alignment=alignment)
                 view, _ = prepare_export(document, destination='asc', report=ConversionReport())
                 shape = labels(view)[2, 0]
-                self.assertEqual((point(shape), shape['TextHorz'], shape['TextVert'], shape['TextAngle']), values)
+                assert_float_facts(self,(point(shape), shape['TextHorz'], shape['TextVert'], shape['TextAngle']), values)
 
     def test_custom_fields_generate_current_identity_bound_text(self):
         document, component = design()
@@ -235,7 +236,7 @@ class CalculatedMarkingTests(unittest.TestCase):
                     view, _ = prepare_export(document, destination='asc', report=ConversionReport())
                     actual = labels(view)
                     self.assertEqual(point(actual[1, 0]), (x, y))
-                    self.assertEqual(actual[1, 0]['TextAngle'], Decimal(str(angle)))
+                    assert_float_facts(self,actual[1, 0]['TextAngle'], Decimal(str(angle)))
                     self.assertEqual(point(actual[2, 0]), (-expected[0] if mirrored else expected[0], expected[1]))
                     self.assertEqual(point(actual[2, 1]), (0, -3))
                     self.assertEqual(dumps(document, preserve=False), before)

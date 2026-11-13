@@ -20,7 +20,6 @@ def symbol_data(name='', reference=''):
         part.add(key)
     supplier = part.add('Suppliers')
     fields(supplier, PartNumber='', Manufacturer='', Pattern='', Supplier='', SourceLocator='', Currency='')
-    supplier.one('SourceLocator').annotations['asc_omit'] = 'not present in ASC'
     return part
 
 

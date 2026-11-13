@@ -5,3 +5,7 @@ from .binary import Cursor
 
 class Reader(RecordReader, Cursor):
     source_format = 'dip'
+
+    def record_definition(self, parent):
+        from ...model.definitions import definition
+        return definition(parent)

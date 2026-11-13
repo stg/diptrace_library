@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.font_codec import compatibility_size
@@ -46,8 +47,8 @@ class XmlOutputVersionTests(unittest.TestCase):
     def assert_facts(self, current, expected):
         self.assertEqual(current.keys(), expected.keys())
         for path, value in expected.items():
-            if isinstance(value, (int, Decimal)) and not isinstance(value, bool):
-                self.assertLessEqual(abs(current[path]-value), Decimal('1e-23'), path)
+            if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+                assert_float_facts(self, current[path], value, path)
             else:
                 self.assertEqual(current[path], value, path)
 
@@ -82,8 +83,8 @@ class XmlOutputVersionTests(unittest.TestCase):
                         self.assert_facts(signature(current.one('/Board/Panel')), expected)
                         self.assertEqual(current.one('/Board')['RailLeft'], Decimal('5.25'))
                         reopened = current.one('/Board/Tables/Table/Cells/Cell[1]')
-                        self.assertLessEqual(abs(reopened['LineSpacing']-cell['LineSpacing']), Decimal('1e-23'))
-                        self.assertLessEqual(abs(reopened['FontWidth']-cell['FontWidth']), Decimal('1e-23'))
+                        assert_float_facts(self, reopened['LineSpacing'], cell['LineSpacing'])
+                        assert_float_facts(self, reopened['FontWidth'], cell['FontWidth'])
         self.assertEqual(model_text(document, preserve=False), before)
 
     def test_route_widths_and_signed_phase_lengths_use_distinct_old_domains(self):
@@ -100,9 +101,9 @@ class XmlOutputVersionTests(unittest.TestCase):
                     point = current.one('/Board/Nets/Net[1]/Traces/Trace[1]/Points/Point[1]')
                     self.assertEqual((point['PhaseFwd'], point['PhaseBack']), (Decimal('.375'), Decimal('-.625')))
                     self.assertEqual(point['Width'], ordinary['Width'])
-                    self.assertEqual(current.one(separate_path)['Width'], Decimal('.4572'))
+                    self.assertEqual(current.one(separate_path)['Width'], 0.4572)
                     raw = output.one('/Source/Board/DifferentialPairs/DifferentialPair/PosSeparateTraces/PosTrace/Points/Point[1]')
-                    self.assertEqual(raw['Width'], Decimal('.4572'))
+                    assert_float_facts(self,raw['Width'], Decimal('.4572'))
 
     def test_equal_geometry_does_not_turn_independent_pad_style_into_inheritance(self):
         document = read(library_source(), report=ConversionReport())
@@ -243,5 +244,5 @@ class XmlOutputVersionTests(unittest.TestCase):
             self.assertEqual(result.one('Library')['Version'], XML_APPLICATION_VERSIONS[version])
             self.assertFalse(any(node.child(name) is not None for node in result.walk(include_self=True)
                                  for name in ('FontSizeFloat', 'FontMono', 'DefStyle')))
-            self.assertEqual(result.one('Components/Component/Part/Pins/Pin/NameFont')['Width'], Decimal('.4572'))
+            self.assertEqual(result.one('Components/Component/Part/Pins/Pin/NameFont')['Width'], 0.4572)
         self.assertEqual(model_text(document, preserve=False), before)

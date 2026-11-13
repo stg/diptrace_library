@@ -16,7 +16,7 @@ def read_dimension_properties(reader, dimension):
 
 
 def read_dimensions(reader, owner):
-    dimensions = owner.add('Dimensions')
+    dimensions = reader.add(owner, 'Dimensions')
     for index in range(reader.count('footprint dimensions')):
         dimension = reader.record(dimensions, 'Dimension')
         dimension.set_values(index)

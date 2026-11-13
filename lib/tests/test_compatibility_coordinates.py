@@ -2,6 +2,7 @@
 import unittest
 
 from lib import ExportReport, new_schematic, parse_asc, parse_dch
+from lib.schematic import ImportContext
 from lib.schematic.model.objects import (new_pattern_shape, new_symbol)
 from lib.schematic.model.refs import (bind_schematic_references)
 from lib.schematic.formats.dch.binary import (Cursor)
@@ -60,7 +61,7 @@ class CompatibilityCoordinateTests(unittest.TestCase):
         before = document.to_asc_bytes()
         report = ExportReport()
         data = document.to_dch_bytes(report=report)
-        loaded = parse_dch(data)
+        loaded = parse_dch(data, context=ImportContext(retain_source=True))
         self.assertEqual(header(data, loaded), (-100000, -100000, 0, 0, 0, 0))
         self.assertEqual([point.values for point in drawing(loaded).select('Points_New/pt')], [(-20, -30)])
         notices = [row for row in report.infos if row.rule == 'dch-compatibility-range']
@@ -75,7 +76,7 @@ class CompatibilityCoordinateTests(unittest.TestCase):
         document = sample()
         drawing(document).one('Points_New/pt[1]').set_values(-40, -50)
         data = document.to_dch_bytes(report=ExportReport())
-        loaded = parse_dch(data)
+        loaded = parse_dch(data, context=ImportContext(retain_source=True))
         self.assertEqual(drawing(loaded).one('Points_New/pt[1]').values, (-40, -50))
         self.assertEqual(header(data, loaded), (-100000, -100000, 0, 0, 0, 0))
         self.assertEqual(drawing(document).one('Points_New/pt[1]').values, (-40, -50))

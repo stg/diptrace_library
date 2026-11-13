@@ -3,6 +3,7 @@ import math
 import unittest
 
 from lib import new_schematic, parse, parse_asc, parse_dch
+from lib.schematic import ImportContext
 from lib.schematic.model.pads import (empty_pad)
 from lib.schematic.formats.dch.binary import (Cursor)
 from lib.schematic.model.objects import (new_symbol)
@@ -42,7 +43,7 @@ class PadOrientationTests(unittest.TestCase):
             with self.subTest(angle=angle):
                 pad.one('PadAngle').set_values(angle)
                 data=source.to_dch_bytes()
-                loaded=parse_dch(data)
+                loaded=parse_dch(data,context=ImportContext(retain_source=True))
                 current=placed_pad(loaded)
                 self.assertEqual(data[current.source.start],expected)
                 self.assertAlmostEqual(float(current.scalar('PadAngle')),angle,places=4)
@@ -64,14 +65,14 @@ class PadOrientationTests(unittest.TestCase):
         public=raw.one('/Schematic/Components/Part/Pattern/Pads/Pad')
         self.assertEqual(public.scalar('Inverted'),'Y')
         data=source.to_dch_bytes()
-        loaded=parse_dch(data)
+        loaded=parse_dch(data,context=ImportContext(retain_source=True))
         self.assertEqual(data[placed_pad(loaded).source.start],0)
         self.assertFalse(pad.children('Inverted'))
 
     def test_standard_choice_remains_independent_of_the_current_angle(self):
         source,_=sample(math.pi/4)
         data=source.to_dch_bytes()
-        offset=standard_flag_offset(data,parse_dch(data))
+        offset=standard_flag_offset(data,parse_dch(data,context=ImportContext(retain_source=True)))
         varied=data[:offset]+b'\x01'+data[offset+1:]
         current=parse_dch(varied)
         pad=placed_pad(current)

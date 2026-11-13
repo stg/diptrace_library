@@ -16,10 +16,9 @@ def new_page(name='Sheet 1'):
            ZoneStandard=0, ZoneFontName='Arial', ZoneFontSize=6, ZoneBorder=False,
            HorzZoneBorder=0, VertZoneBorder=0, PageXPos=0, PageyPos=0, PageScale=1,
            PageType=0, PageHiddenId=0, FLeft=0, FTop=0, FRight=0, FBottom=0)
-    page.add('FontLineWidth', -1).annotations['asc_omit'] = 'zone font pen is not present in ASC'
+    page.add('FontLineWidth', -1)
     from ...common.title_records import new_title_blocks
-    titles = page.append(new_title_blocks())
-    titles.annotations['asc_omit'] = 'format schematic ASC omits title grids'
+    page.append(new_title_blocks())
     from .definitions import PAGE
     return page.bind_schema(PAGE)
 
@@ -49,7 +48,7 @@ def new_schematic(*, sheet_name='Sheet 1'):
     schematic = document.root.add('Schematic')
     pages = schematic.add('Pages')
     pages.append(new_page(sheet_name))
-    fields(schematic, PictureCount=0, HidePower=False, OriginX=0, OriginY=0,
+    fields(schematic, HidePower=False, OriginX=0, OriginY=0,
            PartFontVector=True, PartFontWidth=-1, PartFontScale=1, ProjectDir='',
            ProjectLibs_Name='', ProjectLibs_Type=0, ProjectLibs_Content=0,
            ProjectLibs_Sorted=False, DesignCache_Count=-1)

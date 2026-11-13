@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.model import Document
@@ -96,7 +97,7 @@ class XmlComponentOutputTests(unittest.TestCase):
         for _ in range(3):
             document, output = reopen(document)
             self.assertFalse(output.one('/Source/Board/Components/Component').child('PatternStyle'))
-            self.assertEqual(signature(document.one(COMPONENT)), expected)
+            assert_float_facts(self,signature(document.one(COMPONENT)), expected)
             self.assertEqual(signature(document.one('/Board/CacheLib')), cache)
         # An explicit physical style cannot prevent via-pad initialization.
         # Report the omitted local geometry and retain the authoring model.
@@ -133,7 +134,7 @@ class XmlComponentOutputTests(unittest.TestCase):
         document.one('/Board/HierarchySheets/HSheet[1]/UpdateIds/UId')['Id'] = 400
         expected = signature(document.one(COMPONENT))
         rebuilt, output = reopen(document)
-        self.assertEqual(signature(rebuilt.one(COMPONENT)), expected)
+        assert_float_facts(self,signature(rebuilt.one(COMPONENT)), expected)
         for path in ('ViaStyles', 'Layers', 'HierarchySheets', 'AssemblyVariants'):
             self.assertEqual(signature(rebuilt.one('/Board/'+path)), signature(document.one('/Board/'+path)))
         exclusion = rebuilt.one(COMPONENT+'/AssemblyExclude/Item')
@@ -164,7 +165,7 @@ class XmlComponentOutputTests(unittest.TestCase):
         current = document
         for _ in range(3):
             current, _ = reopen(current)
-            self.assertEqual(signature(current.one(COMPONENT)), expected)
+            assert_float_facts(self,signature(current.one(COMPONENT)), expected)
             self.assertEqual(signature(current.one('/Board/CacheLib')), cache)
         self.assertEqual(model_text(document, preserve=False), before)
 
@@ -181,7 +182,7 @@ class XmlComponentOutputTests(unittest.TestCase):
         policy_path = '/InternalConnections[1]/IntCon[1]'
         expected[policy_path+'/Pad'] = expected[policy_path+'/Members'][0]
         rebuilt, output = reopen(document)
-        self.assertEqual(signature(rebuilt.one(COMPONENT)), expected)
+        assert_float_facts(self,signature(rebuilt.one(COMPONENT)), expected)
         self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), cache)
         pair = output.one('/Source/Board/Components/Component/IntConRecords/Item')
         self.assertEqual((pair['X'], pair['Y']), (17, 41))
@@ -213,7 +214,7 @@ class XmlComponentOutputTests(unittest.TestCase):
         self.assertEqual(members.one('HideLayer/Item')['Lay'], 2)
         expected = signature(document.one(COMPONENT))
         rebuilt, _ = reopen(document)
-        self.assertEqual(signature(rebuilt.one(COMPONENT)), expected)
+        assert_float_facts(self,signature(rebuilt.one(COMPONENT)), expected)
         self.assertFalse(rebuilt.one(COMPONENT+'/Pattern/Pads/Pad[1]')['Standard'])
         self.assertEqual(rebuilt.one(COMPONENT+'/Pattern/Pads/Pad[1]')['ShieldGroup'], 0)
 
@@ -230,7 +231,7 @@ class XmlComponentOutputTests(unittest.TestCase):
                     self.assertEqual(actual.keys(), expected.keys())
                     for path, value in expected.items():
                         if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
-                            self.assertLessEqual(abs(Decimal(str(actual[path]))-Decimal(str(value))), Decimal('1e-28'), path)
+                            assert_float_facts(self, actual[path], value, path)
                         else:
                             self.assertEqual(actual[path], value, path)
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport
 from lib.common.font_codec import read_font_properties, write_font_properties
@@ -125,7 +126,7 @@ class DipGraphicOutputTests(unittest.TestCase):
         document = design()
         board, _, pours, _ = read_sections(document, report=ConversionReport())
         self.assertTrue(pours[0].regions_counted)
-        self.assertEqual(board.one('CopperPours/CopperPour/Fill/SpokeLine/Line')['Width'], Decimal('.7'))
+        self.assertEqual(board.one('CopperPours/CopperPour/Fill/SpokeLine/Line')['Width'], 0.7)
         line = document.one('/Board/CopperPours/CopperPour/Fill/Lines/Line')
         line['Region'] = None
         board, _, pours, _ = read_sections(document, report=ConversionReport())
@@ -141,7 +142,7 @@ class DipGraphicOutputTests(unittest.TestCase):
         pour['MinimumArea'] = 2
         first = reopen(document, report=ConversionReport())
         area = first.one(pour.path)['MinimumArea']
-        self.assertEqual(area, Decimal('1.99996164'))
+        assert_float_facts(self,area, 1.99996164)
         # A threshold rounded to 1e-4 has area error <= 2*sqrt(A)*5e-5 + (5e-5)^2.
         self.assertLess(abs(area-2), Decimal('.000142'))
         for _ in range(3):

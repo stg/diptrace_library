@@ -40,22 +40,22 @@ def project_sheet_settings(schematic, *, units: XmlUnits, active_sheet, version=
         field(sheet, 'Type', enum_text(page_type, ('Normal', 'Hierarchy Block')))
         if page_type:
             field(sheet, 'BlockId', page.scalar('PageHiddenId'))
-        x, y = units.point(page.one('PageXPos').arguments[0], page.one('PageyPos').arguments[0])
+        x, y = units.point(page._field_arguments('PageXPos')[0], page._field_arguments('PageyPos')[0])
         number(sheet, 'XPos', x)
         number(sheet, 'YPos', y)
-        number(sheet, 'Scale', page.one('PageScale').arguments[0])
+        number(sheet, 'Scale', page._field_arguments('PageScale')[0])
         for public, own in (('SheetWidth', 'PageWidth'), ('SheetHeight', 'PageHeight'),
                             ('LeftMargin', 'FLeft'), ('TopMargin', 'FTop'),
                             ('RightMargin', 'FRight'), ('BottomMargin', 'FBottom')):
-            length(sheet, public, page.one(own).arguments[0], units)
+            length(sheet, public, page._field_arguments(own)[0], units)
         zones = sheet.add('BorderZones')
         for public, own in (('Visible', 'Zones'), ('HorzZones', 'HorzZones'), ('VertZones', 'VertZones'),
                             ('Standard', 'ZoneStandard'), ('FontName', 'ZoneFontName'), ('FontSize', 'ZoneFontSize')):
             field(zones, public, page.scalar(own))
-        field(zones, 'FontLineWidth', stroke_width(page.one('FontLineWidth').arguments[0], units))
+        field(zones, 'FontLineWidth', stroke_width(page._field_arguments('FontLineWidth')[0], units))
         field(zones, 'Border', _boolean(page.scalar('ZoneBorder')))
-        length(zones, 'HorzBorderSize', page.one('HorzZoneBorder').arguments[0], units)
-        length(zones, 'VertBorderSize', page.one('VertZoneBorder').arguments[0], units)
+        length(zones, 'HorzBorderSize', page._field_arguments('HorzZoneBorder')[0], units)
+        length(zones, 'VertBorderSize', page._field_arguments('VertZoneBorder')[0], units)
         from .fonts import (project_size)
         project_size(page, zones, size='ZoneFontSize', mono=None, version=version, attribute=False)
         from .tables import (append_title_blocks)
@@ -82,8 +82,8 @@ def project_settings(schematic, *, units: XmlUnits, grid_snap, style: MarkingSty
         field(markings, 'FontName', family)
     from .fonts import (project_size)
     project_size(settings, markings, size='PartFontSize', mono='PartFontMono', version=version, attribute=False)
-    field(markings, 'FontWidth', stroke_width(schematic.one('PartFontWidth').arguments[0], units))
-    number(markings, 'FontScale', schematic.one('PartFontScale').arguments[0])
+    field(markings, 'FontWidth', stroke_width(schematic._field_arguments('PartFontWidth')[0], units))
+    number(markings, 'FontScale', schematic._field_arguments('PartFontScale')[0])
     color_mode = settings.scalar('UsePartFontColor') if use_part_font_color is None else use_part_font_color
     field(markings, 'UsePartFontColor', _boolean(color_mode))
     field(markings, 'FontColor', settings.scalar('PartFontColor', style.font_color))
@@ -109,17 +109,17 @@ def project_settings(schematic, *, units: XmlUnits, grid_snap, style: MarkingSty
     grid = result.add('Grid')
     field(grid, 'Visible', _boolean(settings.scalar('GridEnabled')))
     field(grid, 'Snap', _boolean(grid_snap))
-    length(grid, 'Size', settings.one('GridSize').arguments[0], units)
+    length(grid, 'Size', settings._field_arguments('GridSize')[0], units)
     origin = result.add('Origin')
     field(origin, 'Visible', _boolean(settings.scalar('OriginEnabled')))
     field(origin, 'AxisColor', settings.scalar('clAxis'))
-    x, y = units.point(schematic.one('OriginX').arguments[0], schematic.one('OriginY').arguments[0])
+    x, y = units.point(schematic._field_arguments('OriginX')[0], schematic._field_arguments('OriginY')[0])
     number(origin, 'X', x)
     number(origin, 'Y', y)
     widths = result.add('LineWidth')
     for public, own in (('Wire', 'WireLineWidth'), ('NodeSize', 'NodeSize'), ('Bus', 'BusLineWidth'),
                         ('Table', 'TableLineWidth'), ('Titles', 'TitlesLineWidth')):
-        length(widths, public, settings.one(own).arguments[0], units)
+        length(widths, public, settings._field_arguments(own)[0], units)
     buses = result.add('BusConnections')
     field(buses, 'Show', _choice(settings, 'BusConNetName', 'BusConNetNumber', ('NetName', 'Number')))
     field(buses, 'Position', _choice(settings, 'BusConAbove', 'BusConBelow', ('Above', 'Below')))

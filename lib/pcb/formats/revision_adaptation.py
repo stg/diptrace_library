@@ -9,11 +9,13 @@ def prepare_binary_revision(document, *, version, report=None):
         return
     board = document.one('/Board')
     rounded, mono, shields, trace_shields = [], [], [], []
-    nodes = board.walk(include_self=True) if version < 61 else ()
+    nodes = board._record_walk(include_self=True) if version < 61 else ()
     for node in nodes:
         if node.schema is None:
             continue
         for name in node.schema.fields:
+            if not name.endswith(('FontSize', 'FontMono', 'ShieldGroup')):
+                continue
             field = node.child(name)
             if field is None:
                 continue

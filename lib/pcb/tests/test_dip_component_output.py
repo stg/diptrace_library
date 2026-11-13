@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.font_codec import read_font_properties, write_font_properties
 from lib.common.footprint_codec import read_pad_mask_states
@@ -85,7 +86,7 @@ class DipComponentOutputTests(unittest.TestCase):
         self.assertEqual(rebuilt.one('Angle').values, (Decimal('17.25'),))
         self.assertEqual(rebuilt.one('MarkingFontSize').values, (Decimal('1.25'),))
         self.assertEqual([node.values[1] for node in rebuilt.select('Pattern/Pads/Pad')], ['', '2', '1', ''])
-        self.assertEqual(rebuilt.one('Pattern/Pads/Pad[3]/PadAngle').values, (Decimal('.37'),))
+        self.assertEqual(rebuilt.one('Pattern/Pads/Pad[3]/PadAngle').values, (0.37,))
         restored = rebuilt.one('Pattern/Shapes/Shape[3]')
         self.assertEqual([row.values[0] for row in restored.select('TextLine/pt')], ['literal Ω', 'second line'])
         self.assertEqual(restored.one('FontSize').values, (Decimal('2.125'),))
@@ -155,12 +156,12 @@ class DipComponentOutputTests(unittest.TestCase):
         rebuilt, _, _ = read_sections(document)
         pad = rebuilt.one('Pattern/Pads/Pad[2]')
         self.assertEqual(pad.one('DisableTopMask').values, (3,))
-        self.assertEqual(pad.one('PadHoleH').values, (Decimal('1.2'),))
-        self.assertEqual(pad.one('PadTerminal/Angle').values, (Decimal('.4'),))
+        self.assertEqual(pad.one('PadHoleH').values, (1.2,))
+        assert_float_facts(self,pad.one('PadTerminal/Angle').values, (Decimal('.4'),))
         self.assertEqual(pad.one('PadTerminal/ShapePoints/pt').values, (1, 2))
         self.assertEqual(pad.one('PadMask_TopSegments/pt').values, (1, 2, 3, 4))
         self.assertEqual(pad.one('HideLayer/Item').values, (1,))
-        self.assertEqual(pad.one('CustomSpokes/CustomSpoke').values, (0, 2, 4, Decimal('.3')))
+        assert_float_facts(self,pad.one('CustomSpokes/CustomSpoke').values, (0, 2, 4, Decimal('.3')))
         self.assertEqual(rebuilt.one('Pattern/Holes/Hole[2]').values, (True, False, 1, 2, 3, 4, -1))
         self.assertEqual(rebuilt.one('Pattern/Model3D/Rotate/Z').values, (Decimal('37.25'),))
         self.assertEqual(rebuilt.one('Pattern/Model3D/IPC_XOff').values, (Decimal('1.25'),))

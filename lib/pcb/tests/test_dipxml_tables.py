@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.cell_records import CELL
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.references import Property, ReferenceError
@@ -48,11 +49,11 @@ class PcbXmlTableTests(unittest.TestCase):
         self.assertEqual((table['Id'], table['Orientation'], table['Layer']), (0, 3, 1))
         self.assertEqual((table['X1'], table['Y1'], table['X2'], table['Y2']), (3, -6, 9, -12))
         self.assertEqual((table['DefCellWidth'], table['DefCellHeight']), (15, 18))
-        self.assertEqual((table['DefFontSize'], table['DefFontWidth'], table['DefFontMono']),
-                         (Decimal('3.25'), Decimal('.6'), True))
+        assert_float_facts(self,(table['DefFontSize'], table['DefFontWidth'], table['DefFontMono']),
+                         (3.25, 0.6, True))
         self.assertEqual(cell['Text'], 'first\n\nlast')
         self.assertIsNone(cell.child('TextLines'))
-        self.assertEqual((cell['FontSize'], cell['FontWidth'], cell['FontMono']),
+        assert_float_facts(self,(cell['FontSize'], cell['FontWidth'], cell['FontMono']),
                          (Decimal('2.5'), Decimal('.3'), True))
         self.assertEqual((cell['Column'], cell['Row'], empty['Column'], empty['Row']), (0, 0, 1, 0))
         self.assertEqual(empty['Text'], '')
@@ -92,11 +93,11 @@ class PcbXmlTableTests(unittest.TestCase):
         old = read(source(version='4.3.0.3'), report=ConversionReport()).one('/Board/Tables/Table')
         modern = read(source(version='4.3.0.5'), report=ConversionReport()).one('/Board/Tables/Table')
         self.assertEqual((old.one('AutoUpdate')['PickOffY'], modern.one('AutoUpdate')['PickOffY']), (-9, 9))
-        self.assertEqual((old['DefFontWidth'], modern['DefFontWidth']), (Decimal('.2'), Decimal('.2')))
-        self.assertEqual(modern.one('Cells/Cell[1]')['FontWidth'], Decimal('.1'))
-        self.assertEqual(modern.one('Cells/Cell[1]')['LineSpacing'], Decimal('3.6'))
+        self.assertEqual((old['DefFontWidth'], modern['DefFontWidth']), (0.2, 0.2))
+        assert_float_facts(self,modern.one('Cells/Cell[1]')['FontWidth'], Decimal('.1'))
+        assert_float_facts(self,modern.one('Cells/Cell[1]')['LineSpacing'], Decimal('3.6'))
         current = read(source(), report=ConversionReport()).one('/Board/Tables/Table')
-        self.assertEqual(current.one('Cells/Cell[1]')['LineSpacing'], Decimal('1.2'))
+        assert_float_facts(self,current.one('Cells/Cell[1]')['LineSpacing'], Decimal('1.2'))
         text = TABLES.replace('Type="BOM"', 'Type="Pick and Place"').replace('RowType="Name and Value"', 'RowType="Bottom"')
         table = read(source(text), report=ConversionReport()).one('/Board/Tables/Table')
         self.assertEqual((table['DocType'], table.one('AutoUpdate')['RowType']), (3, 2))
@@ -120,7 +121,7 @@ class PcbXmlTableTests(unittest.TestCase):
         current = document.one('/Board/Tables/Table')
         self.assertEqual((current['Name'], current['DefFontName'], current['DefFontSize']), ('Table', 'Tahoma', 8))
         self.assertEqual((current['DefCellWidth'], current['DefCellHeight'], current['X2'], current['Y2']), (45, 12, 90, 24))
-        self.assertEqual((current['DefFontWidth'], current['DefLineSpacing']), (-2, Decimal('1.2')))
+        self.assertEqual((current['DefFontWidth'], current['DefLineSpacing']), (-2, 1.2))
 
     def test_malformed_grid_and_noninteger_component_members_are_rejected(self):
         for text in (TABLES.replace('<Item>3</Item></RowHeights>', '</RowHeights>'),

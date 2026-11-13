@@ -1,7 +1,9 @@
 """Core PCB authoring records, extending shared physical footprint definitions."""
 from dataclasses import replace
 
-from ...common.schema import Child, Field, Record, MISSING
+from ...common.schema import Child, Field, Record, MISSING, with_units
+from ...common.schema_catalogue import declared_child
+from .catalogue import pcb_schema
 from ...common import footprint_records as footprint
 from ...common.units import DISPLAY_UNITS
 from ...common.library_metadata import definition as metadata_definition
@@ -37,7 +39,7 @@ PAD = replace(footprint.PAD, name='PcbPad', fields={
                        description='Calculated net position; edit Net instead.'),
     'InternalConnection': connection_policies.PAD_GROUP,
     'ShieldGroup': Field('ShieldGroup', 'integer', default=-1),
-    'SignalDelay': Field('SignalDelay', 'number', default=0),
+    'SignalDelay': Field('SignalDelay', 'number', default=0, unit='delay'),
 }, children={**footprint.PAD.children,
     'HideLayer': Child('HideLayer', 'HiddenPadLayers'),
     'BlindLayer': Child('BlindLayer', 'BlindPadLayers'),
@@ -81,8 +83,8 @@ COMPONENT = Record('PcbComponent', {
     **{name: Field(name, 'number', required=True, default=0, unit='shared length')
        for name in ('X', 'Y')},
     'Angle': Field('Angle', 'number', required=True, default=0, unit='radians'),
-    'PlacementClearance': Field('PlacementClearance', 'number', default=-1, unit='shared length'),
-    'MarkingFontSize': Field('MarkingFontSize', 'number', default=5),
+    'PlacementClearance': Field('PlacementClearance', 'number', default=-1, unit='shared length', unit_sentinels=(-1,)),
+    'MarkingFontSize': Field('MarkingFontSize', 'number', default=5, unit='font size'),
     'Component_CategoryName': Field('Component_CategoryName', 'text', default=''),
     'Component_CategoryIndex': Field('Component_CategoryIndex', 'integer', default=-1),
     'Number': Field('Number', 'integer', getter=lambda component: component._ordinal(),
@@ -114,6 +116,8 @@ NET = Record('PcbNet', {
     'TeardropParams': Child('TeardropParams', pad_records.TEARDROP.name),
     'Teardrops': Child('Teardrops', teardrops.TEARDROPS.name),
 })
+NET = with_units(NET, dict.fromkeys(('Width', 'Clearance', 'MeanderGap'), 'shared length'),
+                 sentinels=dict.fromkeys(('Width', 'Clearance', 'MeanderGap'), (-1,)))
 
 
 def _collection(name, kind, record):
@@ -173,6 +177,14 @@ DOCUMENT = Record('PcbDocument', {
 
 
 def definition(node):
+    parent = node.parent
+    if parent is not None and parent.schema is not None:
+        if (record := declared_child(parent.schema, node.kind, pcb_schema())) is not None:
+            return record
+    return _definition_by_ownership(node)
+
+
+def _definition_by_ownership(node):
     if (variant := assembly_variants.definition(node)) is not None:
         return variant
     if (polygon := teardrops.definition(node)) is not None:
@@ -252,7 +264,7 @@ def definition(node):
 
 
 def establish_records(root):
-    for node in root.walk(include_self=True):
+    for node in root._record_walk(include_self=True):
         schema = definition(node)
         if schema is not None:
             if schema is PATTERN:

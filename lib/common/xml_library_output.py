@@ -38,13 +38,13 @@ def project_subfolders(cache):
     return result
 
 
-def project_category(part):
+def project_category(part, *, _factory=Element):
     prefix = 'Pattern_' if part.kind == 'Pattern' else 'Component_'
     name, index = part.scalar(prefix+'CategoryName'), part.scalar(prefix+'CategoryIndex')
     types = part.select(prefix+'CategoryTypes/CategoryType')
     if not name and index < 0 and not types:
         return None
-    result = Element('Category')
+    result = _factory('Category')
     if index >= 0:
         set_attribute(result, 'Index', index)
     if name:
@@ -56,8 +56,8 @@ def project_category(part):
                 raise ValueError(f'{row.path}: category type requires two names and two indices')
             type_name, subtype, type_id, subtype_id = row.arguments
             item = target.add('CategoryType')
-            field(item, 'Type', type_name)
-            set_attribute(item.one('Type'), 'Index', type_id)
+            child = field(item, 'Type', type_name)
+            set_attribute(child, 'Index', type_id)
             if subtype.value or subtype_id.value >= 0:
                 child = field(item, 'SubType', subtype)
                 set_attribute(child, 'Index', subtype_id)

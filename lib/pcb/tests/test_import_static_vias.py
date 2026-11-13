@@ -2,6 +2,7 @@
 import unittest
 from decimal import Decimal
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport, import_diagnostics, _set_import_format
 from lib.common.structural_edits import assembly
@@ -70,7 +71,7 @@ class StaticViaImportTests(unittest.TestCase):
                 self.assertFalse(actual['SurfacePad'])
                 for name in ('Width', 'Height', 'PadWidth', 'PadHeight'):
                     self.assertEqual(pattern[name], style['Size'])
-                self.assertEqual(facts(actual), options)
+                assert_float_facts(self,facts(actual), options)
                 self.assertIs(actual['Net'], current.one('/Board/Nets/Net'))
                 self.assertEqual(actual['Net']['Name'], 'Signal')
                 self.assertTrue(any(notice.rule == 'static-via-style' and notice.severity == 'info'

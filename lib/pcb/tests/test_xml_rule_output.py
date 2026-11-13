@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.units import XmlUnits
@@ -32,8 +33,8 @@ class XmlRuleOutputTests(unittest.TestCase):
     def assert_facts(self, actual, expected):
         self.assertEqual(actual.keys(), expected.keys())
         for name, value in expected.items():
-            if isinstance(value, (int, Decimal)) and not isinstance(value, bool):
-                self.assertLessEqual(abs(actual[name]-value), Decimal('1e-23'), name)
+            if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+                assert_float_facts(self, actual[name], value, name)
             else:
                 self.assertEqual(actual[name], value, name)
 
@@ -77,7 +78,7 @@ class XmlRuleOutputTests(unittest.TestCase):
         current, _ = reopen(document, units='mil', report=report)
         previous = current.one('/Board/LastDRC')
         self.assertIsNone(previous.one('LayClearances/LayClearance')['Layer'])
-        self.assertEqual(previous.one('LayClearances/LayClearance/ClearanceDetails')['TraceToVia'], Decimal('2.1'))
+        assert_float_facts(self,previous.one('LayClearances/LayClearance/ClearanceDetails')['TraceToVia'], 2.1)
         self.assertIsNone(previous.child('ShowList'))
         self.assertIn('previous-check-ui', {notice.rule for notice in report.infos})
         self.assertEqual(model_text(document, preserve=False), before)

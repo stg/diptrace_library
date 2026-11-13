@@ -75,6 +75,13 @@ def reopen(document, *, report=None):
 
 
 def signature(component):
+    def value_signature(value):
+        if isinstance(value, Element):
+            return value.path
+        if isinstance(value, tuple):
+            return tuple(value_signature(item) for item in value)
+        return value
+
     result = {}
     for node in component.walk(include_self=True):
         if node.schema is None or not node.schema.fields:
@@ -84,12 +91,7 @@ def signature(component):
             if field.getter is None and node.child(name) is None and field.default is MISSING:
                 continue
             current = node.get(name, None if field.default is MISSING else field.default)
-            if field.kind == 'reference':
-                current = None if current is None else current.path
-            elif isinstance(current, tuple):
-                current = tuple(tuple(part.path for part in item) if isinstance(item, tuple)
-                                else item.path for item in current)
-            result[path+'/'+name] = current
+            result[path+'/'+name] = value_signature(current)
     return result
 
 

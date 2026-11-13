@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 import re
 from .model import (ELEMENT_NAME)
+from .numbers import same_number
 
 
 _STEP = re.compile(r"(" + ELEMENT_NAME + r"|\*)(?:\[(.*)\])?\Z", re.DOTALL)
@@ -83,7 +84,7 @@ def _predicate(nodes, text):
             actual = node.values[index] if index < len(node.values) else None
         else:
             actual = node.scalar(key)
-        if isinstance(actual, bool) == isinstance(want, bool) and actual == want:
+        if isinstance(actual, bool) == isinstance(want, bool) and same_number(actual, want):
             out.append(node)
     return out
 
@@ -109,8 +110,8 @@ def select(root, path, *, where=None):
         for parent in current:
             candidates = parent.descendants(None if kind == "*" else kind) if recursive else parent.children(None if kind == "*" else kind)
             for node in _predicate(candidates, predicate):
-                if node.uid not in seen:
+                if id(node) not in seen:
                     next_nodes.append(node)
-                    seen.add(node.uid)
+                    seen.add(id(node))
         current = next_nodes
     return filter_matches(current, where)

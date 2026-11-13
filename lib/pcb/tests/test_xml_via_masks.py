@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.pad_masks import MASK_DATA_FIELDS, MASK_COLLECTIONS
@@ -61,7 +62,7 @@ class XmlViaMaskTests(unittest.TestCase):
                 self.assertNotIn('PatternStyle', placed.attrib)
                 self.assertIsNotNone(placed.find('Pads/Pad/MaskPaste'))
                 rebuilt = io.parse(payload, report=ConversionReport())
-                self.assertEqual(facts(rebuilt.one(PAD)), expected)
+                assert_float_facts(self,facts(rebuilt.one(PAD)), expected)
                 self.assertIsNotNone(rebuilt.one(COMPONENT)['Via'])
                 self.assertFalse(report.errors)
                 self.assertEqual(model_text(document, preserve=False), before)
@@ -74,7 +75,7 @@ class XmlViaMaskTests(unittest.TestCase):
             document, output = reopen(document, units=units)
             placed = output.one('/Source/Board/Components/Component')
             self.assertIsNone(placed.child('PatternStyle'))
-            self.assertEqual(facts(document.one(PAD)), expected)
+            assert_float_facts(self,facts(document.one(PAD)), expected)
             if units == 'mil':
                 self.assertEqual(placed.one('Pads/Pad/MaskPaste')['Segment_Side'], 2)
                 self.assertEqual(placed.one('Pads/Pad/MaskPaste/TopSegments/Item')['Y1'], -2)

@@ -81,8 +81,23 @@ A runtime relationship may impose further constraints on an otherwise writable
 field.
 
 Declared numeric fields require finite values. Integer fields reject fractional
-numbers and booleans. Units and supported value domains belong to the family's
-field definitions.
+numbers and booleans and retain exact integer identities. Fractional model data
+uses Python floats; decimal inputs are normalized when stored in canonical
+records. Syntax inspection and local format-boundary calculations can use
+decimals without retaining a second numerical copy in the design.
+
+Units and supported value domains belong to the family's field definitions.
+Physical conversions can differ at the last floating-point place; adapters
+apply the destination's required precision when writing.
+
+For natural lengths, use `design.in_units("mm")` or `record.in_units("inch")`.
+These are lazy views of the same records and relationships. Named access, field
+handles, queries and edits use the selected physical units; integers, angles,
+font sizes, ratios and inherited selections retain their declared meanings.
+`view.model` reaches the canonical object. Choosing a view does not rewrite
+geometry, axes or display settings, and writers still use their destination
+context. See [measurement views](API.md#measurement-views) for defaults and the
+construction boundary.
 
 ## Schema and reflection
 

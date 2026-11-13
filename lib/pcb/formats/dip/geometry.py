@@ -4,6 +4,7 @@ import math
 from ....common.footprint_geometry import expand_normalized_drawing
 from ....common.symbol_geometry import expand_legacy_drawing
 from ....common.conversion import import_notice
+from ....common.import_tree import assign_fields
 
 
 def modernize_drawings(decoded, *, text_layout=None):
@@ -37,8 +38,7 @@ def modernize_pattern_origins(decoded):
                   {'OriginCommon': 1} if pattern.scalar('OriginCommon') == 2 else {})
         if any(pattern.scalar(name) != value for name, value in values.items()):
             changed.append(pattern)
-        for name, value in values.items():
-            pattern.set_field(name, value)
+        assign_fields(pattern, values.items())
     if changed:
         import_notice('info', 'pattern-origin-normalization',
                       'Modernized footprint origin display settings.', changed)
@@ -69,17 +69,12 @@ def expand_pattern_drawings(decoded):
                 point.detach()
             for point in points:
                 geometry.add('pt', *point)
-            for name, value in (
+            assign_fields(shape, (
                     ('TextAngle', item.orientation*math.pi/2 if kind == 7 else 0),
                     ('TextHorz', -1 if kind == 7 else 0),
                     ('TextVert', -1 if kind == 7 else 0),
                     ('TextAlign', -1), ('LineSpacing', 1.2),
-                    ('AllLayers', False), ('Group', -1)):
-                field = shape.child(name)
-                if field is None:
-                    shape.add(name, value)
-                else:
-                    field.set_values(value)
+                    ('AllLayers', False), ('Group', -1)))
             if item.text_marker:
                 # The older tag denotes calculated label geometry, not an
                 # independently authored text drawing. Current marking
@@ -93,9 +88,7 @@ def expand_pattern_drawings(decoded):
 
 
 def _defaults(owner, values):
-    for name, value in values.items():
-        if owner.child(name) is None:
-            owner.add(name, value)
+    assign_fields(owner, values.items(), overwrite=False)
 
 
 def _legacy_placement_defaults(component):

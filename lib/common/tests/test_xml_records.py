@@ -1,5 +1,6 @@
 """Strict XML records distinguish attribute and element namespaces."""
 import unittest
+import math
 from decimal import Decimal, ROUND_DOWN, localcontext
 
 from lib.common.xml import XmlDialect, loads
@@ -13,18 +14,20 @@ class XmlRecordTests(unittest.TestCase):
         expected = Decimal('37037036703703703670.37037036703703703670370370367')
         with localcontext() as context:
             context.prec, context.rounding = 3, ROUND_DOWN
-            self.assertEqual(length(value, XmlUnits('mm')).value, expected)
-            self.assertEqual(length(value, XmlUnits('mm'), reverse=True).value, expected.copy_negate())
+            self.assertAlmostEqual(length(value, XmlUnits('mm')).value, float(expected),
+                                   delta=2*math.ulp(float(expected)))
+            self.assertAlmostEqual(length(value, XmlUnits('mm'), reverse=True).value, -float(expected),
+                                   delta=2*math.ulp(float(expected)))
         with self.assertRaises(ValueError):
             length('4', XmlUnits('mm'))
 
     def test_area_uses_a_squared_unit_scale_without_squaring_the_authored_value(self):
         self.assertEqual(area(4, XmlUnits('mm')).value, 36)
-        self.assertEqual(area(4, XmlUnits('mil')).value, Decimal('.02322576'))
+        self.assertEqual(area(4, XmlUnits('mil')).value, 0.02322576)
         with localcontext() as context:
             context.prec = 3
-            self.assertEqual(area(Decimal('1.234567890123456789'), XmlUnits('mm')).value,
-                             Decimal('11.11111101111111110100'))
+            self.assertAlmostEqual(area(Decimal('1.234567890123456789'), XmlUnits('mm')).value,
+                                   11.111111011111111, delta=2*math.ulp(11.111111011111111))
         with self.assertRaises(ValueError):
             area('4', XmlUnits('mm'))
 

@@ -1,5 +1,6 @@
 """PCB library-symbol output resolves current pad and local-group identities."""
 from ....common import xml_symbol_output
+from ....common.model import Element
 from ....common.conversion import info, warn
 from ....common.supplier_conversion import report_supplier_omissions
 from ....common.key_allocation import allocate_keys
@@ -28,7 +29,14 @@ def project_symbol(part, *, units, pad_keys=None, pattern_style=None, connection
     assignments are never interpreted as public keys, even after reordering.
     """
     check_tree(part, library_records.SYMBOL, destination='DIPXML')
-    for node in part.walk(include_self=True):
+    return _project_validated_symbol(part, units=units, pad_keys=pad_keys, pattern_style=pattern_style,
+                                     connections=connections, physical_font_width=physical_font_width, report=report)
+
+
+def _project_validated_symbol(part, *, units, pad_keys=None, pattern_style=None, connections=(),
+                              physical_font_width=True, report=None, _factory=Element):
+    """Use the complete cache audit in the current library projection call."""
+    for node in part._record_walk(include_self=True):
         if node.kind == 'UnresolvedKeys':
             raise PcbError(f'{node.path}: unresolved symbol keys need a PCB XML mapping')
     inactive_groups = tuple(group for group in part.select('Groups/pt') if not group['Enabled'])
@@ -66,13 +74,13 @@ def project_symbol(part, *, units, pad_keys=None, pattern_style=None, connection
             else:
                 key = pad_keys[target]
         pins.append(xml_symbol_output.project_symbol_pin(pin, units=units, pad_id=key, group=group_key(pin),
-                                                        physical_font_width=physical_font_width))
+                                                        physical_font_width=physical_font_width, _factory=_factory))
     for shape in part.select('Shapes/Shape'):
         if not shape['Enabled']:
             inactive.append(shape)
             continue
         drawings.append(xml_symbol_output.project_symbol_drawing(shape, units=units, group=group_key(shape),
-                                                                physical_font_width=physical_font_width))
+                                                                physical_font_width=physical_font_width, _factory=_factory))
     if inactive:
         warn(report, 'inactive-library-records', 'dipxml', 'XML omits inactive symbol content', inactive)
     if not part['Enabled']:
@@ -81,5 +89,5 @@ def project_symbol(part, *, units, pad_keys=None, pattern_style=None, connection
     result = xml_symbol_output.project_symbol(
         part, units=units, destination='dipxml', report=report, pins=pins, drawings=drawings,
         groups=((group_keys[group], group['X'], group['Y']) for group in groups),
-        pattern_style=pattern_style, connections=connections)
+        pattern_style=pattern_style, connections=connections, _factory=_factory)
     return result

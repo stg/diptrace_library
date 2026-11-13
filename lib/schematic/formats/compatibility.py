@@ -178,8 +178,6 @@ def apply_capacity(document, *, destination, report=None):
     for node, rule, text in fields:
         if node.values and node.values[0]:
             grouped.setdefault((rule, text), []).append(node)
-        if destination == 'asc':
-            node.annotations['asc_omit'] = 'known reported destination mapping omission'
     for (rule, text), nodes in grouped.items():
         warn(report, rule, destination, text, nodes)
     if destination == 'dch':

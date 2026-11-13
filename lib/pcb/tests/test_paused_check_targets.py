@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport
 from lib.common.references import ReferenceError
@@ -36,8 +37,8 @@ class PausedCheckTargetTests(unittest.TestCase):
         for index, row in enumerate(document.select(PATH)):
             self.assertEqual(row['ObjectType1'], 24+index)
             self.assertEqual(row.one('UnresolvedTarget1').values, (-1, 0, 3, -1))
-            self.assertEqual((row['X'], row['Y'], row['Value'], row['Rule']),
-                             (3, -6, Decimal('.3'), Decimal('.6')))
+            assert_float_facts(self,(row['X'], row['Y'], row['Value'], row['Rule']),
+                             (3, -6, 0.3, 0.6))
             with self.assertRaises(ReferenceError):
                 row['Target1']
         self.assertIn('paused-design-error-targets', {n.rule for n in report.infos})

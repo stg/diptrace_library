@@ -33,7 +33,7 @@ def assemble_pad_overrides(rules):
                     node.add(name, value)
             node.bind_schema(schema)
         for pad in pads:
-            for node in pad.walk(include_self=True):
+            for node in pad._record_walk(include_self=True):
                 if (schema := pad_records.definition(node)) is not None:
                     node.bind_schema(schema)
         for node in document.select('/Board/Nets/Net/TeardropParams'):

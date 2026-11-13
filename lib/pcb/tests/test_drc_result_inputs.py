@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.references import ReferenceError
@@ -28,8 +29,8 @@ class DrcResultInputTests(unittest.TestCase):
         result = assemble_graphics(prepared(xml_source()))
         document = result.document
         error = document.one('/Board/DesignErrors/DesignError')
-        self.assertEqual((error['Id'], error['X'], error['Y'], error['Value'], error['Rule']),
-                         (0, 3, -6, Decimal('.3'), Decimal('.6')))
+        assert_float_facts(self,(error['Id'], error['X'], error['Y'], error['Value'], error['Rule']),
+                         (0, 3, -6, 0.3, 0.6))
         self.assertIs(error['Target1'], result.rules.routing.core.pads[8, 1])
         self.assertIs(error['Target2'], result.rules.routing.traces[7, 91].one('Points/Point[2]'))
         self.assertIs(error['RuleLayer'], result.rules.layers[1])
@@ -47,7 +48,7 @@ class DrcResultInputTests(unittest.TestCase):
         point.move_to(point.parent, 0)
         result.rules.classes[1].move_to(result.rules.classes[1].parent, 0)
         self.assertEqual((error['Point2'], error['ObjectNetClass2']), (0, 0))
-        self.assertEqual(error['Rule'], Decimal('.6'))
+        assert_float_facts(self,error['Rule'], 0.6)
         document.references.validate()
 
     def test_ascii_named_layer_mask_and_rule_layer_alias_are_consumed(self):

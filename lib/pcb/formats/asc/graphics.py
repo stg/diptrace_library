@@ -1,5 +1,6 @@
 """Expand ASC board drawings, pour geometry and grouping before shared binding."""
 from ....common.model import Element, Value
+from ....common.import_tree import move_children
 from ....common.units import square_length
 from ....common.picture_sources import picture_reference_index
 from ...model import graphic_records
@@ -128,7 +129,10 @@ def _pour(pour, index):
                     points = polygon.add('Points')
                     for row in rows:
                         numeric_row(row, 2)
-                        row.move_to(points)
+                    # Parser-owned points have no model links yet. Transfer the
+                    # validated rows together; repeated edits rescan the large
+                    # shrinking polygon and growing destination on every point.
+                    move_children(polygon, points, rows)
                     polygon.set_values()
                     polygon.add('Region', region)
             else:

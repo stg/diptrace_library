@@ -40,7 +40,7 @@ def project_document(document, *, context=None, report=None):
                         default_main_supplier=context.default_main_supplier)
     from ..compatibility import (apply_capacity)
     apply_capacity(view, destination='asc', report=report)
-    view.rebuild(force=False)
+    view._synchronize(force=False)
     source=view.one('/Schematic')
     from ..revision_adaptation import (prepare_revisions)
     prepare_revisions(source, destination='asc', report=report)
@@ -59,7 +59,7 @@ def project_document(document, *, context=None, report=None):
     output=Document(representation='asc')
     output.root.add('Source','DipTrace-Schematic',46)
     output.root.add('Units',context.units)
-    value=_value(view.one('/Scale').arguments[0])
+    value=_value(view._field_arguments('/Scale')[0])
     output.root.add('Scale',Value(value.value,value.kind,'%',source=value.source))
     for name in ('Xpos','Ypos'):
         output.root.add(name,round(calculation_number(view.one('/'+name))))

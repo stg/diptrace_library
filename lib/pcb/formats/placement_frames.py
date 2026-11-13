@@ -2,11 +2,13 @@
 from dataclasses import replace
 from contextlib import nullcontext
 from decimal import Decimal, localcontext
+import math
 
 from ...common.conversion import import_notice, info
 from ...common.footprint_bounds import physical_bounds
 from ...common.footprint_records import PAD, HOLE
 from ...common.geometry import decimal_precision, transform_point
+from ...common.numbers import same_number
 from ...common.structural_edits import assembly
 from ..model import markings
 from .assembly.missing_geometry import DIMENSIONS, unavailable_size
@@ -14,6 +16,26 @@ from .assembly.missing_geometry import DIMENSIONS, unavailable_size
 
 def _number(value):
     return value if isinstance(value, Decimal) else Decimal(str(value))
+
+
+def _center_coordinate(first, last):
+    """Take a stable midpoint in the coordinate storage domain.
+
+    Endpoint rounding contributes (ulp(a)+ulp(b))/4 to midpoint resolution.
+    Coordinate storage and projection into a file's units can each round the
+    envelope again; allow all three passes before deciding to rebase again.
+    Keeping a frame within this resolution leaves every authored coordinate
+    untouched, rather than feeding a last-bit residue into placement/markings.
+    A body wholly on one side of zero still has a meaningful displacement,
+    including a point at the smallest representable nonzero coordinate.
+    """
+    first, last = float(first), float(last)
+    if not math.isfinite(first) or not math.isfinite(last):
+        raise ValueError('footprint frame bounds require finite floats')
+    total = first+last
+    midpoint = total/2 if math.isfinite(total) else first/2+last/2
+    resolution = (math.ulp(first)+math.ulp(last))*3/4
+    return 0.0 if first <= 0 <= last and abs(midpoint) <= resolution else midpoint
 
 
 def resolve_fiducials(board, default):
@@ -56,7 +78,12 @@ def _changes(pattern, *, raw, common_fiducials, placement=None, common_only=Fals
                and not (raw and any(unavailable_size(pad.get(name)) for name in DIMENSIONS))]
     box = physical_bounds(pads=bounded, drawings=shapes,
                           holes=((hole['X'], hole['Y'], hole['Diam']) for hole in holes))
-    cx, cy = box.center if box is not None else (Decimal(0), Decimal(0))
+    # Coordinates live in the model's floating domain. Round the envelope
+    # endpoints into that domain before taking its midpoint; decimal tails
+    # beyond those endpoints must not repeatedly translate an unchanged body.
+    cx, cy = (tuple(_number(_center_coordinate(first,last)) for first, last in
+                    ((box.left, box.right), (box.top, box.bottom)))
+              if box is not None else (Decimal(0), Decimal(0)))
     if box is not None and frame_origin is not None:
         cx, cy = map(_number, frame_origin)
     width = box.width if box is not None and box.width > 0 else Decimal('.001')
@@ -103,7 +130,7 @@ def _changes(pattern, *, raw, common_fiducials, placement=None, common_only=Fals
         field = record.child(name)
         if field is None:
             record.add(name, value)
-        elif field.values != (value,):
+        elif not same_number(field.values[0], value):
             pending[field] = (replace(field.arguments[0], value=value, lexeme=None),)
 
     with localcontext() as context:
@@ -116,7 +143,7 @@ def _changes(pattern, *, raw, common_fiducials, placement=None, common_only=Fals
             x, y = row.arguments
             supplied = (replace(x, value=_number(x.value)-cx, lexeme=None),
                         replace(y, value=_number(y.value)-cy, lexeme=None))
-            if tuple(value.value for value in supplied) != row.values:
+            if any(not same_number(value.value, current) for value, current in zip(supplied, row.values)):
                 pending[row] = supplied
         if placement is not None and (cx or cy):
             angle = placement.get('Angle', 0) if placement_angle is None else placement_angle

@@ -8,7 +8,7 @@ from lib import AscExportContext, Element, ExportReport, ReferenceError, new_sch
 from lib.schematic.formats.export_view import (prepare_export)
 from lib.schematic.model.pads import (empty_pad)
 from lib.schematic.model.new import (fields)
-from lib.schematic.model.objects import (new_symbol, new_pattern_shape)
+from lib.schematic.model.objects import (new_symbol, new_pattern_shape, new_pin)
 from lib.schematic.model.refs import (bind_schematic_references)
 
 
@@ -40,6 +40,129 @@ def design(*, cached=False, unresolved=False):
 
 
 class PatternCompactionTests(unittest.TestCase):
+    def test_xml_keeps_an_assignment_to_an_omitted_pad_unresolved(self):
+        from lib.schematic.model.local_keys import missing_key
+        for cached in (False, True):
+            for declared_key in (None, 70):
+                with self.subTest(cached=cached, declared_key=declared_key):
+                    source = new_schematic()
+                    part = source.one('/Schematic/Components').append(new_symbol('Device', 'U1'))
+                    if cached:
+                        slot = source.one('/Schematic/CacheLib/Slots').add('Slot', 0, '')
+                        slot.add('VariablePath', '')
+                        definition = slot.add('Definition', 0)
+                        definition.append(new_symbol('Definition', '', placed=False))
+                        definition.append(part.one('Pattern').clone())
+                        source.remove(part)
+                        part = definition.one('Part')
+                        pattern = definition.one('Pattern')
+                    else:
+                        pattern = part.one('Pattern')
+                    for index in (1, 2):
+                        pad = empty_pad(index)
+                        pad.set_values(index, 'same-label', '', index, 0)
+                        pad['Number_New'] = -1 if index == 1 else index
+                        pad['PadWidth_New'] = pad['PadHeight_New'] = 1
+                        if declared_key is not None and index == 1:
+                            pad.add('Id', declared_key)
+                        pattern.one('Pads').insert(pad, index)
+                    pins = part.one('Pins')
+                    first, second = pins.append(new_pin(placed=not cached)), pins.append(new_pin(placed=not cached))
+                    first['Number'], second['Number'] = 1, 2
+                    bind_schematic_references(source)
+                    before = source.to_dch_bytes(report=ExportReport())
+                    report = ExportReport()
+                    output = source.as_dchxml(report=report)
+                    expected_key = 1 if declared_key is None else declared_key
+                    pin_keys = [p['PadId'] for p in output.select('/Source/Library/Components/Component/Part/Pins/Pin')]
+                    self.assertIn(expected_key, pin_keys)
+                    self.assertTrue(any(n.rule == 'inactive-pad-assignment' for n in report.warnings))
+                    rebuilt = output.as_schematic(report=ExportReport())
+                    owner = (rebuilt.one('/Schematic/CacheLib/Slots/Slot/Definition/Part') if cached
+                             else rebuilt.one('/Schematic/Components/Part'))
+                    current = owner.select('Pins/Pin')
+                    self.assertEqual(missing_key(current[0], 'PadId').values[1], expected_key)
+                    self.assertEqual(current[0]['Number'], -1)
+                    links = rebuilt.references.outgoing(owner, role='symbol-pin-pad')
+                    self.assertEqual(len(links), 1)
+                    self.assertEqual(links[0].target['StringNumber'], 'same-label')
+                    self.assertIsNone(missing_key(current[1], 'PadId'))
+                    self.assertEqual(source.to_dch_bytes(report=ExportReport()), before)
+                    self.assertEqual(first['Number'], 1)
+                    self.assertIsNone(missing_key(first, 'PadId'))
+                    rebuilt.validate()
+                    # Direct serialization uses the lazy projection rather
+                    # than the editable syntax view exercised above.
+                    from lib import parse, serialize
+                    data = serialize(source, format='dchxml', report=ExportReport())
+                    cycle = parse(data, report=ExportReport())
+                    again = parse(serialize(cycle, format='dchxml', report=ExportReport()),
+                                  report=ExportReport())
+                    for current_document in (cycle, again):
+                        owner = (current_document.one('/Schematic/CacheLib/Slots/Slot/Definition/Part') if cached
+                                 else current_document.one('/Schematic/Components/Part'))
+                        first_pin = owner.one('Pins/Pin[1]')
+                        self.assertEqual(missing_key(first_pin, 'PadId').values[1], expected_key)
+                        self.assertEqual(len(current_document.references.outgoing(owner, role='symbol-pin-pad')), 1)
+                        current_document.validate()
+
+    def test_cached_xml_pad_activity_is_independent_of_its_ordinal(self):
+        source, placed = design(cached=True)
+        source.remove(placed.parent)
+        pattern = source.one('/Schematic/CacheLib/Slots/Slot/Definition/Pattern')
+        pad = empty_pad(1)
+        pad.annotations.clear()
+        pad.set_values(1, 'retained', '', 0, 0)
+        pad.set_field('Number_New', 0)
+        pad.set_field('PadWidth_New', 1)
+        pad.set_field('PadHeight_New', 1)
+        pattern.one('Pads').insert(pad, 1)
+        bind_schematic_references(source)
+        output = source.as_dchxml(report=ExportReport())
+        self.assertEqual([node.values[0] for node in output.select(
+            '/Source/Library/Library/Patterns/Pattern/Pads/Pad/Number')], ['retained'])
+        self.assertEqual(pad['Number_New'], 0)
+
+    def test_xml_compacts_cached_pads_without_reactivating_them_on_import(self):
+        source, placed = design(cached=True)
+        source.remove(placed.parent)
+        pattern = source.one('/Schematic/CacheLib/Slots/Slot/Definition/Pattern')
+        pads = pattern.one('Pads')
+        for index in (1, 2):
+            pad = empty_pad(index)
+            pad.annotations.clear()
+            pad.set_values(index, 'inactive' if index == 1 else 'kept', '', index*3, 0)
+            for name, value in dict(Number_New=-1 if index == 1 else index,
+                                    PadShape_New=2, PadWidth_New=1, PadHeight_New=1, SurfacePad=True).items():
+                pad.set_field(name, value)
+            pads.insert(pad, index)
+        dimension = pattern.one('Dimensions/Dimension[2]')
+        for reference in source.references.outgoing(dimension, role='pattern-dimension-1'):
+            source.references.discard(reference)
+        dimension.set_field('Connected1', 0)
+        dimension.set_field('SubObject1', 2)
+        bind_schematic_references(source)
+        before, report = source.to_dch_bytes(report=ExportReport()), ExportReport()
+        rebuilt = source.as_dchxml(report=report).as_schematic()
+        current = rebuilt.one('/Schematic/CacheLib/Slots/Slot/Definition/Pattern')
+        kept = current.select('Pads/Pad')[1:-1]
+        self.assertEqual([pad.values[1] for pad in kept], ['kept'])
+        attached = current.one('Dimensions/Dimension')
+        self.assertEqual(attached['SubObject1'], 1)
+        self.assertIs(rebuilt.references.outgoing(attached, role='pattern-dimension-1')[0].target, kept[0])
+        self.assertTrue(any(pattern.one('Pads/Pad[2]').path in notice.paths for notice in report.warnings))
+        self.assertEqual(source.to_dch_bytes(report=ExportReport()), before)
+        self.assertEqual([pad['Number_New'] for pad in pads.children('Pad')[1:-1]], [-1, 2])
+
+    def test_xml_rejects_a_cached_attachment_to_an_omitted_inactive_hole(self):
+        source, placed = design(cached=True, unresolved=True)
+        source.remove(placed.parent)
+        pattern = source.one('/Schematic/CacheLib/Slots/Slot/Definition/Pattern')
+        original = [node.values for node in pattern.select('Holes/Hole')]
+        with self.assertRaises(ReferenceError):
+            source.as_dchxml(report=ExportReport())
+        self.assertEqual([node.values for node in pattern.select('Holes/Hole')], original)
+
     def test_pad_and_drawing_compaction_follows_retained_dimension_targets(self):
         for mode in (0, 1):
             with self.subTest(mode=mode):

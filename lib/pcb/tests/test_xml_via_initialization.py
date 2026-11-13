@@ -4,6 +4,7 @@ from copy import deepcopy
 from decimal import Decimal
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.geometry import transform_point
@@ -111,7 +112,7 @@ class XmlViaInitializationTests(unittest.TestCase):
                 self.assertEqual((current['StringNumber'], current['Name'], current['X'], current['PadAngle']),
                                  ('1', '', 0, 0))
                 self.assertFalse(current['Locked'])
-                self.assertEqual(facts(current), options)
+                assert_float_facts(self,facts(current), options)
                 self.assertEqual(model_text(document, preserve=False), before)
                 rebuilt.references.validate()
 

@@ -1,5 +1,6 @@
 """Pad styles retain independent geometry settings and their XML defaults."""
 from decimal import Decimal
+import math
 import unittest
 
 from lib.common.footprint_objects import new_pad, new_pattern
@@ -71,7 +72,8 @@ class XmlPadGeometryTests(unittest.TestCase):
                     target = new_pattern('Package')
                     read_pad_style(XmlRecord(source), target, units=XmlUnits('mm'))
                     self.assertEqual(target['PadHole'], Decimal('3.75'))
-                    self.assertEqual(target['PadHoleH'], expected)
+                    self.assertAlmostEqual(target['PadHoleH'], float(expected),
+                                           delta=2*math.ulp(float(expected)))
                     self.assertEqual(target['SurfacePad'], kind == 'Surface')
 
 

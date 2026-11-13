@@ -92,6 +92,12 @@ These are data edits. Changing a component's position does not make its wires
 follow it, and changing a library filename does not load a new definition.
 The [editing boundary](MODEL.md#data-editing-and-geometry) explains that distinction.
 
+For positions and dimensions in mm or inches, select a
+[measurement view](API.md#measurement-views), such as `design.in_units("mm")`,
+and use the same field/query API through it. The view edits the same design;
+the original API continues to use the shared length units listed in the model
+catalogues. Saving either one uses the destination's normal output settings.
+
 ## Save or convert it
 
 Write a new binary file, or choose another extension to convert the design:

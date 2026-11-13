@@ -5,6 +5,7 @@ from .xml import set_attribute
 from .xml_output import enum_text, numeric, point_attributes
 from .model import Element
 from .pad_masks import mask_state
+from .xml_plan import XmlBuilder
 
 
 def _stack(target, source, *, units, terminal=False):
@@ -16,15 +17,15 @@ def _stack(target, source, *, units, terminal=False):
     label = shape_label(shape, terminal=terminal)
     set_attribute(target, 'Shape', label)
     for name, own in (('Width', width_name), ('Height', height_name)):
-        set_attribute(target, name, numeric(units.length(source.one(own).arguments[0])))
+        set_attribute(target, name, numeric(units.length(source._field_arguments(own)[0])))
     # A style can retain settings for another shape or pad type. Those remain
     # editable data even while the selected geometry does not use them.
-    corner = source.one('ShapeCorner' if terminal else 'PadCorner').arguments[0]
+    corner = source._field_arguments('ShapeCorner' if terminal else 'PadCorner')[0]
     if shape == 2 or corner.value != 0:
         set_attribute(target, 'Corner', corner)
     if not terminal and (not source.scalar('SurfacePad') or
             any(source.scalar(name) != 0 for name in ('PadShape_X', 'PadShape_Y'))):
-        point_attributes(target, source.one('PadShape_X').arguments[0], source.one('PadShape_Y').arguments[0],
+        point_attributes(target, source._field_arguments('PadShape_X')[0], source._field_arguments('PadShape_Y')[0],
                          units, names=('XOff', 'YOff'))
     container = 'ShapePoints' if terminal else 'PadPoints_New' if individual else 'PadPoints'
     points = source.select(container+'/pt')
@@ -34,8 +35,8 @@ def _stack(target, source, *, units, terminal=False):
             point_attributes(result.add('Item'), *point.arguments, units)
 
 
-def project_pad_style(source, *, name, units):
-    result = Element('PadStyle')
+def project_pad_style(source, *, name, units, _factory=Element):
+    result = _factory('PadStyle')
     set_attribute(result, 'Name', name)
     surface = source.scalar('SurfacePad')
     set_attribute(result, 'Type', 'Surface' if surface else 'Through')
@@ -44,22 +45,27 @@ def project_pad_style(source, *, name, units):
     # mode. Emit both dimensions so an omitted height cannot inherit the width.
     set_attribute(result, 'HoleType', enum_text(source.scalar('PadHoleType'), ('Round', 'Obround')))
     for public, own in (('Hole', 'PadHole'), ('HoleH', 'PadHoleH')):
-        set_attribute(result, public, numeric(units.length(source.one(own).arguments[0])))
+        set_attribute(result, public, numeric(units.length(source._field_arguments(own)[0])))
     _stack(result.add('MainStack'), source, units=units)
     terminals = source.children('PadTerminal')
     if terminals:
         target = result.add('Terminals')
         for terminal in terminals:
             item = target.add('Terminal')
-            point_attributes(item, terminal.one('X').arguments[0], terminal.one('Y').arguments[0], units)
-            set_attribute(item, 'Angle', terminal.one('Angle').arguments[0])
+            point_attributes(item, terminal._field_arguments('X')[0], terminal._field_arguments('Y')[0], units)
+            set_attribute(item, 'Angle', terminal._field_arguments('Angle')[0])
             _stack(item, terminal, units=units, terminal=True)
-    if (masks := project_mask_paste(source, units=units)) is not None:
+    if (masks := project_mask_paste(source, units=units, _factory=_factory)) is not None:
         result.append(masks)
     return result
 
 
-def project_mask_paste(source, *, units, complete=False):
+def plan_pad_style(source, *, name, units):
+    """Plan all style facts without constructing an editable XML tree."""
+    return project_pad_style(source, name=name, units=units, _factory=XmlBuilder).freeze()
+
+
+def project_mask_paste(source, *, units, complete=False, _factory=Element):
     """Project mask/paste choices for a style or a placed-pad overlay.
 
     A complete overlay supplies even common modes and empty segment lists, so
@@ -74,16 +80,16 @@ def project_mask_paste(source, *, units, complete=False):
             ('BotPaste', 'BotPaste_State', 'DisableBottomPaste', PASTE_STATES)):
         state = mask_state(source,own) if individual else source.scalar(default)
         states.append((public, state, labels))
-    swell, shrink = (source.one(name).arguments[0] for name in ('CustomSwell_New', 'CustomShrink_New'))
+    swell, shrink = (source._field_arguments(name)[0] for name in ('CustomSwell_New', 'CustomShrink_New'))
     if complete or any(state for _, state, _ in states) or swell.value != -1000 or shrink.value != -1000:
-        target = Element('MaskPaste')
+        target = _factory('MaskPaste')
         for public, state, labels in states:
             if complete or state > 0:
                 set_attribute(target, public, enum_text(state, labels))
         if complete or any(state == 3 for _, state, _ in states[2:]):
             for public, own in (('Segment_Percent', 'PadMask_Percent'), ('Segment_EdgeGap', 'PadMask_EdgeGap'),
                                 ('Segment_Gap', 'PadMask_SegmentGap'), ('Segment_Side', 'PadMask_SegmentSide')):
-                value = source.one(own).arguments[0]
+                value = source._field_arguments(own)[0]
                 set_attribute(target, public, value if public == 'Segment_Percent' else numeric(units.length(value)))
         for public, value in (('CustomSwell', swell), ('CustomShrink', shrink)):
             if value.value != -1000:

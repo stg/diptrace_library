@@ -64,7 +64,7 @@ class DrcResultModelTests(unittest.TestCase):
             self.assertEqual(observed.values, (1,))
             self.assertEqual(row.one('Layers/Layer')['Index'], 0)
             self.assertEqual(row['RuleLay'], 0)
-            self.assertEqual((row['X'], row['Y'], row['Value']), (1, 2, Decimal('.1')))
+            self.assertEqual((row['X'], row['Y'], row['Value']), (1, 2, 0.1))
         document.references.validate()
 
     def test_retarget_guards_copy_clone_and_removal_are_atomic(self):
@@ -132,7 +132,7 @@ class DrcResultModelTests(unittest.TestCase):
         row = document.one('/Board/DesignErrors/DesignError')
         self.assertIsNone(row['Target1'])
         self.assertEqual((row['Object1'], row['SubObject1'], row['Point1']), (-1, -1, -1))
-        self.assertEqual(row['Value'], Decimal('.1'))
+        self.assertEqual(row['Value'], 0.1)
         self.assertTrue(any(n.rule == 'stale-design-error-targets' for n in report.infos))
         document.references.validate()
 

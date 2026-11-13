@@ -1,15 +1,16 @@
 """Project current physical definitions into PCB XML library records."""
 from dataclasses import dataclass
+from functools import cached_property
 
 from ....common.conversion import info, warn
 from ....common.key_allocation import allocate_keys
-from ....common.model import Element
+from ....common.xml_plan import XmlPlan, XmlBuilder
 from ....common.xml import set_attribute
-from ....common.xml_catalog import StyleTable
+from ....common.xml_catalog import StylePlans
 from ....common.xml_footprint_output import project_model3d, project_drawing, project_dimension
 from ....common.xml_library_output import project_category
 from ....common.xml_output import enum_text, field, numeric, point_attributes
-from ....common.xml_pad_output import project_pad_style
+from ....common.xml_pad_output import plan_pad_style
 from ....common.xml_footprint_vocabulary import PATTERN_TYPES
 from ...model.definitions import PATTERN
 from ...model import library_records
@@ -24,12 +25,20 @@ from .dimension_attachments import marking_endpoint
 @dataclass(frozen=True)
 class PatternProjection:
     """Physical XML plus keys/pairs for the enclosing component-library writer."""
-    element: Element
-    styles: Element
+    plan: XmlPlan
+    pad_styles: StylePlans
     pad_keys: dict
     connections: tuple
     shape_keys: dict
     hole_keys: dict
+
+    @cached_property
+    def element(self):
+        return self.plan.element()
+
+    @property
+    def styles(self):
+        return self.pad_styles.element
 
 
 def _physical_type(pattern, report):
@@ -150,10 +159,17 @@ def project_pattern(pattern, *, style, units, explicit_pad_style=True,
     """
     schema = library_records.PATTERN if library_records.is_pattern(pattern) else PATTERN
     check_tree(pattern,schema,destination='DIPXML')
+    return _build_pattern(pattern, style=style, units=units, explicit_pad_style=explicit_pad_style,
+                          physical_font_width=physical_font_width, report=report)
+
+
+def _build_pattern(pattern, *, style, units, explicit_pad_style=True,
+                   physical_font_width=True, report=None):
+    """Project geometry whose complete schema has just been checked by its owner."""
     keys = _Keys(pattern, report=report)
-    for node in pattern.walk(include_self=True):
+    for node in pattern._record_walk(include_self=True):
         _unavailable(node)
-    result, styles = Element('Pattern'),StyleTable('PadStyles','PadStyle','Name','Pad')
+    result, styles = XmlBuilder('Pattern'),StylePlans('PadStyles','PadStyle','Name','Pad')
     set_attribute(result,'PatternStyle',style)
     set_attribute(result,'Type',_physical_type(pattern, report))
     set_attribute(result,'Mounting',enum_text(pattern['Mounting'],('Through','SMD','Chassis','Mixed'),negative='None'))
@@ -161,9 +177,9 @@ def project_pattern(pattern, *, style, units, explicit_pad_style=True,
     set_attribute(result,'Orientation',orientation*90 if orientation in (0,1,2,3) else orientation)
     set_attribute(result,'LockTypeChange',pattern['LockProperties'])
     for name in ('Width','Height'):
-        set_attribute(result,name,numeric(units.length(pattern.one(name).arguments[0])))
+        set_attribute(result,name,numeric(units.length(pattern._field_arguments(name)[0])))
     for index in (1,2,3):
-        set_attribute(result,'Float'+str(index),numeric(units.length(pattern.one('Spacing'+str(index)).arguments[0])))
+        set_attribute(result,'Float'+str(index),numeric(units.length(pattern._field_arguments('Spacing'+str(index))[0])))
     for index in (1,2):
         set_attribute(result,'Int'+str(index),pattern['Number'+str(index)])
     field(result,'Name',pattern['Name'])
@@ -173,7 +189,7 @@ def project_pattern(pattern, *, style, units, explicit_pad_style=True,
                         ('Datasheet','Datasheet'),('Manufacturer','Pattern_Manufacturer')):
         if pattern.get(own,''):
             field(result,public,pattern[own])
-    if category := project_category(pattern):
+    if category := project_category(pattern, _factory=XmlBuilder):
         result.append(category)
     names = pattern.select('PossibleNames/PossibleName')
     if names:
@@ -199,7 +215,7 @@ def project_pattern(pattern, *, style, units, explicit_pad_style=True,
             set_attribute(row,'Type',enum_text(user['Type'],('Text','Link')))
             field(row,'Name',user['Name'])
             field(row,'Text',user['Value'])
-    default = styles.include(project_pad_style(pattern,name='',units=units))
+    default = styles.include_plan(plan_pad_style(pattern,name='',units=units))
     set_attribute(result.add('DefPad'),'Style',default)
     pads = result.add('Pads')
     for pad in keys.members['Pads']:
@@ -208,7 +224,7 @@ def project_pattern(pattern, *, style, units, explicit_pad_style=True,
         # Earlier XML infers inheritance from style identity. A distinct style
         # must remain distinct even when its current geometry equals the default.
         excluded = (default,) if not explicit_pad_style and not pad['Standard'] else ()
-        set_attribute(row,'Style',styles.include(project_pad_style(pad,name='',units=units), exclude=excluded))
+        set_attribute(row,'Style',styles.include_plan(plan_pad_style(pad,name='',units=units), exclude=excluded))
         for name,current in (('DefStyle',pad['Standard']),('Angle',pad['PadAngle']),
                              ('Locked',pad['Locked']),('Side','Bottom' if pad['Sided'] else 'Top')):
             set_attribute(row,name,current)
@@ -234,7 +250,7 @@ def project_pattern(pattern, *, style, units, explicit_pad_style=True,
         pad_id = shape.get('PadId',-1)
         row = project_drawing(shape,index=keys.values['Shapes'][shape],units=units,group=keys.group(shape),
                               pad_id=keys.at('Pads',pad_id) if pad_id >= 0 else -1,
-                              physical_font_width=physical_font_width)
+                              physical_font_width=physical_font_width, _factory=XmlBuilder)
         shapes.append(row)
         if shape.get('ShieldGroup',-1) != -1:
             warn(report,'pattern-shield-group','dipxml','XML footprint styles omit drawing shield-group membership',(shape,))
@@ -255,8 +271,8 @@ def project_pattern(pattern, *, style, units, explicit_pad_style=True,
         if not dimension['Enabled']:
             raise PcbError(f'{dimension.path}: inactive dimension needs output normalization')
         dimensions.append(project_dimension(dimension,units=units,attachments=keys.attachments(dimension),
-                                            group=keys.group(dimension), physical_font_width=physical_font_width))
-    result.append(project_model3d(pattern.one('Model3D'),units=units,variable_fallback=False))
+                                            group=keys.group(dimension), physical_font_width=physical_font_width, _factory=XmlBuilder))
+    result.append(project_model3d(pattern.one('Model3D'),units=units,variable_fallback=False, _factory=XmlBuilder))
     omitted = [name for name in pattern.schema.fields if name.startswith('VariableParameter') and pattern[name]]
     if omitted:
         warn(report,'pattern-parameter-options','dipxml','XML omits footprint parameter-enable choices',(pattern,))
@@ -265,8 +281,13 @@ def project_pattern(pattern, *, style, units, explicit_pad_style=True,
         if pair['Pad1'] is None or pair['Pad2'] is None:
             raise PcbError(f'{pair.path}: assign both internal-connection pads before export')
         pairs.append(tuple(keys.values['Pads'][pair[name]] for name in ('Pad1','Pad2')))
-    return PatternProjection(result,styles.element,keys.values['Pads'],tuple(pairs),
+    return PatternProjection(result.freeze(),styles,keys.values['Pads'],tuple(pairs),
                              keys.values['Shapes'],keys.values['Holes'])
+
+
+# Only the library builder uses this entry after checking the owning cache or
+# the static-via pattern in its current call. It still applies the same frame.
+_project_validated_pattern = in_xml_frame(_build_pattern)
 
 
 def _groups(pattern, result, keys, units, report):

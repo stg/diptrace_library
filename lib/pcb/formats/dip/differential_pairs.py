@@ -7,33 +7,33 @@ from .settings import read_drc
 
 
 def _side_points(reader, center, collection, kind):
-    points = center.add(collection)
+    points = reader.add(center, collection)
     for index in range(reader.count('differential '+collection)):
-        point = points.add(kind, index)
+        point = reader.add(points, kind, index)
         _fields(reader, point, 'number', 'X Y')
-        reader.field(point, 'Selected', 'boolean')
+        reader.field_into(point, 'Selected', 'boolean')
     return points
 
 
 def _pair(reader, pairs, index, kind='DifferentialPair'):
     start = reader.pos
-    pair = pairs.add(kind, index)
-    reader.field(pair, 'Enabled', 'boolean')
-    reader.field(pair, 'Name', 'text')
+    pair = reader.add(pairs, kind, index)
+    reader.field_into(pair, 'Enabled', 'boolean')
+    reader.field_into(pair, 'Name', 'text')
     _fields(reader, pair, 'integer', 'Number PosNet NegNet NetClass')
-    reader.field(pair, 'CustomColor', 'boolean')
-    reader.field(pair, 'TraceColor', 'color')
-    pads = pair.add('PadPoints')
+    reader.field_into(pair, 'CustomColor', 'boolean')
+    reader.field_into(pair, 'TraceColor', 'color')
+    pads = reader.add(pair, 'PadPoints')
     for pad_index in range(reader.count('paired pads')):
-        pad = pads.add('PadPoint', pad_index)
+        pad = reader.add(pads, 'PadPoint', pad_index)
         _fields(reader, pad, 'integer', 'PosComp PosPad NegComp NegPad')
-    segments = pair.add('Segments')
+    segments = reader.add(pair, 'Segments')
     for segment_index in range(reader.count('paired segments')):
-        segment = segments.add('Segment', segment_index)
+        segment = reader.add(segments, 'Segment', segment_index)
         _fields(reader, segment, 'integer', 'PosTrace NegTrace StartPoint EndPoint StartSegment EndSegment')
-        centers = segment.add('CenterPoints')
+        centers = reader.add(segment, 'CenterPoints')
         for center_index in range(reader.count('paired center points')):
-            center = centers.add('CenterPoint', center_index)
+            center = reader.add(centers, 'CenterPoint', center_index)
             _fields(reader, center, 'number', 'X Y')
             _fields(reader, center, 'integer',
                     'Lay ViaStyle Orientation Type PosTrace_StartPoint PosTrace_EndPoint '
@@ -51,22 +51,22 @@ def read_initial_pairs(reader, board):
         # Earlier revisions load ordinary point phase lengths as zero, even
         # though they have no differential-routing section to store them.
         for point in board.select('Nets/Net/Traces/Trace/Points/Point'):
-            point.add('PhaseFwd', 0)
-            point.add('PhaseBack', 0)
+            reader.add_into(point, 'PhaseFwd', 0)
+            reader.add_into(point, 'PhaseBack', 0)
         return None
     for net_class in board.select('NetClasses/NetClass'):
         _fields(reader, net_class, 'number', 'Phase Phase_ErrorLength')
         for layer in net_class.select('LayProperties/LayProperty'):
             _fields(reader, layer, 'number', 'Neck_Width Neck_DifClearance Neck_MaxLength')
-    pairs = board.add('DifferentialPairs')
+    pairs = reader.add(board, 'DifferentialPairs')
     for index in range(reader.count('differential pairs')):
         _pair(reader, pairs, index)
     for point in board.select('Nets/Net/Traces/Trace/Points/Point'):
-        reader.field(point, 'PairPoint', 'integer')
+        reader.field_into(point, 'PairPoint', 'integer')
         _fields(reader, point, 'number', 'PhaseFwd PhaseBack')
     for error in board.select('DesignErrors/DesignError'):
         _fields(reader, error, 'integer', 'RuleType RuleLay ObjectNetClass1 ObjectNetClass2')
-    removed = board.add('RemovedDifferentialPairs')
+    removed = reader.add(board, 'RemovedDifferentialPairs')
     # The first revision with differential routing also accepts an early file
     # ending before the removed-pair list was added.
     if reader.pos < len(reader.data):
@@ -81,17 +81,17 @@ def _extend_side_points(reader, pair):
             for collection, kind in (('PosPoints', 'PosPoint'), ('NegPoints', 'NegPoint')):
                 for point in center.select(collection+'/'+kind):
                     _fields(reader, point, 'integer', 'Lay ViaStyle')
-                    reader.field(point, 'Necked', 'boolean')
+                    reader.field_into(point, 'Necked', 'boolean')
 
 
 def _separate_traces(reader, pair, side):
-    traces = pair.add(side+'SeparateTraces')
+    traces = reader.add(pair, side+'SeparateTraces')
     upgrades = []
     for index in range(reader.count(side.lower()+' separate traces')):
         start = reader.pos
-        trace = traces.add(side+'Trace', index)
+        trace = reader.add(traces, side+'Trace', index)
         _fields(reader, trace, 'integer', 'Object1 SubObject1 Point1 Object2 SubObject2 Point2 Connected1 Connected2')
-        reader.field(trace, 'Selected', 'boolean')
+        reader.field_into(trace, 'Selected', 'boolean')
         _fields(reader, trace, 'integer', 'Group TraceId')
         previous_number = reader.integer()
         points = _points(reader, trace, necked=True)
@@ -111,18 +111,18 @@ def read_routing_extensions(reader, board):
     read_drc(reader, board, 'LastDRC')
     upgrades = []
     for pair in board.select('DifferentialPairs/DifferentialPair'):
-        reader.field(pair, 'AutoPadPoints', 'boolean')
-        reader.field(pair, 'RouteMode', 'integer')
+        reader.field_into(pair, 'AutoPadPoints', 'boolean')
+        reader.field_into(pair, 'RouteMode', 'integer')
         _extend_side_points(reader, pair)
         for side in ('Pos', 'Neg'):
             upgrades.extend(_separate_traces(reader, pair, side))
     for trace in board.select('Nets/Net/Traces/Trace'):
-        reader.field(trace, 'PairSeparateTrace', 'integer')
+        reader.field_into(trace, 'PairSeparateTrace', 'integer')
         for end in (1, 2):
-            reader.field(trace, 'Connected'+str(end), 'integer', replace=True)
+            reader.field_into(trace, 'Connected'+str(end), 'integer', replace=True)
         for point in trace.select('Points/Point'):
-            reader.field(point, 'PairSubPoint', 'integer')
-            reader.field(point, 'PairNecked', 'boolean')
+            reader.field_into(point, 'PairSubPoint', 'integer')
+            reader.field_into(point, 'PairNecked', 'boolean')
     for pair in board.select('RemovedDifferentialPairs/RemovedDifferentialPair'):
         _extend_side_points(reader, pair)
     return tuple(upgrades)

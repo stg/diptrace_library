@@ -19,7 +19,7 @@ to distinguish a nominal body envelope from other visible geometry.
 from decimal import Decimal, localcontext
 import math
 
-from .geometry import Bounds, circular_arc_bounds, transform_point, decimal_precision, rotation_components
+from .geometry import Bounds, transform_point, decimal_precision, rotation_components
 
 
 def _number(value):
@@ -103,18 +103,44 @@ def _pad(pad):
 
 
 def _drawing(shape):
+    # Retain working precision through the circle solve. Rounding relative
+    # extrema to binary coordinates can bias a repeatedly normalized frame.
     kind = shape['Type']
     if kind <= 0 or kind == 7:
         return None
-    points = [tuple(map(_number,row.values)) for row in shape.select('Points_New/pt')]
+    points = [tuple(map(_number, row.values)) for row in shape.select('Points_New/pt')]
     if kind != 6:
         return _points(points)
     if len(points) != 3:
         raise ValueError('a footprint arc requires three defining points')
-    x,y = points[0]
-    relative = [(float(px-x),float(py-y)) for px,py in points]
-    box = circular_arc_bounds(*relative)
-    return _shift(Bounds(*map(_number,(box.left,box.top,box.right,box.bottom))),x,y)
+    (ax, ay), (bx, by), (ex, ey) = points
+    if points[0] == points[2]:
+        ox, oy = (ax + bx) / 2, (ay + by) / 2
+        radius = ((bx - ax)**2 + (by - ay)**2).sqrt() / 2
+        return Bounds(ox - radius, oy - radius, ox + radius, oy + radius)
+    ux, uy, vx, vy = bx - ax, by - ay, ex - ax, ey - ay
+    cross = ux * vy - uy * vx
+    if not cross:
+        return Bounds.from_points(points)
+    u2, v2 = ux * ux + uy * uy, vx * vx + vy * vy
+    dx, dy = (u2 * vy - v2 * uy) / (2 * cross), (ux * v2 - vx * u2) / (2 * cross)
+    ox, oy = ax + dx, ay + dy
+    radius = (dx * dx + dy * dy).sqrt()
+    direction = 1 if cross > 0 else -1
+    first, last = (ax - ox, ay - oy), (ex - ox, ey - oy)
+
+    def turn(a, b):
+        return direction * (a[0] * b[1] - a[1] * b[0])
+
+    minor = turn(first, last) >= 0
+    extrema = []
+    for point in ((ox + radius, oy), (ox, oy + radius),
+                  (ox - radius, oy), (ox, oy - radius)):
+        vector = point[0] - ox, point[1] - oy
+        starts, ends = turn(first, vector) >= 0, turn(vector, last) >= 0
+        if (starts and ends) if minor else (starts or ends):
+            extrema.append(point)
+    return Bounds.from_points(points + extrema)
 
 
 def physical_bounds(*, pads=(), drawings=(), holes=()):

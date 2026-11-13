@@ -7,6 +7,28 @@ from lib.common.model import Document
 
 
 class AscTests(unittest.TestCase):
+    def test_no_source_mode_preserves_tokens_and_semantics_without_spans(self):
+        text = '(Component "Example" 003 (X -0.0000) (X -0.0000) (Name Inner!1))'
+        detailed = asc.loads(text)
+        lean = asc.loads_bytes(text.encode(), retain_source=False)
+        self.assertEqual(asc.dumps(lean, preserve=False), asc.dumps(detailed, preserve=False))
+        self.assertIsNone(lean._source_text)
+        self.assertIsNone(lean._source_bytes)
+        for node in lean.root.walk(include_self=True):
+            self.assertIsNone(node.source)
+            self.assertIsNone(node._syntax)
+            self.assertTrue(all(value.source is None for value in node.arguments))
+        self.assertEqual(lean.one('/Component').arguments[1].lexeme, '003')
+        self.assertIs(lean.one('//X[1]').arguments[0], lean.one('//X[2]').arguments[0])
+        lean.one('//X[1]').set_argument(0, 5)
+        self.assertEqual(lean.one('//X[2]').values, (Decimal('-0.0000'),))
+
+    def test_no_source_mode_keeps_malformed_input_rejection(self):
+        for text in ('(Name "unterminated)', '(Name 1', '(Name 1))', 'outside', '(1Name x)'):
+            for retain in (False, True):
+                with self.subTest(text=text, retain=retain), self.assertRaises(ValueError):
+                    asc.loads(text, retain_source=retain)
+
     def test_pcb_source_has_no_schematic_dependencies(self):
         text = '(Source "DipTrace-PCBN" 53)\r\n(Board (Points (pt 1.25 -2.5 "N")))\r\n'
         document = asc.loads(text)

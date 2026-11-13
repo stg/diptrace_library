@@ -4,7 +4,7 @@ from ..model.local_groups import owner
 
 
 def reserved(owner):
-    return {node['UnresolvedGroupId'] for node in owner.walk(include_self=True)
+    return {node['UnresolvedGroupId'] for node in owner._record_walk(include_self=True)
             if node.child('UnresolvedGroupId') is not None}
 
 

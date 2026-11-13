@@ -109,7 +109,7 @@ class AscOutputTests(unittest.TestCase):
         self.assertEqual([notice.rule for notice in report.infos],['viewport-position'])
         rebuilt = reopen(document,report=ConversionReport())
         self.assertEqual(signature(rebuilt.one('/Board')),expected)
-        self.assertEqual(rebuilt.root['Scale'],Decimal('123.4567'))
+        self.assertEqual(rebuilt.root['Scale'],123.4567)
         self.assertEqual(dumps(document,preserve=False),before)
 
     def test_unmapped_root_or_board_content_cannot_be_silently_omitted(self):

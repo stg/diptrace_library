@@ -111,9 +111,9 @@ For relationship ownership, scope, lifecycle and validation see the
 | RailBottom | number | no | no | — | shared length | stored |
 | OriginX | number | no | no | — | shared length | stored |
 | OriginY | number | no | no | — | shared length | stored |
-| CompFontSize | number | no | no | — | — | stored |
-| PatternFontWidth | number | no | no | — | — | stored |
-| PatternFontScale | number | no | no | — | — | stored |
+| CompFontSize | number | no | no | — | font size | stored |
+| PatternFontWidth | number | no | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
+| PatternFontScale | number | no | no | — | ratio | stored |
 | Enabled | boolean | no | no | `True` | — | stored |
 | Selected | boolean | no | no | `False` | — | stored |
 | ShieldGroup | integer | no | no | `-1` | — | stored |
@@ -199,12 +199,12 @@ Two opposite corners, retaining their authored order.
 | Type | integer | yes | no | — | — | stored |
 | Number1 | integer | yes | no | — | — | stored |
 | Number2 | integer | yes | no | — | — | stored |
-| Width | number | yes | no | — | — | stored |
-| Height | number | yes | no | — | — | stored |
+| Width | number | yes | no | — | shared length | stored |
+| Height | number | yes | no | — | shared length | stored |
 | Value | text | no | no | `''` | — | stored |
 | LockProperties | boolean | yes | no | — | — | stored |
-| Origin_X | number | yes | no | — | — | stored |
-| Origin_Y | number | yes | no | — | — | stored |
+| Origin_X | number | yes | no | — | shared length | stored |
+| Origin_Y | number | yes | no | — | shared length | stored |
 | ModelType | integer | yes | no | — | — | stored |
 | ModelString | text | yes | no | — | — | stored |
 | SubfolderIndex | integer | yes | no | — | — | stored |
@@ -280,16 +280,16 @@ A table cell with authored bounds and derived grid position.
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
 | FOrientation | boolean | yes | no | — | — | stored |
-| FontSize | number | yes | no | — | — | stored |
+| FontSize | number | yes | no | — | font size | stored |
 | FontType | integer | yes | no | — | — | stored |
 | Align | integer | yes | no | — | — | stored |
 | FontColor | integer | yes | no | — | — | stored |
 | Text | text | yes | no | — | — | stored |
 | FontName | text | yes | no | — | — | stored |
 | VectorFont | boolean | yes | no | — | — | stored |
-| FontWidth | number | yes | no | — | — | stored |
-| FontScale | number | yes | no | — | — | stored |
-| LineSpacing | number | yes | no | — | — | stored |
+| FontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
+| FontScale | number | yes | no | — | ratio | stored |
+| LineSpacing | number | yes | no | — | ratio | stored |
 | FontMono | boolean | no | no | `False` | — | stored |
 | X1 | number | yes | no | `0` | shared length | stored |
 | Y1 | number | yes | no | `0` | shared length | stored |
@@ -408,22 +408,22 @@ An ordered collection of DesignCacheLink records.
 | SubObject2 | integer | yes | no | — | — | stored |
 | Point2 | integer | yes | no | — | — | stored |
 | Layer | integer | yes | no | — | — | stored |
-| X1 | number | yes | no | — | — | stored |
-| Y1 | number | yes | no | — | — | stored |
-| X2 | number | yes | no | — | — | stored |
-| Y2 | number | yes | no | — | — | stored |
-| XD | number | yes | no | — | — | stored |
-| YD | number | yes | no | — | — | stored |
-| ArrowSize | number | yes | no | — | — | stored |
+| X1 | number | yes | no | — | shared length | stored |
+| Y1 | number | yes | no | — | shared length | stored |
+| X2 | number | yes | no | — | shared length | stored |
+| Y2 | number | yes | no | — | shared length | stored |
+| XD | number | yes | no | — | shared length | stored |
+| YD | number | yes | no | — | shared length | stored |
+| ArrowSize | number | yes | no | — | shared length | stored |
 | Units | integer | yes | no | — | — | stored |
 | VectorFont | boolean | yes | no | — | — | stored |
 | FontName | text | yes | no | — | — | stored |
-| FontSize | number | yes | no | — | — | stored |
-| FontScale | number | yes | no | — | — | stored |
-| FontWidth | number | yes | no | — | — | stored |
+| FontSize | number | yes | no | — | font size | stored |
+| FontScale | number | yes | no | — | ratio | stored |
+| FontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
 | ShowUnits | boolean | yes | no | — | — | stored |
-| Angle | number | yes | no | — | — | stored |
-| ExternalRadius | number | yes | no | — | — | stored |
+| Angle | number | yes | no | — | angle | stored |
+| ExternalRadius | number | yes | no | — | selection | stored |
 | PointerMode | integer | yes | no | — | — | stored |
 | PointerText | text | yes | no | — | — | stored |
 | Group | reference | no | yes | — | — | relationship |
@@ -482,25 +482,25 @@ An ordered collection of DesignCacheLink records.
 | DisableBottomMask | integer | yes | no | — | — | stored |
 | DisableTopPaste | integer | yes | no | — | — | stored |
 | DisableBottomPaste | integer | yes | no | — | — | stored |
-| CustomSwell_New | number | yes | no | — | — | stored |
-| CustomShrink_New | number | yes | no | — | — | stored |
-| PadHole | number | yes | no | — | — | stored |
-| PadHoleH | number | yes | no | — | — | stored |
+| CustomSwell_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| CustomShrink_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| PadHole | number | yes | no | — | shared length | stored |
+| PadHoleH | number | yes | no | — | shared length | stored |
 | PadHoleType | integer | yes | no | — | — | stored |
 | SurfacePad | boolean | yes | no | — | — | stored |
 | PadShape_New | integer | yes | no | — | — | stored; Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, 4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit. |
-| PadAngle | number | yes | no | — | — | stored |
-| PadShape_X | number | yes | no | — | — | stored |
-| PadShape_Y | number | yes | no | — | — | stored |
-| PadCorner | number | yes | no | — | — | stored |
-| PadWidth_New | number | yes | no | — | — | stored |
-| PadHeight_New | number | yes | no | — | — | stored |
+| PadAngle | number | yes | no | — | radians | stored |
+| PadShape_X | number | yes | no | — | shared length | stored |
+| PadShape_Y | number | yes | no | — | shared length | stored |
+| PadCorner | number | yes | no | — | percent | stored |
+| PadWidth_New | number | yes | no | — | shared length | stored |
+| PadHeight_New | number | yes | no | — | shared length | stored |
 | Group | reference | no | yes | — | — | relationship |
 | Standard | boolean | yes | no | — | — | stored |
 | PadTerminalCount | integer | no | no | — | — | calculated; Calculated number of current terminal records. |
-| PadMask_Percent | number | yes | no | — | — | stored |
-| PadMask_EdgeGap | number | yes | no | — | — | stored |
-| PadMask_SegmentGap | number | yes | no | — | — | stored |
+| PadMask_Percent | number | yes | no | — | percent | stored |
+| PadMask_EdgeGap | number | yes | no | — | shared length | stored |
+| PadMask_SegmentGap | number | yes | no | — | shared length | stored |
 | PadMask_SegmentSide | number | yes | no | — | shared length | stored |
 | Index | integer | yes | no | `0` | — | calculated |
 | StringNumber | text | yes | no | `''` | — | stored |
@@ -541,17 +541,17 @@ An ordered collection of DesignCacheLink records.
 | Layer | integer | yes | no | — | — | stored |
 | FontName | text | yes | no | — | — | stored |
 | VectorFont | boolean | yes | no | — | — | stored |
-| FontSize | number | yes | no | — | — | stored |
-| FontScale | number | yes | no | — | — | stored |
-| FontWidth | number | yes | no | — | — | stored |
+| FontSize | number | yes | no | — | font size | stored |
+| FontScale | number | yes | no | — | ratio | stored |
+| FontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
 | FontMono | boolean | no | no | `False` | — | stored |
 | TextShow | integer | yes | no | — | — | stored |
-| Width | number | yes | no | — | shared length | stored |
+| Width | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
 | TextAngle | number | yes | no | — | radians | stored |
 | TextHorz | integer | yes | no | — | — | stored |
 | TextVert | integer | yes | no | — | — | stored |
 | TextAlign | integer | yes | no | — | — | stored |
-| LineSpacing | number | yes | no | — | — | stored |
+| LineSpacing | number | yes | no | — | ratio | stored |
 | AllLayers | boolean | yes | no | — | — | stored |
 | Group | reference | no | yes | — | — | relationship |
 | PadId | integer | no | no | — | — | calculated |
@@ -583,23 +583,23 @@ An ordered collection of DesignCacheLink records.
 | Type | integer | yes | no | — | — | stored |
 | Orientation | integer | yes | no | — | — | stored |
 | Number | integer | yes | no | — | — | stored |
-| Length | number | yes | no | — | — | stored |
+| Length | number | yes | no | — | shared length | stored |
 | Name | text | yes | no | — | — | stored |
 | StringNumber | text | yes | no | — | — | stored |
 | ShowName | boolean | yes | no | — | — | stored |
-| PinNumXShift | number | yes | no | — | — | stored |
-| PinNumYShift | number | yes | no | — | — | stored |
-| PinNameXShift | number | yes | no | — | — | stored |
-| PinNameYShift | number | yes | no | — | — | stored |
+| PinNumXShift | number | yes | no | — | shared length | stored |
+| PinNumYShift | number | yes | no | — | shared length | stored |
+| PinNameXShift | number | yes | no | — | shared length | stored |
+| PinNameYShift | number | yes | no | — | shared length | stored |
 | ElectricType | integer | yes | no | — | — | stored |
-| NameFontSize | number | yes | no | — | — | stored |
-| NameFontWidth | number | yes | no | — | — | stored |
-| NameFontScale | number | yes | no | — | — | stored |
+| NameFontSize | number | yes | no | — | font size | stored |
+| NameFontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
+| NameFontScale | number | yes | no | — | ratio | stored |
 | Group | reference | no | yes | — | — | relationship |
-| PinNameRotate | number | yes | no | — | — | stored |
-| PinNumRotate | number | yes | no | — | — | stored |
+| PinNameRotate | number | yes | no | — | angle | stored |
+| PinNumRotate | number | yes | no | — | angle | stored |
 | NameFontMono | boolean | no | no | `False` | — | stored |
-| SignalDelay | number | no | no | — | — | stored |
+| SignalDelay | number | no | no | — | delay | stored |
 | Index | integer | yes | no | `0` | — | calculated |
 | X | number | yes | no | `0` | shared length | stored |
 | Y | number | yes | no | `0` | shared length | stored |
@@ -641,23 +641,23 @@ An ordered collection of DesignCacheLink records.
 | --- | --- | --- | --- | --- | --- | --- |
 | Enabled | boolean | yes | no | — | — | stored |
 | Type | integer | yes | no | — | — | stored |
-| FontSize | number | yes | no | — | — | stored |
+| FontSize | number | yes | no | — | font size | stored |
 | FontColor | integer | yes | no | — | — | stored |
 | FontType | integer | yes | no | — | — | stored |
 | FontName | text | yes | no | — | — | stored |
-| PenWidth | number | yes | no | — | shared length | stored |
+| PenWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
 | TextAngle | number | yes | no | — | radians | stored |
 | TextHorz | integer | yes | no | — | — | stored |
 | TextVert | integer | yes | no | — | — | stored |
 | TextAlign | integer | yes | no | — | — | stored |
-| LineSpacing | number | yes | no | — | — | stored |
+| LineSpacing | number | yes | no | — | ratio | stored |
 | Group | reference | no | yes | — | — | relationship |
 | ShowPart | boolean | yes | no | — | — | stored |
 | MarkingGenerated | boolean | yes | no | — | — | stored |
 | Locked | boolean | yes | no | — | — | stored |
 | VectorFont | boolean | yes | no | — | — | stored |
-| FontWidth | number | yes | no | — | — | stored |
-| FontScale | number | yes | no | — | — | stored |
+| FontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
+| FontScale | number | yes | no | — | ratio | stored |
 | FontMono | boolean | no | no | `False` | — | stored |
 | Index | integer | yes | no | `0` | — | calculated |
 | GroupId | integer | no | no | — | — | calculated |
@@ -684,9 +684,9 @@ An ordered collection of DesignCacheLink records.
 | Mirror | boolean | no | no | `False` | — | stored |
 | NoSearch | boolean | no | no | `False` | — | stored |
 | Units | integer | no | no | `0` | — | stored |
-| IPC_XOff | number | no | no | `0` | — | stored |
-| IPC_YOff | number | no | no | `0` | — | stored |
-| AutoHeight | number | no | no | `0` | — | stored |
+| IPC_XOff | number | no | no | `0` | shared length | stored |
+| IPC_YOff | number | no | no | `0` | shared length | stored |
+| AutoHeight | number | no | no | `0` | shared length | stored |
 | AutoColor | integer | no | no | `4934475` | — | stored |
 | Type | integer | no | no | `0` | — | stored |
 | KeepPins | boolean | no | no | `False` | — | stored |
@@ -715,25 +715,25 @@ An ordered collection of ModelLine records.
 
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
-| X | number | yes | no | `0` | — | stored; Model offset on this axis. |
-| Y | number | yes | no | `0` | — | stored; Model offset on this axis. |
-| Z | number | yes | no | `0` | — | stored; Model offset on this axis. |
+| X | number | yes | no | `0` | shared length | stored; Model offset on this axis. |
+| Y | number | yes | no | `0` | shared length | stored; Model offset on this axis. |
+| Z | number | yes | no | `0` | shared length | stored; Model offset on this axis. |
 
 ## ModelRotate
 
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
-| X | number | yes | no | `0` | — | stored; Model rotate on this axis. |
-| Y | number | yes | no | `0` | — | stored; Model rotate on this axis. |
-| Z | number | yes | no | `0` | — | stored; Model rotate on this axis. |
+| X | number | yes | no | `0` | angle | stored; Model rotate on this axis. |
+| Y | number | yes | no | `0` | angle | stored; Model rotate on this axis. |
+| Z | number | yes | no | `0` | angle | stored; Model rotate on this axis. |
 
 ## ModelZoom
 
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
-| X | number | yes | no | `1` | — | stored; Model zoom on this axis. |
-| Y | number | yes | no | `1` | — | stored; Model zoom on this axis. |
-| Z | number | yes | no | `1` | — | stored; Model zoom on this axis. |
+| X | number | yes | no | `1` | ratio | stored; Model zoom on this axis. |
+| Y | number | yes | no | `1` | ratio | stored; Model zoom on this axis. |
+| Z | number | yes | no | `1` | ratio | stored; Model zoom on this axis. |
 
 ## PadStyle
 
@@ -742,24 +742,24 @@ An ordered collection of ModelLine records.
 | SurfacePad | boolean | yes | no | — | — | stored |
 | Sided | boolean | yes | no | — | — | stored |
 | PadHoleType | integer | yes | no | — | — | stored |
-| PadHole | number | yes | no | — | — | stored |
-| PadHoleH | number | yes | no | — | — | stored |
+| PadHole | number | yes | no | — | shared length | stored |
+| PadHoleH | number | yes | no | — | shared length | stored |
 | PadShape | integer | yes | no | — | — | stored; Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, 4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit. |
-| PadWidth | number | yes | no | — | — | stored |
-| PadHeight | number | yes | no | — | — | stored |
-| PadCorner | number | yes | no | — | — | stored |
-| PadShape_X | number | yes | no | — | — | stored |
-| PadShape_Y | number | yes | no | — | — | stored |
+| PadWidth | number | yes | no | — | shared length | stored |
+| PadHeight | number | yes | no | — | shared length | stored |
+| PadCorner | number | yes | no | — | percent | stored |
+| PadShape_X | number | yes | no | — | shared length | stored |
+| PadShape_Y | number | yes | no | — | shared length | stored |
 | PadTerminalCount | integer | no | no | — | — | calculated; Calculated number of current terminal records. |
 | TopMask_State | integer | yes | no | — | — | stored |
 | BotMask_State | integer | yes | no | — | — | stored |
 | TopPaste_State | integer | yes | no | — | — | stored |
 | BotPaste_State | integer | yes | no | — | — | stored |
-| CustomSwell_New | number | yes | no | — | — | stored |
-| CustomShrink_New | number | yes | no | — | — | stored |
-| PadMask_Percent | number | yes | no | — | — | stored |
-| PadMask_EdgeGap | number | yes | no | — | — | stored |
-| PadMask_SegmentGap | number | yes | no | — | — | stored |
+| CustomSwell_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| CustomShrink_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| PadMask_Percent | number | yes | no | — | percent | stored |
+| PadMask_EdgeGap | number | yes | no | — | shared length | stored |
+| PadMask_SegmentGap | number | yes | no | — | shared length | stored |
 | PadMask_SegmentSide | number | yes | no | — | shared length | stored |
 | Name | text | yes | no | `''` | — | stored |
 
@@ -782,7 +782,7 @@ An ordered collection of ModelLine records.
 | --- | --- | --- | --- | --- | --- | --- |
 | Index | integer | no | no | — | — | calculated; Current terminal position. |
 | Type | integer\|text | yes | no | `0` | — | stored; Terminal shape code or a public text selection, including empty text. |
-| Angle | number | yes | no | `0` | — | stored; Unquantized terminal angle in its public field representation. |
+| Angle | number | yes | no | `0` | angle | stored; Unquantized terminal angle in its public field representation. |
 | X | number | yes | no | `0` | shared length | stored |
 | Y | number | yes | no | `0` | shared length | stored |
 | ShapeWidth | number | yes | no | `0` | shared length | stored |
@@ -828,13 +828,13 @@ An ordered collection of PasteSegment records.
 | VariableParameter5 | boolean | yes | no | — | — | stored |
 | Number1 | integer | yes | no | — | — | stored |
 | Number2 | integer | yes | no | — | — | stored |
-| Spacing1 | number | yes | no | — | — | stored |
-| Spacing2 | number | yes | no | — | — | stored |
-| Spacing3 | number | yes | no | — | — | stored |
+| Spacing1 | number | yes | no | — | shared length | stored |
+| Spacing2 | number | yes | no | — | shared length | stored |
+| Spacing3 | number | yes | no | — | shared length | stored |
 | LockProperties | boolean | yes | no | — | — | stored |
-| PatternOrientation | number | yes | no | — | — | stored |
-| Width | number | yes | no | — | — | stored |
-| Height | number | yes | no | — | — | stored |
+| PatternOrientation | number | yes | no | — | orientation | stored |
+| Width | number | yes | no | — | shared length | stored |
+| Height | number | yes | no | — | shared length | stored |
 | OriginCross | boolean | yes | no | — | — | stored |
 | OriginCircle | boolean | yes | no | — | — | stored |
 | OriginCommon | integer | yes | no | — | — | stored |
@@ -845,29 +845,29 @@ An ordered collection of PasteSegment records.
 | RecoveryCode_Generator | boolean | yes | no | — | — | stored |
 | RecoveryCode_Model | boolean | yes | no | — | — | stored |
 | Pattern_Manufacturer | text | yes | no | — | — | stored |
-| PadCorner | number | yes | no | — | — | stored |
-| PadShape_X | number | yes | no | — | — | stored |
-| PadShape_Y | number | yes | no | — | — | stored |
-| PadWidth | number | yes | no | — | — | stored |
-| PadHeight | number | yes | no | — | — | stored |
+| PadCorner | number | yes | no | — | percent | stored |
+| PadShape_X | number | yes | no | — | shared length | stored |
+| PadShape_Y | number | yes | no | — | shared length | stored |
+| PadWidth | number | yes | no | — | shared length | stored |
+| PadHeight | number | yes | no | — | shared length | stored |
 | PadShape | integer | yes | no | — | — | stored; Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, 4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit. |
 | SurfacePad | boolean | yes | no | — | — | stored |
-| PadHole | number | yes | no | — | — | stored |
-| PadHoleH | number | yes | no | — | — | stored |
+| PadHole | number | yes | no | — | shared length | stored |
+| PadHoleH | number | yes | no | — | shared length | stored |
 | PadHoleType | integer | yes | no | — | — | stored |
 | PadTerminalCount | integer | no | no | — | — | calculated; Calculated number of current terminal records. |
 | TopMask_State | integer | yes | no | — | — | stored |
 | BotMask_State | integer | yes | no | — | — | stored |
 | TopPaste_State | integer | yes | no | — | — | stored |
 | BotPaste_State | integer | yes | no | — | — | stored |
-| CustomSwell_New | number | yes | no | — | — | stored |
-| CustomShrink_New | number | yes | no | — | — | stored |
-| PadMask_Percent | number | yes | no | — | — | stored |
-| PadMask_EdgeGap | number | yes | no | — | — | stored |
-| PadMask_SegmentGap | number | yes | no | — | — | stored |
+| CustomSwell_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| CustomShrink_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| PadMask_Percent | number | yes | no | — | percent | stored |
+| PadMask_EdgeGap | number | yes | no | — | shared length | stored |
+| PadMask_SegmentGap | number | yes | no | — | shared length | stored |
 | PadMask_SegmentSide | number | yes | no | — | shared length | stored |
-| OriginX | number | yes | no | — | — | stored |
-| OriginY | number | yes | no | — | — | stored |
+| OriginX | number | yes | no | — | shared length | stored |
+| OriginY | number | yes | no | — | shared length | stored |
 | Mounting | integer | yes | no | — | — | stored |
 | Pattern_CategoryName | text | yes | no | — | — | stored |
 | Pattern_CategoryIndex | integer | yes | no | — | — | stored |
@@ -972,15 +972,15 @@ An ordered collection of PasteSegment records.
 | TextVert | integer | no | no | `0` | — | stored |
 | TextAlign | integer | no | no | `0` | — | stored |
 | ShieldGroup | integer | no | no | `-1` | — | stored |
-| PenWidth | number | no | no | `0` | — | stored |
-| FontSize | number | no | no | `0` | — | stored |
-| FontWidth | number | no | no | `0` | — | stored |
-| FontScale | number | no | no | `0` | — | stored |
-| LineSpacing | number | no | no | `0` | — | stored |
-| TextAngle | number | no | no | `0` | — | stored |
-| PictureWidth | number | no | no | `0` | — | stored |
-| PictureHeight | number | no | no | `0` | — | stored |
-| PictureTransparent | number | no | no | `0` | — | stored |
+| PenWidth | number | no | no | `0` | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
+| FontSize | number | no | no | `0` | font size | stored |
+| FontWidth | number | no | no | `0` | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
+| FontScale | number | no | no | `0` | ratio | stored |
+| LineSpacing | number | no | no | `0` | ratio | stored |
+| TextAngle | number | no | no | `0` | radians | stored |
+| PictureWidth | number | no | no | `0` | shared length | stored |
+| PictureHeight | number | no | no | `0` | shared length | stored |
+| PictureTransparent | number | no | no | `0` | opacity | stored |
 | FontName | text | no | no | `''` | — | stored |
 | Picture_File | text | no | no | `''` | — | stored |
 | Picture_File_Variable | text | no | no | `''` | — | stored |
@@ -1008,7 +1008,7 @@ An ordered collection of PasteSegment records.
 | VertZones | integer | no | no | — | — | stored |
 | Standard | integer | no | no | — | — | stored |
 | FontName | text | no | no | — | — | stored |
-| FontSize | number | no | no | — | — | stored |
+| FontSize | number | no | no | — | font size | stored |
 | HorzBorderSize | number | no | no | — | shared length | stored |
 | VertBorderSize | number | no | no | — | shared length | stored |
 | FontLineWidth | number | no | no | — | shared length | stored |
@@ -1032,20 +1032,20 @@ An ordered collection of PasteSegment records.
 
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
-| TraceToTrace | number | no | no | `-1` | shared length | stored |
-| TraceToVia | number | no | no | `-1` | shared length | stored |
-| TraceToPad | number | no | no | `-1` | shared length | stored |
-| TraceToSmd | number | no | no | `-1` | shared length | stored |
-| TraceToCopper | number | no | no | `-1` | shared length | stored |
-| ViaToVia | number | no | no | `-1` | shared length | stored |
-| ViaToPad | number | no | no | `-1` | shared length | stored |
-| ViaToSmd | number | no | no | `-1` | shared length | stored |
-| ViaToCopper | number | no | no | `-1` | shared length | stored |
-| PadToPad | number | no | no | `-1` | shared length | stored |
-| PadToSmd | number | no | no | `-1` | shared length | stored |
-| PadToCopper | number | no | no | `-1` | shared length | stored |
-| SmdToSmd | number | no | no | `-1` | shared length | stored |
-| SmdToCopper | number | no | no | `-1` | shared length | stored |
+| TraceToTrace | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToVia | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToPad | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToVia | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToPad | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| PadToPad | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| PadToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| PadToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SmdToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SmdToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
 
 ## PcbClassClearances
 
@@ -1066,14 +1066,14 @@ An ordered collection of PasteSegment records.
 | Layer | reference | no | yes | — | — | relationship |
 | Lay | integer | no | no | — | — | calculated |
 | LayerName | text | no | no | — | — | calculated |
-| Width | number | no | no | `-1` | shared length | stored |
-| MinWidth | number | no | no | `-1` | shared length | stored |
-| MaxWidth | number | no | no | `-1` | shared length | stored |
-| Clearance | number | no | no | `-1` | shared length | stored |
-| DifClearance | number | no | no | `-1` | shared length | stored |
-| Neck_Width | number | no | no | `-1` | shared length | stored |
-| Neck_DifClearance | number | no | no | `-1` | shared length | stored |
-| Neck_MaxLength | number | no | no | `-1` | shared length | stored |
+| Width | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MinWidth | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MaxWidth | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| Clearance | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| DifClearance | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| Neck_Width | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| Neck_DifClearance | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| Neck_MaxLength | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
 
 | Child | Record type | Count |
 | --- | --- | --- |
@@ -1207,8 +1207,8 @@ An ordered collection of PasteSegment records.
 | X | number | yes | no | `0` | shared length | stored |
 | Y | number | yes | no | `0` | shared length | stored |
 | Angle | number | yes | no | `0` | radians | stored |
-| PlacementClearance | number | no | no | `-1` | shared length | stored |
-| MarkingFontSize | number | no | no | `5` | — | stored |
+| PlacementClearance | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MarkingFontSize | number | no | no | `5` | font size | stored |
 | Component_CategoryName | text | no | no | `''` | — | stored |
 | Component_CategoryIndex | integer | no | no | `-1` | — | stored |
 | Number | integer | no | no | — | — | calculated |
@@ -1429,22 +1429,22 @@ An ordered collection of PasteSegment records.
 | SubObject2 | integer | yes | no | — | — | stored |
 | Point2 | integer | yes | no | — | — | stored |
 | Layer | integer | yes | no | — | — | stored |
-| X1 | number | yes | no | — | — | stored |
-| Y1 | number | yes | no | — | — | stored |
-| X2 | number | yes | no | — | — | stored |
-| Y2 | number | yes | no | — | — | stored |
-| XD | number | yes | no | — | — | stored |
-| YD | number | yes | no | — | — | stored |
-| ArrowSize | number | yes | no | — | — | stored |
+| X1 | number | yes | no | — | shared length | stored |
+| Y1 | number | yes | no | — | shared length | stored |
+| X2 | number | yes | no | — | shared length | stored |
+| Y2 | number | yes | no | — | shared length | stored |
+| XD | number | yes | no | — | shared length | stored |
+| YD | number | yes | no | — | shared length | stored |
+| ArrowSize | number | yes | no | — | shared length | stored |
 | Units | integer | yes | no | — | — | stored |
 | VectorFont | boolean | yes | no | — | — | stored |
 | FontName | text | yes | no | — | — | stored |
-| FontSize | number | yes | no | — | — | stored |
-| FontScale | number | yes | no | — | — | stored |
-| FontWidth | number | yes | no | — | — | stored |
+| FontSize | number | yes | no | — | font size | stored |
+| FontScale | number | yes | no | — | ratio | stored |
+| FontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
 | ShowUnits | boolean | yes | no | — | — | stored |
-| Angle | number | yes | no | — | — | stored |
-| ExternalRadius | number | yes | no | — | — | stored |
+| Angle | number | yes | no | — | angle | stored |
+| ExternalRadius | number | yes | no | — | selection | stored |
 | PointerMode | integer | yes | no | — | — | stored |
 | PointerText | text | yes | no | — | — | stored |
 | Group | reference | no | yes | — | — | relationship |
@@ -1484,33 +1484,33 @@ An ordered collection of PasteSegment records.
 
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
-| TraceToTrace | number | no | no | `-1` | shared length | stored |
-| TraceToVia | number | no | no | `-1` | shared length | stored |
-| TraceToPad | number | no | no | `-1` | shared length | stored |
-| TraceToSmd | number | no | no | `-1` | shared length | stored |
-| TraceToCopper | number | no | no | `-1` | shared length | stored |
-| TraceToDrill | number | no | no | `-1` | shared length | stored |
-| TraceToBoard | number | no | no | `-1` | shared length | stored |
-| ViaToVia | number | no | no | `-1` | shared length | stored |
-| ViaToPad | number | no | no | `-1` | shared length | stored |
-| ViaToSmd | number | no | no | `-1` | shared length | stored |
-| ViaToCopper | number | no | no | `-1` | shared length | stored |
-| ViaToDrill | number | no | no | `-1` | shared length | stored |
-| ViaToBoard | number | no | no | `-1` | shared length | stored |
-| PadToPad | number | no | no | `-1` | shared length | stored |
-| PadToSmd | number | no | no | `-1` | shared length | stored |
-| PadToCopper | number | no | no | `-1` | shared length | stored |
-| PadToDrill | number | no | no | `-1` | shared length | stored |
-| PadToBoard | number | no | no | `-1` | shared length | stored |
-| SmdToSmd | number | no | no | `-1` | shared length | stored |
-| SmdToCopper | number | no | no | `-1` | shared length | stored |
-| SmdToDrill | number | no | no | `-1` | shared length | stored |
-| SmdToBoard | number | no | no | `-1` | shared length | stored |
-| CopperToCopper | number | no | no | `-1` | shared length | stored |
-| CopperToDrill | number | no | no | `-1` | shared length | stored |
-| CopperToBoard | number | no | no | `-1` | shared length | stored |
-| DrillToDrill | number | no | no | `-1` | shared length | stored |
-| DrillToBoard | number | no | no | `-1` | shared length | stored |
+| TraceToTrace | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToVia | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToPad | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToDrill | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| TraceToBoard | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToVia | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToPad | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToDrill | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| ViaToBoard | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| PadToPad | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| PadToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| PadToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| PadToDrill | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| PadToBoard | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SmdToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SmdToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SmdToDrill | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SmdToBoard | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| CopperToCopper | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| CopperToDrill | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| CopperToBoard | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| DrillToDrill | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| DrillToBoard | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
 
 ## PcbDrcLayerClearance
 
@@ -1518,10 +1518,10 @@ An ordered collection of PasteSegment records.
 | --- | --- | --- | --- | --- | --- | --- |
 | Layer | reference | no | yes | — | — | relationship |
 | Lay | integer | no | no | — | — | calculated |
-| SameTraceToTrace | number | no | no | `-1` | shared length | stored |
-| SameSmdToVia | number | no | no | `-1` | shared length | stored |
-| SameSmdToPad | number | no | no | `-1` | shared length | stored |
-| SameSmdToSmd | number | no | no | `-1` | shared length | stored |
+| SameTraceToTrace | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SameSmdToVia | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SameSmdToPad | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| SameSmdToSmd | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
 
 | Child | Record type | Count |
 | --- | --- | --- |
@@ -1539,12 +1539,12 @@ An ordered collection of PasteSegment records.
 | --- | --- | --- | --- | --- | --- | --- |
 | Layer | reference | no | yes | — | — | relationship |
 | Lay | integer | no | no | — | — | calculated |
-| MinTrace | number | no | no | `-1` | shared length | stored |
-| MinDrill | number | no | no | `-1` | shared length | stored |
-| MinRing | number | no | no | `-1` | shared length | stored |
-| MaxRing | number | no | no | `-1` | shared length | stored |
-| MaxPlatedHole | number | no | no | `-1` | shared length | stored |
-| MaxNonPlatedHole | number | no | no | `-1` | shared length | stored |
+| MinTrace | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MinDrill | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MinRing | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MaxRing | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MaxPlatedHole | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MaxNonPlatedHole | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
 
 ## PcbDrcLayerSizes
 
@@ -1693,7 +1693,7 @@ An ordered collection of PasteSegment records.
 | Name | text | no | no | `''` | — | stored |
 | Type | integer | no | no | — | — | calculated; Conductor/plane follows the copper layer; an item without a copper layer is dielectric. |
 | VariableThickness | boolean | no | no | `False` | — | stored |
-| Constant | number | no | no | `0` | — | stored |
+| Constant | number | no | no | `0` | ratio | stored |
 | Thickness | number | no | no | `0` | shared length | stored |
 | TraceWidth | number | no | no | `0` | shared length | stored |
 
@@ -1825,9 +1825,9 @@ An ordered collection of PasteSegment records.
 | TraceColor | integer | no | no | `0` | — | stored |
 | ActiveLine | integer | no | no | `-1` | — | stored |
 | ActivePoint | integer | no | no | `-1` | — | stored |
-| Width | number | no | no | `-1` | — | stored |
-| Clearance | number | no | no | `-1` | — | stored |
-| MeanderGap | number | no | no | `-1` | — | stored |
+| Width | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| Clearance | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
+| MeanderGap | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
 | Number | integer | no | no | — | — | calculated |
 
 | Child | Record type | Count |
@@ -1861,7 +1861,7 @@ An ordered collection of PasteSegment records.
 | Phase_ErrorLength | number | no | no | `0` | shared length | stored |
 | LengthDelta | number | no | no | `Decimal('7.62')` | shared length | stored |
 | FixedLength | number | no | no | `-1` | shared length | stored |
-| MaxIncorrectWayValue | number | no | no | `0` | — | stored; Autorouting limit scalar, independent of display length units. |
+| MaxIncorrectWayValue | number | no | no | `0` | unscaled | stored; Autorouting limit scalar, independent of display length units. |
 
 | Child | Record type | Count |
 | --- | --- | --- |
@@ -1936,25 +1936,25 @@ An ordered collection of PasteSegment records.
 | DisableBottomMask | integer | yes | no | — | — | stored |
 | DisableTopPaste | integer | yes | no | — | — | stored |
 | DisableBottomPaste | integer | yes | no | — | — | stored |
-| CustomSwell_New | number | yes | no | — | — | stored |
-| CustomShrink_New | number | yes | no | — | — | stored |
-| PadHole | number | yes | no | — | — | stored |
-| PadHoleH | number | yes | no | — | — | stored |
+| CustomSwell_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| CustomShrink_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| PadHole | number | yes | no | — | shared length | stored |
+| PadHoleH | number | yes | no | — | shared length | stored |
 | PadHoleType | integer | yes | no | — | — | stored |
 | SurfacePad | boolean | yes | no | — | — | stored |
 | PadShape_New | integer | yes | no | — | — | stored; Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, 4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit. |
-| PadAngle | number | yes | no | — | — | stored |
-| PadShape_X | number | yes | no | — | — | stored |
-| PadShape_Y | number | yes | no | — | — | stored |
-| PadCorner | number | yes | no | — | — | stored |
-| PadWidth_New | number | yes | yes | — | — | stored; Main copper dimension; None means unavailable geometry. |
-| PadHeight_New | number | yes | yes | — | — | stored; Main copper dimension; None means unavailable geometry. |
+| PadAngle | number | yes | no | — | radians | stored |
+| PadShape_X | number | yes | no | — | shared length | stored |
+| PadShape_Y | number | yes | no | — | shared length | stored |
+| PadCorner | number | yes | no | — | percent | stored |
+| PadWidth_New | number | yes | yes | — | shared length | stored; Main copper dimension; None means unavailable geometry. |
+| PadHeight_New | number | yes | yes | — | shared length | stored; Main copper dimension; None means unavailable geometry. |
 | Group | integer | yes | no | — | — | stored |
 | Standard | boolean | yes | no | — | — | stored |
 | PadTerminalCount | integer | no | no | — | — | calculated; Calculated number of current terminal records. |
-| PadMask_Percent | number | yes | no | — | — | stored |
-| PadMask_EdgeGap | number | yes | no | — | — | stored |
-| PadMask_SegmentGap | number | yes | no | — | — | stored |
+| PadMask_Percent | number | yes | no | — | percent | stored |
+| PadMask_EdgeGap | number | yes | no | — | shared length | stored |
+| PadMask_SegmentGap | number | yes | no | — | shared length | stored |
 | PadMask_SegmentSide | number | yes | no | — | shared length | stored |
 | Index | integer | yes | no | `0` | — | calculated |
 | StringNumber | text | yes | no | `''` | — | stored |
@@ -1966,7 +1966,7 @@ An ordered collection of PasteSegment records.
 | NetNumber | integer | no | no | — | — | calculated; Calculated net position; edit Net instead. |
 | InternalConnection | integer | no | no | — | — | calculated; Calculated connection-group position; labels and authored pairs define membership. |
 | ShieldGroup | integer | no | no | `-1` | — | stored |
-| SignalDelay | number | no | no | `0` | — | stored |
+| SignalDelay | number | no | no | `0` | delay | stored |
 
 | Child | Record type | Count |
 | --- | --- | --- |
@@ -2086,7 +2086,7 @@ An ordered collection of PasteSegment records.
 | ShieldGroup | integer | no | no | `-1` | — | stored |
 | Arc | boolean | no | no | `False` | — | stored |
 | Selected | boolean | no | no | `False` | — | stored |
-| MeanderAngle | number | no | no | `0` | — | stored |
+| MeanderAngle | number | no | no | `0` | angle | stored |
 | Necked | boolean | no | no | `False` | — | stored |
 
 ## PcbPairedPad
@@ -2158,13 +2158,13 @@ An ordered collection of PasteSegment records.
 | VariableParameter5 | boolean | yes | no | — | — | stored |
 | Number1 | integer | yes | no | — | — | stored |
 | Number2 | integer | yes | no | — | — | stored |
-| Spacing1 | number | yes | no | — | — | stored |
-| Spacing2 | number | yes | no | — | — | stored |
-| Spacing3 | number | yes | no | — | — | stored |
+| Spacing1 | number | yes | no | — | shared length | stored |
+| Spacing2 | number | yes | no | — | shared length | stored |
+| Spacing3 | number | yes | no | — | shared length | stored |
 | LockProperties | boolean | yes | no | — | — | stored |
-| PatternOrientation | number | yes | no | — | — | stored |
-| Width | number | yes | no | — | — | stored |
-| Height | number | yes | no | — | — | stored |
+| PatternOrientation | number | yes | no | — | orientation | stored |
+| Width | number | yes | no | — | shared length | stored |
+| Height | number | yes | no | — | shared length | stored |
 | OriginCross | boolean | yes | no | — | — | stored |
 | OriginCircle | boolean | yes | no | — | — | stored |
 | OriginCommon | integer | yes | no | — | — | stored |
@@ -2175,29 +2175,29 @@ An ordered collection of PasteSegment records.
 | RecoveryCode_Generator | boolean | yes | no | — | — | stored |
 | RecoveryCode_Model | boolean | yes | no | — | — | stored |
 | Pattern_Manufacturer | text | no | no | — | — | stored |
-| PadCorner | number | yes | no | — | — | stored |
-| PadShape_X | number | yes | no | — | — | stored |
-| PadShape_Y | number | yes | no | — | — | stored |
-| PadWidth | number | yes | no | — | — | stored |
-| PadHeight | number | yes | no | — | — | stored |
+| PadCorner | number | yes | no | — | percent | stored |
+| PadShape_X | number | yes | no | — | shared length | stored |
+| PadShape_Y | number | yes | no | — | shared length | stored |
+| PadWidth | number | yes | no | — | shared length | stored |
+| PadHeight | number | yes | no | — | shared length | stored |
 | PadShape | integer | yes | no | — | — | stored; Pad-shape code: 0 ellipse, 1 obround, 2 rectangle, 3 polygon, 4 D-shape, 5 unnamed, 20 fiducial; other numeric codes remain explicit. |
 | SurfacePad | boolean | yes | no | — | — | stored |
-| PadHole | number | yes | no | — | — | stored |
-| PadHoleH | number | yes | no | — | — | stored |
+| PadHole | number | yes | no | — | shared length | stored |
+| PadHoleH | number | yes | no | — | shared length | stored |
 | PadHoleType | integer | yes | no | — | — | stored |
 | PadTerminalCount | integer | no | no | — | — | calculated; Calculated number of current terminal records. |
 | TopMask_State | integer | yes | no | — | — | stored |
 | BotMask_State | integer | yes | no | — | — | stored |
 | TopPaste_State | integer | yes | no | — | — | stored |
 | BotPaste_State | integer | yes | no | — | — | stored |
-| CustomSwell_New | number | yes | no | — | — | stored |
-| CustomShrink_New | number | yes | no | — | — | stored |
-| PadMask_Percent | number | yes | no | — | — | stored |
-| PadMask_EdgeGap | number | yes | no | — | — | stored |
-| PadMask_SegmentGap | number | yes | no | — | — | stored |
+| CustomSwell_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| CustomShrink_New | number | yes | no | — | shared length | stored; Unit-independent selections: -1000. |
+| PadMask_Percent | number | yes | no | — | percent | stored |
+| PadMask_EdgeGap | number | yes | no | — | shared length | stored |
+| PadMask_SegmentGap | number | yes | no | — | shared length | stored |
 | PadMask_SegmentSide | number | yes | no | — | shared length | stored |
-| OriginX | number | yes | no | — | — | stored |
-| OriginY | number | yes | no | — | — | stored |
+| OriginX | number | yes | no | — | shared length | stored |
+| OriginY | number | yes | no | — | shared length | stored |
 | Mounting | integer | yes | no | — | — | stored |
 | Pattern_CategoryName | text | yes | no | — | — | stored |
 | Pattern_CategoryIndex | integer | yes | no | — | — | stored |
@@ -2236,22 +2236,22 @@ An ordered collection of PasteSegment records.
 | SubObject2 | integer | yes | no | — | — | stored |
 | Point2 | integer | yes | no | — | — | stored |
 | Layer | integer | yes | no | — | — | stored |
-| X1 | number | yes | no | — | — | stored |
-| Y1 | number | yes | no | — | — | stored |
-| X2 | number | yes | no | — | — | stored |
-| Y2 | number | yes | no | — | — | stored |
-| XD | number | yes | no | — | — | stored |
-| YD | number | yes | no | — | — | stored |
-| ArrowSize | number | yes | no | — | — | stored |
+| X1 | number | yes | no | — | shared length | stored |
+| Y1 | number | yes | no | — | shared length | stored |
+| X2 | number | yes | no | — | shared length | stored |
+| Y2 | number | yes | no | — | shared length | stored |
+| XD | number | yes | no | — | shared length | stored |
+| YD | number | yes | no | — | shared length | stored |
+| ArrowSize | number | yes | no | — | shared length | stored |
 | Units | integer | yes | no | — | — | stored |
 | VectorFont | boolean | yes | no | — | — | stored |
 | FontName | text | yes | no | — | — | stored |
-| FontSize | number | yes | no | — | — | stored |
-| FontScale | number | yes | no | — | — | stored |
-| FontWidth | number | yes | no | — | — | stored |
+| FontSize | number | yes | no | — | font size | stored |
+| FontScale | number | yes | no | — | ratio | stored |
+| FontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
 | ShowUnits | boolean | yes | no | — | — | stored |
-| Angle | number | yes | no | — | — | stored |
-| ExternalRadius | number | yes | no | — | — | stored |
+| Angle | number | yes | no | — | angle | stored |
+| ExternalRadius | number | yes | no | — | selection | stored |
 | PointerMode | integer | yes | no | — | — | stored |
 | PointerText | text | yes | no | — | — | stored |
 | Group | integer | yes | no | — | — | stored |
@@ -2277,17 +2277,17 @@ An ordered collection of PasteSegment records.
 | Layer | integer | yes | no | — | — | stored |
 | FontName | text | yes | no | — | — | stored |
 | VectorFont | boolean | yes | no | — | — | stored |
-| FontSize | number | yes | no | — | — | stored |
-| FontScale | number | yes | no | — | — | stored |
-| FontWidth | number | yes | no | — | — | stored |
+| FontSize | number | yes | no | — | font size | stored |
+| FontScale | number | yes | no | — | ratio | stored |
+| FontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
 | FontMono | boolean | no | no | `False` | — | stored |
 | TextShow | integer | yes | no | — | — | stored |
-| Width | number | yes | no | — | shared length | stored |
+| Width | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
 | TextAngle | number | yes | no | — | radians | stored |
 | TextHorz | integer | yes | no | — | — | stored |
 | TextVert | integer | yes | no | — | — | stored |
 | TextAlign | integer | yes | no | — | — | stored |
-| LineSpacing | number | yes | no | — | — | stored |
+| LineSpacing | number | yes | no | — | ratio | stored |
 | AllLayers | boolean | yes | no | — | — | stored |
 | Group | integer | yes | no | — | — | stored |
 | PadId | integer | no | no | — | — | calculated |
@@ -2545,16 +2545,16 @@ Available calculated classification; absence means unavailable, including when f
 | NonSignalLayer | reference | no | yes | — | — | relationship |
 | NonSignal | integer | no | no | — | — | calculated |
 | UnresolvedNonSignal | integer | no | no | — | — | stored |
-| DefFontSize | number | no | no | `0` | — | stored |
-| DefCellWidth | number | no | no | `0` | — | stored |
-| DefCellHeight | number | no | no | `0` | — | stored |
-| X1 | number | no | no | `0` | — | stored |
-| Y1 | number | no | no | `0` | — | stored |
-| X2 | number | no | no | `0` | — | stored |
-| Y2 | number | no | no | `0` | — | stored |
-| DefFontWidth | number | no | no | `0` | — | stored |
-| DefFontScale | number | no | no | `0` | — | stored |
-| DefLineSpacing | number | no | no | `0` | — | stored |
+| DefFontSize | number | no | no | `0` | font size | stored |
+| DefCellWidth | number | no | no | `0` | shared length | stored |
+| DefCellHeight | number | no | no | `0` | shared length | stored |
+| X1 | number | no | no | `0` | shared length | stored |
+| Y1 | number | no | no | `0` | shared length | stored |
+| X2 | number | no | no | `0` | shared length | stored |
+| Y2 | number | no | no | `0` | shared length | stored |
+| DefFontWidth | number | no | no | `0` | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
+| DefFontScale | number | no | no | `0` | ratio | stored |
+| DefLineSpacing | number | no | no | `0` | ratio | stored |
 | DefFontName | text | no | no | `''` | — | stored |
 | Name | text | no | no | `''` | — | stored |
 | Supplier | text | no | no | `''` | — | stored |
@@ -2599,8 +2599,8 @@ Available calculated classification; absence means unavailable, including when f
 | Variant | reference | no | yes | — | — | relationship |
 | AssemblyVariant | integer | no | no | — | — | calculated |
 | UnresolvedAssemblyVariant | integer | no | no | — | — | stored |
-| PickOffX | number | no | no | — | — | stored |
-| PickOffY | number | no | no | — | — | stored |
+| PickOffX | number | no | no | — | shared length | stored |
+| PickOffY | number | no | no | — | shared length | stored |
 | Header | boolean | no | no | — | — | stored |
 | BomRowNumber | boolean | no | no | — | — | stored |
 | BomTotal | boolean | no | no | — | — | stored |
@@ -2619,7 +2619,7 @@ Available calculated classification; absence means unavailable, including when f
 | --- | --- | --- | --- | --- | --- | --- |
 | Type | integer | no | no | — | — | stored |
 | TextAlign | integer | no | no | — | — | stored |
-| Width | number | no | no | — | — | stored |
+| Width | number | no | no | — | shared length | stored |
 | Name | text | no | no | `''` | — | stored |
 | Title | text | no | no | `''` | — | stored |
 | Index | integer | no | no | — | — | calculated |
@@ -2742,7 +2742,7 @@ Available calculated classification; absence means unavailable, including when f
 | Id | integer | no | no | — | — | calculated |
 | X | number | yes | no | `0` | shared length | stored |
 | Y | number | yes | no | `0` | shared length | stored |
-| Width | number | no | no | `-1` | shared length | stored |
+| Width | number | no | no | `-1` | shared length | stored; Unit-independent selections: -1. |
 | Jumper | integer | no | no | `0` | — | stored |
 | Meander | integer | no | no | `0` | — | stored |
 | ShieldGroup | integer | no | no | `-1` | — | stored |
@@ -2754,7 +2754,7 @@ Available calculated classification; absence means unavailable, including when f
 | PairNecked | boolean | no | no | `False` | — | stored |
 | PhaseFwd | number | no | yes | `None` | shared length | stored; Calculated phase length, absent when unavailable. |
 | PhaseBack | number | no | yes | `None` | shared length | stored; Calculated phase length, absent when unavailable. |
-| MeanderAngle | number | no | no | `0` | — | stored |
+| MeanderAngle | number | no | no | `0` | angle | stored |
 
 ## PcbTracePoints
 
@@ -2822,8 +2822,8 @@ Available calculated classification; absence means unavailable, including when f
 
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
-| Width | number | no | no | `0` | — | stored |
-| Height | number | no | no | `0` | — | stored |
+| Width | number | no | no | `0` | shared length | stored |
+| Height | number | no | no | `0` | shared length | stored |
 
 | Child | Record type | Count |
 | --- | --- | --- |
@@ -2941,7 +2941,7 @@ An ordered collection of LibraryPath records.
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
 | Quantity | integer | yes | no | `0` | — | stored |
-| Price | number | yes | no | `0` | — | stored; Unit price in the supplier currency. |
+| Price | number | yes | no | `0` | currency | stored; Unit price in the supplier currency. |
 
 ## RowHeight
 
@@ -3045,12 +3045,12 @@ An ordered collection of Cell records.
 | Smd | integer | no | no | `0` | — | stored |
 | Trace | integer | no | no | `0` | — | stored |
 | TJunc | integer | no | no | `0` | — | stored |
-| PadViaWidth | number | no | no | `0` | — | stored |
-| PadViaLength | number | no | no | `0` | — | stored |
-| SmdWidth | number | no | no | `0` | — | stored |
-| SmdLength | number | no | no | `0` | — | stored |
-| TraceLength | number | no | no | `0` | — | stored |
-| TJuncLength | number | no | no | `0` | — | stored |
+| PadViaWidth | number | no | no | `0` | percent | stored |
+| PadViaLength | number | no | no | `0` | percent | stored |
+| SmdWidth | number | no | no | `0` | percent | stored |
+| SmdLength | number | no | no | `0` | percent | stored |
+| TraceLength | number | no | no | `0` | percent | stored |
+| TJuncLength | number | no | no | `0` | percent | stored |
 
 ## TextLine
 
@@ -3071,16 +3071,16 @@ An ordered collection of TextLine records.
 | Field | Type | Required | Nullable | Default | Unit | Access / meaning |
 | --- | --- | --- | --- | --- | --- | --- |
 | FOrientation | boolean | yes | no | — | — | stored |
-| FontSize | number | yes | no | — | — | stored |
+| FontSize | number | yes | no | — | font size | stored |
 | FontType | integer | yes | no | — | — | stored |
 | Align | integer | yes | no | — | — | stored |
 | FontColor | integer | yes | no | — | — | stored |
 | Text | text | yes | no | — | — | stored |
 | FontName | text | yes | no | — | — | stored |
 | VectorFont | boolean | yes | no | — | — | stored |
-| FontWidth | number | yes | no | — | — | stored |
-| FontScale | number | yes | no | — | — | stored |
-| LineSpacing | number | yes | no | — | — | stored |
+| FontWidth | number | yes | no | — | shared length | stored; Negative pen/width values are style selections, not physical lengths. |
+| FontScale | number | yes | no | — | ratio | stored |
+| LineSpacing | number | yes | no | — | ratio | stored |
 | Placement | tuple | yes | no | — | — | stored |
 | ↳ X1 | number | yes | no | 0 | shared length |  |
 | ↳ Y1 | number | yes | no | 0 | shared length |  |

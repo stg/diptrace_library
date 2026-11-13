@@ -3,6 +3,7 @@ from copy import deepcopy
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.references import ReferenceError
@@ -85,7 +86,7 @@ class RemovedPairTests(unittest.TestCase):
             with self.subTest(version=version):
                 data = encode(document, version=version, report=ConversionReport())
                 current = reopen(data, report=ConversionReport())
-                self.assertEqual(signature(current.one(PATH)), expected)
+                assert_float_facts(self,signature(current.one(PATH)), expected)
                 self.assertEqual(encode(current, version=version, report=ConversionReport()), data)
                 current.references.validate()
         self.assertEqual(dumps(document, preserve=False), before)

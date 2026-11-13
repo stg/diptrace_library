@@ -33,4 +33,4 @@ def expand_legacy_drawing(shape, *, orientation=0):
             shape.set_field('Type', 8 if kind == 6 else 9)
     for name, value in (('TextAngle', orientation*math.pi/2), ('TextHorz', -1),
                         ('TextVert', -1), ('TextAlign', -1), ('LineSpacing', 1.2)):
-        shape.add(name, value).annotations['derived_from'] = 'legacy drawing settings'
+        shape.add(name, value)

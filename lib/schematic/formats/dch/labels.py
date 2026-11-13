@@ -52,7 +52,7 @@ def upgrade_global_labels(version, schematic):
             name = schematic.scalar(field_name)
             user_fields.add('pt', name, user_field_key(name), 1, alignment)
     for name, values in labels.items():
-        schematic.add(name, *values).annotations['derived_from'] = 'legacy global label choices'
+        schematic.add(name, *values)
 
 
 def upgrade_instance_labels(version, schematic, *, font_size, font_name='', text_layout=None):

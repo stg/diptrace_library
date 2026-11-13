@@ -1,11 +1,13 @@
 """Stable binary coordinate frames derived from current footprint anchors."""
-from ....common.binary import quantized_number
+import math
+
+from ....common.binary import quantized_number, number_is_representable
 from ....common.conversion import info
 from ..placement_frames import project_frame
 
 
-def _exact_geometry(component):
-    """Keep a centered, already representable frame without re-encoding it."""
+def _on_binary_grid(component):
+    """Keep a grid frame, allowing its adjacent float rounding residue."""
     pattern = component.one('Pattern')
     values = [component.get(name, 0) for name in ('X', 'Y')]
     for pad in pattern.select('Pads/Pad'):
@@ -19,7 +21,19 @@ def _exact_geometry(component):
         if hole['Enabled']:
             values.extend(hole[name] for name in ('X', 'Y', 'Diam'))
     try:
-        return all(value is None or quantized_number(value, format_name='DIP') == value for value in values)
+        for value in values:
+            if value is None or number_is_representable(value, format_name='DIP'):
+                continue
+            # Float unit arithmetic can reach the adjacent representable float
+            # instead of the decoded wire value. Removing that last-bit residue
+            # needs only the writer's ordinary quantization, not a new frame
+            # and an additional rounding of the component's world placement.
+            if isinstance(value, float):
+                rounded = float(quantized_number(value, format_name='DIP'))
+                if abs(rounded-value) <= math.ulp(value):
+                    continue
+            return False
+        return True
     except (ValueError, TypeError):
         # A change of frame may make local coordinates representable. The
         # actual writer still validates every projected scalar and its range.
@@ -61,7 +75,7 @@ def project_frames(board, *, report=None):
         # Their existing initialization/frame rules remain authoritative.
         if pattern['Type'] in (15, 16):
             continue
-        if _exact_geometry(component):
+        if _on_binary_grid(component):
             continue
         angle = quantized_number(component.get('Angle', 0), format_name='DIP')
         for origin in _anchors(pattern):

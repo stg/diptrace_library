@@ -53,7 +53,7 @@ class AscRoutingTests(unittest.TestCase):
                 point = result.traces[73, 53].one('Points/Point[1]')
                 self.assertIsNone(point.get('PhaseFwd'))
                 self.assertIsNone(point.child('PhaseFwd'))
-                self.assertEqual(point['PhaseBack'], Decimal('-99999.9'))
+                self.assertEqual(point['PhaseBack'], -99999.9)
 
     def test_pad_endpoints_bind_through_the_ordinary_second_endpoint_spelling(self):
         result = assemble_routing(prepare_core(design()))

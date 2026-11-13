@@ -14,7 +14,7 @@ THERMAL = Record('PcbPadThermal', {**LAYER_FIELDS,
 }, parameters=('Lay', 'Type', 'Spoke', 'Width'))
 TEARDROP = Record('TeardropParameters', {
     **{name: Field(name, 'integer', default=0) for name in ('PadVia', 'Smd', 'Trace', 'TJunc')},
-    **{name: Field(name, 'number', default=0) for name in
+    **{name: Field(name, 'number', default=0, unit='percent') for name in
        ('PadViaWidth', 'PadViaLength', 'SmdWidth', 'SmdLength', 'TraceLength', 'TJuncLength')},
 })
 COLLECTIONS = {

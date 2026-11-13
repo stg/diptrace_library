@@ -2,6 +2,7 @@
 import unittest
 
 from lib import ExportReport, new_schematic, parse_dch
+from lib.schematic import ImportContext
 from lib.schematic.model.objects import (new_pattern, new_symbol)
 from lib.schematic.model.refs import (bind_schematic_references)
 
@@ -27,7 +28,7 @@ class CachedPropertiesTests(unittest.TestCase):
         flags = (True, False, True, False, True, False, True)
         part.one('Verification').set_values(*flags)
         data = source.to_dch_bytes()
-        decoded = cached_part(parse_dch(data)).one('Verification')
+        decoded = cached_part(parse_dch(data, context=ImportContext(retain_source=True))).one('Verification')
         start, end = decoded.source.start, decoded.source.end
         for count in (0, 3, 7, 10):
             with self.subTest(count=count):

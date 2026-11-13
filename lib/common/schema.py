@@ -9,6 +9,30 @@ from typing import Callable, Mapping
 
 
 MISSING = object()
+_in_validation_preview = lambda: False
+_in_structure_preview = lambda: False
+_validation_values = lambda: None
+
+
+def _validate_tuple_scalars(values, name):
+    """Check untyped tuple payloads without allocating member definitions."""
+    for value in values:
+        if value is None or isinstance(value, (str, bool, int)):
+            continue
+        if isinstance(value, tuple):
+            _validate_tuple_scalars(value, name)
+        elif isinstance(value, (float, Decimal)):
+            if not math.isfinite(float(value)):
+                raise ValueError(f'{name} requires finite floating numbers')
+        else:
+            raise TypeError(f'{name} tuple values must be scalars')
+
+
+def _bind_validation_preview(guard, *, structure, values):
+    """Bind model preview state after the shared types have been initialized."""
+    global _in_validation_preview, _in_structure_preview, _validation_values
+    _in_validation_preview = guard
+    _in_structure_preview, _validation_values = structure, values
 
 
 @dataclass(frozen=True)
@@ -30,9 +54,21 @@ class Field:
     collection_dependencies: Callable | None = None
     value_dependencies: Callable | None = None
     choices: tuple = ()
+    unit_sentinels: tuple = ()
+    unit_selector: Callable | None = None
+    _item_definition: object = dataclass_field(init=False, repr=False, compare=False, default=None)
+    _stores_integer: bool = dataclass_field(init=False, repr=False, compare=False, default=False)
 
     def __post_init__(self):
         object.__setattr__(self, 'choices', tuple(self.choices))
+        object.__setattr__(self, 'unit_sentinels', tuple(self.unit_sentinels))
+        if not isinstance(self.unit, str):
+            raise TypeError('field units must be text')
+        if self.unit_selector is not None and not callable(self.unit_selector):
+            raise TypeError('a field unit selector must be callable or None')
+        kinds = self.kind.split('|')
+        object.__setattr__(self, '_stores_integer',
+                           'integer' in kinds and not {'number', 'value'}.intersection(kinds))
         if (self.item_kind or self.length is not None) and self.kind != 'tuple':
             raise ValueError('tuple item types and lengths require a tuple field')
         if self.length is not None and (isinstance(self.length, bool) or
@@ -40,6 +76,8 @@ class Field:
             raise ValueError('tuple length requires a nonnegative integer')
         if self.members and self.length is not None and len(self.members) != self.length:
             raise ValueError('tuple length must agree with its named members')
+        if self.item_kind:
+            object.__setattr__(self, '_item_definition', Field(self.name+' item', self.item_kind))
 
     @property
     def readonly(self):
@@ -52,6 +90,18 @@ class Field:
             if self.nullable:
                 return
             raise TypeError(f'{self.name} does not accept None; remove an optional field explicitly')
+        # Most stored fields use these built-in scalar types. Their valid
+        # cases need neither numeric coercion nor tuple/union dispatch. Keep
+        # subclasses, choices and all failures on the complete checks below.
+        if not self.choices:
+            value_type, kind = type(value), self.kind
+            if ((value_type is str and kind in ('text', 'value'))
+                    or (value_type is bool and kind in ('boolean', 'value'))
+                    or (value_type is int and kind in ('integer', 'number', 'value'))
+                    or (value_type is float and kind in ('number', 'value') and math.isfinite(value))
+                    or (value_type is Decimal and kind in ('number', 'value')
+                        and value.is_finite() and math.isfinite(float(value)))):
+                return
         if '|' in self.kind:
             for kind in self.kind.split('|'):
                 try:
@@ -67,7 +117,8 @@ class Field:
             return
         numeric = isinstance(value, (int, float, Decimal)) and not isinstance(value, bool)
         if numeric and ((isinstance(value, float) and not math.isfinite(value)) or
-                        (isinstance(value, Decimal) and not value.is_finite())):
+                        (isinstance(value, Decimal) and (not value.is_finite() or
+                         self.kind in ('number', 'value') and not math.isfinite(float(value))))):
             raise ValueError(f'{self.name} requires a finite number')
         if self.kind == 'text':
             valid = isinstance(value, str)
@@ -90,14 +141,34 @@ class Field:
         if self.kind == 'tuple' and self.length is not None and len(value) != self.length:
             raise ValueError(f'{self.name} requires {self.length} tuple values')
         if self.kind == 'tuple' and self.item_kind:
-            item_definition = Field(self.name+' item', self.item_kind)
             for item in value:
-                item_definition.validate(item)
+                self._item_definition.validate(item)
         if self.kind == 'tuple' and self.members:
             if len(value) != len(self.members):
                 raise ValueError(f'{self.name} requires {len(self.members)} named tuple members')
             for member, item in zip(self.members, value):
                 member.validate(item)
+        elif self.kind == 'tuple' and not self.item_kind:
+            _validate_tuple_scalars(value, self.name)
+
+
+def with_units(record, units, *, sentinels=None, selectors=None):
+    """Declare measurement metadata alongside a record's field vocabulary.
+
+    Returned definitions remain immutable. Sentinels and selectors describe
+    existing value domains; they neither add design facts nor change validation.
+    """
+    sentinels, selectors = sentinels or {}, selectors or {}
+    unknown = (units.keys() | sentinels.keys() | selectors.keys()) - record.fields.keys()
+    if unknown:
+        raise KeyError(f'{record.name}: unknown unit fields {sorted(unknown)!r}')
+    fields = dict(record.fields)
+    for name in units.keys() | sentinels.keys() | selectors.keys():
+        field = fields[name]
+        fields[name] = replace(field, unit=units.get(name, field.unit),
+                               unit_sentinels=sentinels.get(name, field.unit_sentinels),
+                               unit_selector=selectors.get(name, field.unit_selector))
+    return replace(record, fields=fields)
 
 
 @dataclass(frozen=True)
@@ -159,8 +230,11 @@ class Record:
                         raise ValueError(f'{child.path}: expected {definition.record}, found {child.schema.name}')
 
     def validate_parameters(self, record):
+        direct = None if _in_validation_preview() else getattr(record._content, 'validate_field', None)
         for name in self.parameters:
             definition = self.fields[name]
+            if direct is not None and direct(name, definition, parameter=True):
+                continue
             children = record._child_sequence(name)
             if definition.readonly:
                 if children:
@@ -175,9 +249,16 @@ class Record:
 
     def validate_fields(self, record):
         """Audit present stored values and required fields without reading unresolved getters."""
+        bulk = (None if type(self) is not Record or _in_structure_preview()
+                else getattr(record._content, 'audit_fields', None))
+        if bulk is not None and bulk(self, proposed=_validation_values()):
+            return
         self.validate_parameters(record)
+        direct = None if _in_validation_preview() else getattr(record._content, 'validate_field', None)
         for name, definition in self.fields.items():
             if name in self.parameters or definition.getter is not None:
+                continue
+            if direct is not None and direct(name, definition):
                 continue
             children = record._child_sequence(name)
             if not children:

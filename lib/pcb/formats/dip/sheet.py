@@ -5,10 +5,10 @@ from .preamble import _fields
 
 
 def read_groups(reader, board):
-    groups = board.add('Groups')
+    groups = reader.add(board, 'Groups')
     for _ in range(reader.count('groups')):
         start = reader.pos
-        group = groups.add('Group')
+        group = reader.add(groups, 'Group')
         _fields(reader, group, 'boolean', 'Enabled Selected')
         reader.boolean()  # Temporary group state is not carried into the loaded design.
         group.set_values(reader.argument('integer'), reader.argument('number'), reader.argument('number'))
@@ -17,16 +17,16 @@ def read_groups(reader, board):
 
 
 def read_sheet_layout(reader, board):
-    sheet = board.add('SheetSettings')
+    sheet = reader.add(board, 'SheetSettings')
     _fields(reader, sheet, 'number', 'SheetWidth SheetHeight LeftMargin TopMargin RightMargin BottomMargin')
-    titles = sheet.add('TitleBlocks')
+    titles = reader.add(sheet, 'TitleBlocks')
     for index in range(6):
         read_title_block(reader, titles, index)
-    zones = sheet.add('BorderZones')
-    reader.field(zones, 'Visible', 'boolean')
+    zones = reader.add(sheet, 'BorderZones')
+    reader.field_into(zones, 'Visible', 'boolean')
     _fields(reader, zones, 'integer', 'HorzZones VertZones Standard')
-    reader.field(zones, 'FontName', 'text')
-    reader.field(zones, 'FontSize', 'integer')
-    reader.field(zones, 'Border', 'boolean')
+    reader.field_into(zones, 'FontName', 'text')
+    reader.field_into(zones, 'FontSize', 'integer')
+    reader.field_into(zones, 'Border', 'boolean')
     _fields(reader, zones, 'number', 'HorzBorderSize VertBorderSize FontLineWidth')
     return sheet

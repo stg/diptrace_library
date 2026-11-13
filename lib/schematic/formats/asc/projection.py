@@ -65,7 +65,10 @@ def _scalar_field(node, name):
 
 _OMITTED_EXTENSIONS = {
     'Schematic': {'ActiveSheet'},
-    'Pin': {'NameFontMono'}, 'Shape': {'FontMono', 'PictureFlipped'},
+    'Page': {'FontLineWidth', 'TitleBlocks'},
+    'CacheLib': {'PatternCategories'},
+    'Pattern': {'Sided', 'RefDes'},
+    'Pin': {'NameFontMono'}, 'Shape': {'FontMono', 'PictureFlipped', 'PadId'},
     'Dimension': {'FontMono'}, 'Cell': {'FontMono'}, 'Content': {'FontMono'},
     'Table': {'DefFontMono'}, 'Settings': {'PartFontMono', 'NetNameFontSize'},
     'ssimulator': {'sim_digital', 'OptionsGeneral', 'OptionsDC', 'OptionsAC', 'OptionsTransient'},
@@ -74,8 +77,18 @@ _OMITTED_EXTENSIONS = {
 
 def _visible(node, *, include_extensions=False):
     omitted = () if include_extensions else _OMITTED_EXTENSIONS.get(node.kind, ())
+    # Destination coverage follows the current record's role. Diagnostic notes
+    # and the format from which it was imported cannot select its ASC fields.
+    if node.kind == 'Pattern' and node.parent is not None and node.parent.kind != 'Definition':
+        omitted = {*omitted, 'Datasheet'}
+    if node.kind == 'Part' and node.parent is not None and node.parent.kind == 'Definition':
+        omitted = {*omitted, 'Datasheet'}
+    if node.kind == 'Pin' and node.parent is not None:
+        part = node.parent.parent
+        if part is not None and part.kind == 'Part' and part.parent is not None and part.parent.kind == 'Definition':
+            omitted = {*omitted, 'SignalDelay'}
     return [child for child in node.children()
-            if child.kind != 'UnresolvedKeys' and child.kind not in omitted and not child.annotations.get('asc_omit')
+            if child.kind != 'UnresolvedKeys' and child.kind not in omitted
             and (node.schema is None or child.kind not in node.schema.parameters)]
 
 
@@ -372,7 +385,7 @@ def project_pattern(pattern, *, line_width=None, text_bounds=None):
             for index, pad in enumerate(entries):
                 if pad.kind != 'Pad':
                     raise ProjectionError(f'{field.path}: expected Pad, found {pad.kind}')
-                if pad.annotations.get('asc_omit'):
+                if index in (0, len(entries)-1):
                     continue
                 projected = project_pad(pad)
                 projected.set_argument(0, index)

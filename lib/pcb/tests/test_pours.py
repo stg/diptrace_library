@@ -2,6 +2,7 @@
 from decimal import Decimal, localcontext
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.binary import BinaryWriter
 from lib.common.model import Element
 from lib.pcb.formats.dip.pours import read_base_pours
@@ -67,7 +68,7 @@ class PourTests(unittest.TestCase):
                 self.assertEqual(upgrade.previous_number, 19)
                 self.assertEqual(len(pour.one('Points').children()), 3)
                 self.assertEqual(pour.one('Fill/Lines/Line')['Region'], 4 if version > 33 else -1)
-                self.assertEqual(pour.one('Fill/SpokeLine/Line')['Width'], Decimal('.2'))
+                self.assertEqual(pour.one('Fill/SpokeLine/Line')['Width'], 0.2)
                 self.assertEqual(pour.one('Fill/Polygons/Poly')['Region'], 5 if version > 33 else -1)
                 self.assertIsNone(pour.child('Regions_Counted'))
 
@@ -76,7 +77,7 @@ class PourTests(unittest.TestCase):
         with localcontext() as context:
             context.prec = 2
             pour = read_base_pours(Reader(data), Element('Board'))[0].pour
-        self.assertEqual(pour['MinimumArea'], Decimal('1.52399025'))
+        assert_float_facts(self,pour['MinimumArea'], 1.52399025)
 
 
 if __name__ == '__main__':

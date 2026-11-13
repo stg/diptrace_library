@@ -11,12 +11,13 @@ def _bind(document):
     return document
 
 
-def loads(text, *, source=None):
-    return _bind(asc.loads(text, source=source, document_factory=Document))
+def loads(text, *, source=None, retain_source=True):
+    return _bind(asc.loads(text, source=source, document_factory=Document, retain_source=retain_source))
 
 
-def loads_bytes(data, *, source=None, encoding=None):
-    return _bind(asc.loads_bytes(data, source=source, encoding=encoding, document_factory=Document))
+def loads_bytes(data, *, source=None, encoding=None, retain_source=True):
+    return _bind(asc.loads_bytes(data, source=source, encoding=encoding, document_factory=Document,
+                                retain_source=retain_source))
 
 
 def read(path, *, encoding=None):

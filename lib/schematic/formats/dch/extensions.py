@@ -15,7 +15,7 @@ def _pad_states(r, pattern):
 def read_common_extensions(r, schematic, document):
     """Read common extensions."""
     classes = schematic.child("NetClasses").children("NetClass")
-    pairs = schematic.add("DifferentialPairs")
+    pairs = r.add(schematic, "DifferentialPairs")
     if r.header.version >= 35:
         for node in classes:
             node.set_values(*node.arguments, *(r.argument('number') for _ in range(5)))
@@ -23,7 +23,7 @@ def read_common_extensions(r, schematic, document):
         for _ in range(r.count("differential pairs")):
             start = r.pos
             enabled, name = r.argument('boolean'), r.argument('text')
-            node = pairs.add("DifferentialPair", name, enabled, r.argument('integer'), r.argument('integer'), r.argument('integer'), r.argument('boolean'), r.argument('color'))
+            node = r.add(pairs, "DifferentialPair", name, enabled, r.argument('integer'), r.argument('integer'), r.argument('integer'), r.argument('boolean'), r.argument('color'))
             node.source = SourceSpan("dch", start, r.pos, r.source)
     else:
 
@@ -32,19 +32,19 @@ def read_common_extensions(r, schematic, document):
             node.annotations.pop("incomplete", None)
     if r.header.version >= 36:
         for name in ("Xpos", "Ypos"):
-            r.field(document.root, name, "number", replace=True)
+            r.field_into(document.root, name, "number", replace=True)
         for page in schematic.child("Pages").children("Page"):
             for name in ("PageXPos", "PageyPos"):
-                r.field(page, name, "number", replace=True)
+                r.field_into(page, name, "number", replace=True)
     parts = placed_components(schematic)
     if r.header.version >= 37:
         for part in parts:
             for pin in part.child("Pins").children("Pin"):
-                r.field(pin, "SignalDelay", "number")
+                r.field_into(pin, "SignalDelay", "number")
     else:
         for part in parts:
             for pin in part.child("Pins").children("Pin"):
-                pin.add("SignalDelay", Decimal(0)).annotations["default_for_version"] = r.header.version
+                r.add_into(pin, "SignalDelay", Decimal(0))
     if r.header.version >= 38:
         for pattern in footprints(schematic):
             _pad_states(r, pattern)

@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.references import ReferenceError
 from lib.pcb.formats.assembly.board_rules import assemble_rules
@@ -59,10 +60,10 @@ class PcbXmlPairTests(unittest.TestCase):
                 document = design(text, report=ConversionReport())
                 ordinary = document.one('/Board/Nets/Net[1]/Traces/Trace[1]/Points/Point[1]')
                 separate = document.one('/Board/DifferentialPairs/DifferentialPair/PosSeparateTraces/PosTrace/Points/Point[1]')
-                self.assertEqual(ordinary['Width'], Decimal('.9'))
-                self.assertEqual(separate['Width'], width)
-                self.assertEqual(ordinary['PhaseFwd'], phase)
-                self.assertEqual(ordinary['PhaseBack'], -phase/2)
+                assert_float_facts(self,ordinary['Width'], 0.9)
+                assert_float_facts(self,separate['Width'], width)
+                assert_float_facts(self,ordinary['PhaseFwd'], phase)
+                assert_float_facts(self,ordinary['PhaseBack'], -phase/2)
                 self.assertIsNone(separate.get('PhaseFwd'))
 
     def test_unavailable_phase_lengths_are_absent_editable_values(self):
@@ -78,7 +79,7 @@ class PcbXmlPairTests(unittest.TestCase):
                 self.assertIsNone(node.child('PhaseFwd'))
                 self.assertEqual(node['PhaseBack'], 0)
                 node['PhaseFwd'] = Decimal('-.2')
-                self.assertEqual(node['PhaseFwd'], Decimal('-.2'))
+                self.assertEqual(node['PhaseFwd'], -0.2)
                 del node['PhaseFwd']
                 self.assertIsNone(node.get('PhaseFwd'))
                 document.references.validate()
@@ -93,8 +94,8 @@ class PcbXmlPairTests(unittest.TestCase):
                          (0, 'Data pair', 2, False))
         self.assertEqual((pair['CustomColor'], pair['TraceColor']), (True, 123))
         self.assertEqual((center['X'], center['Y'], center['Type'], center['Necked']), (6, -9, 3, True))
-        self.assertEqual((side['X'], side['Y'], side['Meander'], side['MeanderAngle']),
-                         (Decimal('.3'), Decimal('-.6'), 2, Decimal('7.8')))
+        assert_float_facts(self,(side['X'], side['Y'], side['Meander'], side['MeanderAngle']),
+                         (0.3, -0.6, 2, 7.8))
         self.assertTrue(side['Arc'])
         self.assertIs(center['Layer'], document.one('/Board/Layers/Layer[1]'))
         self.assertIs(center['Via'], document.one('/Board/ViaStyles/ViaStyle[1]'))

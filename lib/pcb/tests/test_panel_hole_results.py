@@ -2,6 +2,7 @@
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.references import ReferenceError
@@ -71,7 +72,7 @@ class PanelHoleResultTests(unittest.TestCase):
                 row = current.one(PATH)
                 self.assertEqual((row['ObjectType1'], row['ObjectType2'], row['Object1'], row['Object2']),
                                  (22, 23, 3, 7))
-                self.assertEqual(tuple(row[name] for name in ('X', 'Y', 'Value', 'Rule')), values)
+                assert_float_facts(self,tuple(row[name] for name in ('X', 'Y', 'Value', 'Rule')), values)
                 for side in ('1', '2'):
                     with self.assertRaises(ReferenceError):
                         row['Target'+side]

@@ -179,7 +179,7 @@ a property or user-field selector instead binds its text to that current value.
 Import and detached export preparation refresh bound text without replacing the
 drawing. Editing its cached text cannot override the selected component property.
 
-The unpublished PCB model applies this to copper pours: Poured=True with absent
+The PCB model applies this to copper pours: Poured=True with absent
 Fill retains the filled choice without calculated geometry. A destination that
 requires geometry for that choice exports it unfilled on a detached view.
 Optional Fill/Regions separately owns calculated classification groups. Its

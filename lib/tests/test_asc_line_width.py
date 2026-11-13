@@ -94,14 +94,14 @@ class AscLineWidthTests(unittest.TestCase):
 
     def test_header_supplies_width_when_the_named_setting_is_absent(self):
         current = source(cached=True, named=False)
-        self.assertEqual(shape(current).scalar('Width'), Decimal('.73'))
+        self.assertEqual(shape(current).scalar('Width'), 0.73)
         cached = current.one('/Schematic/CacheLib/Slots/Slot/Definition/Pattern/Shapes/Shape[2]')
-        self.assertEqual(cached.scalar('Width'), Decimal('.57'))
+        self.assertEqual(cached.scalar('Width'), .57)
         for destination in ('dch', 'asc', 'dchxml'):
             with self.subTest(destination=destination):
                 from lib import parse
                 converted = parse(getattr(current, 'to_'+destination+'_bytes')(), format=destination)
-                self.assertEqual(shape(converted).scalar('Width'), Decimal('.73'))
+                self.assertEqual(shape(converted).scalar('Width'), .73)
 
     def test_invalid_context_is_an_export_error_without_changing_the_source(self):
         current = source()

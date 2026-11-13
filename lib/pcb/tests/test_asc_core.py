@@ -82,7 +82,7 @@ class AscCoreTests(unittest.TestCase):
         self.assertEqual(result.document.root['Units'], 'mil')
         self.assertEqual((result.components[17]['X'], result.components[17]['Y']),
                          (default['X'], default['Y']))
-        self.assertEqual(result.components[17]['Angle'], Decimal('7.854'))
+        self.assertEqual(result.components[17]['Angle'], 7.854)
 
     def test_source_version_does_not_apply_binary_geometry_gates_to_current_named_data(self):
         text = fixture().replace('PCBN" 53', 'PCBN" 31')
@@ -90,7 +90,7 @@ class AscCoreTests(unittest.TestCase):
         result = assemble_core(data)
         self.assertEqual(data.source_version, 31)
         self.assertEqual(result.components[17].one('Pattern')['Width'], Decimal('4.5'))
-        self.assertEqual(result.components[17]['Angle'], Decimal('7.854'))
+        self.assertEqual(result.components[17]['Angle'], 7.854)
 
     def test_conflicting_membership_and_bad_boolean_fail(self):
         text = fixture()

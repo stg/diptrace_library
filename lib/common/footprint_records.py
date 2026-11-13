@@ -1,5 +1,6 @@
 """Shared footprint and related record definitions for design documents."""
-from .schema import Child, Field, Record
+from .schema import Child, Field, Record, with_units
+from .measurements import nonnegative_length
 from .drawing_records import POINT, POINTS
 from .supplier_records import SUPPLIERS, definition as supplier_definition
 from .user_fields import USER_FIELD, USER_FIELDS
@@ -331,6 +332,34 @@ MODEL_ZOOM = Record('ModelZoom', {
    children={
    })
 
+
+def _pad_units(record, geometry):
+    lengths = (*geometry.split(), 'CustomSwell_New', 'CustomShrink_New',
+               'PadShape_X', 'PadShape_Y', 'PadHole', 'PadHoleH',
+               'PadMask_EdgeGap', 'PadMask_SegmentGap', 'PadMask_SegmentSide')
+    return with_units(record, {
+        **dict.fromkeys(lengths, 'shared length'),
+        'PadCorner': 'percent', 'PadMask_Percent': 'percent',
+    }, sentinels={'CustomSwell_New': (-1000,), 'CustomShrink_New': (-1000,)})
+
+
+PATTERN = _pad_units(PATTERN, 'Spacing1 Spacing2 Spacing3 Width Height PadWidth PadHeight OriginX OriginY')
+PATTERN = with_units(PATTERN, {'PatternOrientation': 'orientation'})
+PAD = _pad_units(PAD, 'PadWidth_New PadHeight_New')
+PAD = with_units(PAD, {'PadAngle': 'radians'})
+PAD_STYLE = _pad_units(PAD_STYLE, 'PadWidth PadHeight')
+PATTERN_SHAPE = with_units(PATTERN_SHAPE, {
+    'FontSize': 'font size', 'FontScale': 'ratio', 'FontWidth': 'shared length', 'LineSpacing': 'ratio',
+}, selectors={'FontWidth': nonnegative_length, 'Width': nonnegative_length})
+DIMENSION = with_units(DIMENSION, {
+    **dict.fromkeys('X1 Y1 X2 Y2 XD YD ArrowSize FontWidth'.split(), 'shared length'),
+    'FontSize': 'font size', 'FontScale': 'ratio', 'Angle': 'angle', 'ExternalRadius': 'selection',
+}, selectors={'FontWidth': nonnegative_length})
+TERMINAL = with_units(TERMINAL, {'Angle': 'angle'})
+MODEL3D = with_units(MODEL3D, dict.fromkeys(('IPC_XOff', 'IPC_YOff', 'AutoHeight'), 'shared length'))
+MODEL_OFFSET = with_units(MODEL_OFFSET, dict.fromkeys(('X', 'Y', 'Z'), 'shared length'))
+MODEL_ROTATE = with_units(MODEL_ROTATE, dict.fromkeys(('X', 'Y', 'Z'), 'angle'))
+MODEL_ZOOM = with_units(MODEL_ZOOM, dict.fromkeys(('X', 'Y', 'Z'), 'ratio'))
 
 VECTORS = {'Offset': MODEL_OFFSET, 'Rotate': MODEL_ROTATE, 'Zoom': MODEL_ZOOM}
 

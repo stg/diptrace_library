@@ -1,6 +1,7 @@
 """PCB table grids and supplied documentation-generation settings."""
 from ...common import cell_records as cells
-from ...common.schema import Child, Field, Record, MISSING
+from ...common.schema import Child, Field, Record, MISSING, with_units
+from ...common.measurements import nonnegative_length
 from .graphic_records import GROUP_FIELDS
 from .non_signal_layers import SELECTION_FIELDS
 from . import table_relations as relations
@@ -17,12 +18,14 @@ UPDATE = Record('PcbTableUpdate', {
     **_fields('boolean', 'Header BomRowNumber BomTotal PickMirror PickOrigin'),
     **_fields('text', 'AssemblyName Separator'),
 }, children={'Columns': Child('Columns', 'PcbTableUpdateColumns')})
+UPDATE = with_units(UPDATE, dict.fromkeys(('PickOffX', 'PickOffY'), 'shared length'))
 COLUMN = Record('PcbTableUpdateColumn', {
     **_fields('integer', 'Type TextAlign'), **_fields('number', 'Width'),
     **{name: Field(name, 'text', default='') for name in ('Name', 'Title')},
     'Index': Field('Index', 'integer', getter=lambda node: node._ordinal(),
                     ordinal_dependencies=lambda node: (node,)),
 }, parameters=('Index',))
+COLUMN = with_units(COLUMN, {'Width': 'shared length'})
 MEMBER = Record('PcbTableRowComponent', {
     'Component': Field('Component', 'reference', nullable=True,
         getter=relations.component, setter=relations.set_component,
@@ -55,6 +58,10 @@ TABLE = Record('PcbTable', {
     'RowHeights': Child('RowHeights', cells.ROW_HEIGHTS.name),
     'AutoUpdate': Child('AutoUpdate', UPDATE.name), 'RowComponents': Child('RowComponents', ROWS.name),
 })
+TABLE = with_units(TABLE, {
+    **dict.fromkeys('DefCellWidth DefCellHeight X1 Y1 X2 Y2 DefFontWidth'.split(), 'shared length'),
+    'DefFontSize': 'font size', 'DefFontScale': 'ratio', 'DefLineSpacing': 'ratio',
+}, selectors={'DefFontWidth': nonnegative_length})
 
 
 def definition(node):

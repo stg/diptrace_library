@@ -30,9 +30,7 @@ def _pattern(pattern):
         values = [pad.children(name)[-1].values for pad in pads]
         if values and any(value != values[0] for value in values[1:]):
             raise ValueError(f'{pattern.path}: conflicting cached footprint default {name}')
-        field = pattern.add(name, *(values[0] if values else (-1000 if name.startswith('Custom') else 0,)))
-        if not values:
-            field.annotations['generated_default'] = 'no pads contain this footprint default in ASC'
+        pattern.add(name, *(values[0] if values else (-1000 if name.startswith('Custom') else 0,)))
         for pad in pads:
             field = pad.children(name)[-1]
             # CustomSwell/Shrink already occur earlier as individual pad data.
@@ -55,7 +53,7 @@ def _part(part):
         _rename(shape, {'Width': 'PenWidth'})
         unpack_symbol_shape(shape)
     part.add('ModelNote', '')
-    part.one('Suppliers').add('SourceLocator', '').annotations['asc_omit'] = 'not present in ASC'
+    part.one('Suppliers').add('SourceLocator', '')
 
 
 def unpack_cache(schematic):

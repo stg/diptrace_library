@@ -88,7 +88,7 @@ class DimensionGeometryTests(unittest.TestCase):
         self.assertIs(default_terminal.schema, TERMINAL)
         self.assertEqual((terminal['Index'], terminal['Type']), (0, 3))
         terminal['Angle'] = Decimal('.37')
-        self.assertEqual(terminal['Angle'], Decimal('.37'))
+        self.assertEqual(terminal['Angle'], 0.37)
         self.assertIs(paste.schema, PASTE_SEGMENT)
         paste['X2'] = 8
         self.assertEqual(paste.values, (1, 2, 8, 4))

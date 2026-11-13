@@ -21,10 +21,11 @@ GLOBAL_NAMED_MARKING = group('GlobalNamedMarking', (SHOW, SHOW_PART, ALIGN),
 NET_CLASS = group('NetClass', (
     Field('Name', 'text', required=True, default=''),
     Field('Type', 'integer', required=True, default=0, description='0 Normal, 1 Differential Pair.'),
-    Field('Width', 'number', required=True, default=-1, unit='shared length', description='-1 inherits the common width.'),
-    Field('Clearance', 'number', required=True, default=-1, unit='shared length', description='-1 inherits common clearance.'),
+    Field('Width', 'number', required=True, default=-1, unit='shared length', unit_sentinels=(-1,), description='-1 inherits the common width.'),
+    Field('Clearance', 'number', required=True, default=-1, unit='shared length', unit_sentinels=(-1,), description='-1 inherits common clearance.'),
     Field('UpdateId', 'integer', required=True, default=0, description='Persistent class update identity.'),
-    *(Field(name, 'number', required=True, default=default, unit='shared length') for name, default in
+    *(Field(name, 'number', required=True, default=default, unit='shared length',
+            unit_sentinels=(-1,) if name == 'DifClearance' else ()) for name, default in
       (('DifClearance', -1), ('MaxUncoupledLength', 0), ('Tolerance', 0), ('Phase', 0), ('Phase_ErrorLength', 0))),
 ))
 

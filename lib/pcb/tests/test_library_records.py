@@ -121,7 +121,7 @@ class LibraryRecordTests(unittest.TestCase):
         self.assertIsNone(shape.child('Name'))
         self.assertIsNone(shape.child('Orientation'))
         self.assertEqual(shape['Index'], 0)
-        self.assertEqual(shape['TextAngle'], Decimal('.37'))
+        self.assertEqual(shape['TextAngle'], 0.37)
         shape.one('TextLine/pt')['Text'] = 'Edited text'
         shape.one('Points_New/pt')['X'] = 8
         cloned = document.clone()

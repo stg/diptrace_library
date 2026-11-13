@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common import cell_records
 from lib.common.asc import dumps
 from lib.common.model import Element
@@ -131,8 +132,8 @@ class TableModelTests(unittest.TestCase):
                 self.assertIsNone(cell.child('Placement'))
                 self.assertIsNone(table.child('FontName'))
                 self.assertEqual(table['DefFontName'], 'Arial')
-                self.assertEqual(table['DefLineSpacing'], Decimal('1.2' if version < 47 else '1.6'))
-                self.assertEqual(cell['LineSpacing'], Decimal('1.2' if version < 47 else '1.4'))
+                assert_float_facts(self,table['DefLineSpacing'], Decimal('1.2' if version < 47 else '1.6'))
+                assert_float_facts(self,cell['LineSpacing'], Decimal('1.2' if version < 47 else '1.4'))
                 if version < 43:
                     self.assertEqual((table['DocType'], table['DocUnits']), (0, 0))
                 if version < 50:

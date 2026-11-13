@@ -4,6 +4,7 @@ from decimal import Decimal
 import math
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.library_codec import CachedDefinitionInput
 from lib.common.model import Element
 from lib.pcb.formats.dip.components import DrawingUpgrade
@@ -94,7 +95,7 @@ class GeometryUpgradeTests(unittest.TestCase):
                 cached_definitions=(CachedDefinitionInput(definition, (polygon,)),)))
         expand_pattern_drawings(decoded)
         self.assertEqual([p.values for p in placed.select('Shapes/Shape/Points_New/pt')], [(3., 12.)])
-        self.assertEqual(text.shape['TextAngle'], Decimal(str(math.pi/2)))
+        assert_float_facts(self,text.shape['TextAngle'], Decimal(str(math.pi/2)))
         self.assertEqual(text.shape['TextHorz'], -1)
         self.assertEqual([p.values for p in cached.select('Shapes/Shape/Points_New/pt')], [(6., 4.5), (12., 7.5)])
         self.assertEqual(polygon.shape['TextAngle'], 0)
@@ -132,7 +133,7 @@ class GeometryUpgradeTests(unittest.TestCase):
                 cached_definitions=()))
         expand_pattern_drawings(decoded)
         self.assertEqual([p.values for p in node.select('Shapes/Shape/Points_New/pt')], before)
-        self.assertEqual(drawing.shape['TextAngle'], Decimal('.37'))
+        self.assertEqual(drawing.shape['TextAngle'], 0.37)
 
     def test_import_assembly_modernizes_cached_symbol_text_and_ellipses(self):
         decoded = fixture()
@@ -167,7 +168,7 @@ class GeometryUpgradeTests(unittest.TestCase):
         model['AutoColor'] = 0x123456
         text, ellipse = shapes.children()
         self.assertEqual(text.one('Points_New/pt').values, (1, 4))
-        self.assertEqual(text['TextAngle'], Decimal(str(math.pi/2)))
+        assert_float_facts(self,text['TextAngle'], Decimal(str(math.pi/2)))
         self.assertIsNone(text['Group'])
         self.assertEqual(text['GroupId'], -1)
         self.assertIsNone(text.child('Orientation'))

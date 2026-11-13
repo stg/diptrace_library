@@ -43,7 +43,7 @@ class RatlineInputTests(unittest.TestCase):
         self.assertIs(row['Pad1'], result.pads[8, 1])
         self.assertIs(row['Pad2'], result.pads[8, 2])
         other = assemble_core(prepared(xml_source().replace('Units="mm"', 'Units="mil"')))
-        self.assertEqual(other.document.one('/Board/Ratlines/Ratline')['X1'], Decimal('.0762'))
+        self.assertEqual(other.document.one('/Board/Ratlines/Ratline')['X1'], 0.0762)
 
     def test_missing_flags_use_reset_defaults_and_counter_ids_do_not_select_targets(self):
         text = xml_source().replace('<Ratline Id="17" Hidden="Y"', '<Ratline Id="99"')

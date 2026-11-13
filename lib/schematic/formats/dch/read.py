@@ -13,6 +13,7 @@ from .data import (stored_data)
 from ...model.document import (Document)
 from ....common.model import (Element, IncompleteDocumentError, SourceSpan, Value)
 from ....common.binary_records import RecordReader
+from ....common.numbers import decimal_scale
 from ....common.footprint_codec import (read_holes, read_model, read_parameters as _pattern_parameters,
                                        read_pad_geometry, read_pad_mask_states)
 from ....common.dimension_codec import read_dimensions
@@ -26,34 +27,33 @@ class Reader(RecordReader, Cursor):
     """Populate our document elements from named wire fields."""
     source_format = 'dch'
 
-    def _annotate(self, node):
-        node.annotations['source_version'] = self.header.version
-
+    def record_definition(self, parent):
+        from ...model.definitions import definition
+        return definition(parent)
 
 def _preamble(r: Reader, doc: Document) -> tuple[Element, int]:
-    doc.root.add("Source", "DipTrace-Schematic", 46)
+    r.add_into(doc.root, "Source", "DipTrace-Schematic", 46)
     # Units are a separate format export setting; do not invent a value here.
     for kind, name in [("number", "Scale"), ("integer", "Xpos"), ("integer", "Ypos")]:
         node = r.field(doc.root, name, kind)
         if name == "Scale":
             stored = node.values[0]
             factor = min(Decimal(1000), max(Decimal('0.01'), stored))
-            sign, digits, exponent = factor.as_tuple()
-            percent = Decimal((sign, digits, exponent+2))
+            percent = decimal_scale(factor, 2)
             node.set_argument(0, Value(percent, 'number', '%', source=node.arguments[0].source))
-    schematic = doc.root.add("Schematic")
-    r.field(schematic, "PictureCount", "integer")
-    pages = schematic.add("Pages")
+    schematic = r.add(doc.root, "Schematic")
+    r.field_into(schematic, "ActiveSheet", "integer")
+    pages = r.add(schematic, "Pages")
     for _ in range(r.count("pages")):
         start = r.pos
-        page = pages.add("Page", r.argument('text'))
+        page = r.add(pages, "Page", r.argument('text'))
         page.source = SourceSpan("dch", start, r.pos, r.source)
 
         # The prefix repeats PageType; the later page layout is authoritative.
         r.integer()
         # Persistent page identity arrives in the schema-33 extension.
         if r.header.version <= 32:
-            page.add("PageHiddenId", 0).annotations["default_for_version"] = r.header.version
+            r.add_into(page, "PageHiddenId", 0)
     pictures = r.integer()
     if pictures < 0:
         raise DchError('negative legacy picture resource count')
@@ -70,45 +70,45 @@ def _preamble(r: Reader, doc: Document) -> tuple[Element, int]:
     for kind, name in [("boolean", "HidePower"), ("number", "OriginX"), ("number", "OriginY"),
                        ("text", "FieldName1"), ("text", "FieldName2"), ("boolean", "PartFontVector"),
                        ("number", "PartFontWidth"), ("number", "PartFontScale")]:
-        r.field(schematic, name, kind)
-    classes = schematic.add("NetClasses")
+        r.field_into(schematic, name, kind)
+    classes = r.add(schematic, "NetClasses")
     for _ in range(r.count("net classes")):
-        node = classes.add("NetClass", r.argument('text'), r.argument('integer'), r.argument('number'), r.argument('number'), r.argument('integer'))
+        node = r.add(classes, "NetClass", r.argument('text'), r.argument('integer'), r.argument('number'), r.argument('number'), r.argument('integer'))
         node.annotations["incomplete"] = "remaining class settings occur later in the file"
     return schematic, r.count("components")
 
 
 def _component_head(r: Reader, components: Element) -> Element:
     start = r.pos
-    part = components.add("Part")
+    part = r.add(components, "Part")
     r.fields(part, COMPONENT_PLACEMENT)
     name, ref, value, base_ref, base_name = [r.argument('text') for _ in range(5)]
     part.set_values(name, ref)
     for key, val in (("Value", value), ("BaseName", base_name), ("BaseRefDes", base_ref)):
-        part.add(key, val)
+        r.add_into(part, key, val)
     for name in ("ShowText", "TextAlign"):
-        r.field(part, name, "integer")
-    r.field(part, "LockProperties", "boolean")
+        r.field_into(part, name, "integer")
+    r.field_into(part, "LockProperties", "boolean")
     for kind, name in [("integer", "PartNumber"), ("integer", "PartType"),
                        ("text", "PartName"), ("text", "PartDescriptor"), ("boolean", "AllowParts"),
                        ("integer", "ShowText2"), ("integer", "TextAlign2"), ("integer", "ShowNumbers")]:
-        r.field(part, name, kind)
+        r.field_into(part, name, kind)
     for name in ("TextPosX", "TextPosY", "TextPosX2", "TextPosY2"):
-        r.field(part, name, "number")
-    r.field(part, "PartString", "text")
-    r.field(part, "HiddenId", "integer")
-    fields = part.add("UserFields")
+        r.field_into(part, name, "number")
+    r.field_into(part, "PartString", "text")
+    r.field_into(part, "HiddenId", "integer")
+    fields = r.add(part, "UserFields")
     for _ in range(r.count("component user fields")):
-        fields.add("UserField", r.argument('text'), r.argument('text'), r.argument('integer'))
+        r.add_into(fields, "UserField", r.argument('text'), r.argument('text'), r.argument('integer'))
     for name in ("FieldIndex1", "FieldIndex2"):
-        r.field(part, name, "integer")
-    r.field(part, "Locked", "boolean")
+        r.field_into(part, name, "integer")
+    r.field_into(part, "Locked", "boolean")
     angle = r.field(part, "Angle", "number")
     if not r.header.angles_in_degrees:
         radians = angle.values[0]
         angle.set_argument(0, Decimal(str(round(float(radians) * 180 / math.pi, 4))))
     for kind, name in [("text", "LibPath"), ("integer", "ModelType")]:
-        r.field(part, name, kind)
+        r.field_into(part, name, kind)
     part.source = SourceSpan("dch", start, r.pos, r.source)
     part.annotations["incomplete"] = "component body follows this decoded scalar prefix"
     return part
@@ -116,72 +116,72 @@ def _component_head(r: Reader, components: Element) -> Element:
 
 def _component_pins(r: Reader, part: Element):
     """format gates for this prefix all precede minimum schema 29."""
-    model_body = part.add("ModelBody")
+    model_body = r.add(part, "ModelBody")
     for _ in range(r.count("model text lines")):
-        model_body.add("Line", r.argument('text'))
-    r.field(part, "ModelString", "text")
-    r.field(part, "Datasheet", "text")
-    r.field(part, "HorzFlip", "boolean")
-    r.field(part, "VertFlip", "boolean")
-    pins = part.add("Pins")
+        r.add_into(model_body, "Line", r.argument('text'))
+    r.field_into(part, "ModelString", "text")
+    r.field_into(part, "Datasheet", "text")
+    r.field_into(part, "HorzFlip", "boolean")
+    r.field_into(part, "VertFlip", "boolean")
+    pins = r.add(part, "Pins")
     for index in range(r.count("pins")):
         start = r.pos
-        pin = pins.add("Pin", index)
-        r.field(pin, "Enabled", "boolean")
+        pin = r.add(pins, "Pin", index)
+        r.field_into(pin, "Enabled", "boolean")
         for name in ("Type", "Orientation", "Number", "NetNumber"):
-            r.field(pin, name, "integer")
+            r.field_into(pin, name, "integer")
         pin.set_values(index, r.argument('number'), r.argument('number'))
-        r.field(pin, "Length", "number")
+        r.field_into(pin, "Length", "number")
         for name in ("Name", "StringNumber"):
-            r.field(pin, name, "text")
+            r.field_into(pin, name, "text")
         for name in ("FConnect", "ShowName"):
-            r.field(pin, name, "boolean")
+            r.field_into(pin, name, "boolean")
         for name in ("PinNumXShift", "PinNumYShift", "PinNameXShift", "PinNameYShift"):
-            r.field(pin, name, "number")
-        r.field(pin, "ElectricType", "integer")
+            r.field_into(pin, name, "number")
+        r.field_into(pin, "ElectricType", "integer")
         for name in ("Hidden", "Locked"):
-            r.field(pin, name, "boolean")
-        r.field(pin, "ModelSig", "text")
-        r.field(pin, "NoConnect", "boolean")
+            r.field_into(pin, name, "boolean")
+        r.field_into(pin, "ModelSig", "text")
+        r.field_into(pin, "NoConnect", "boolean")
         r.fields(pin, PIN_FONT)
         pin.source = SourceSpan("dch", start, r.pos, r.source)
-    part.annotations["declared_shape_count"] = r.count("component shapes")
     part.annotations["incomplete"] = "component shapes and following fields are not decoded"
+    return r.count("component shapes")
 
 
-def _component_shapes(r: Reader, part: Element, *, placed=True):
-    shapes = part.add("Shapes")
-    for index in range(part.annotations["declared_shape_count"]):
+def _component_shapes(r: Reader, part: Element, *, count, placed=True):
+    shapes = r.add(part, "Shapes")
+    for index in range(count):
         start = r.pos
-        shape = shapes.add("Shape", index)
+        shape = r.add(shapes, "Shape", index)
         if not placed:
             # Cached symbol drawings never serialize the placed-only flag.
-            shape.add('ShowPart', False).annotations['default_for_version'] = r.header.version
-        r.field(shape, "Enabled", "boolean")
-        r.field(shape, "Orientation", "integer")
+            r.add_into(shape, 'ShowPart', False)
+        r.field_into(shape, "Enabled", "boolean")
+        r.field_into(shape, "Orientation", "integer")
         kind = r.field(shape, "Type", "integer")
         # Only the placed-symbol reader recognizes the old marking tag. Cached
         # symbols use the same field layout but keep their ordinary type value.
         generated = placed and kind.values[0] == 700
         if generated:
             kind.set_argument(0, 10)
-        r.field(shape, "FontSize", "integer")
-        r.field(shape, "FontColor", "color")
-        r.field(shape, "FontType", "integer")
-        r.field(shape, "FontName", "text")
-        r.field(shape, "Name", "text")
-        shape.add('TextLine').add('pt', shape.child('Name').arguments[0])
-        r.field(shape, "PenWidth", "number")
+        r.field_into(shape, "FontSize", "integer")
+        r.field_into(shape, "FontColor", "color")
+        r.field_into(shape, "FontType", "integer")
+        r.field_into(shape, "FontName", "text")
+        r.field_into(shape, "Name", "text")
+        r.add_into(r.add(shape, 'TextLine'), 'pt', shape.child('Name').arguments[0])
+        r.field_into(shape, "PenWidth", "number")
         # The >=40 format stores the editable geometry. format export also
         # projects historical text bounds, which require its layout rules.
-        points = shape.add("Points_New" if r.header.version >= 40 else "Points")
+        points = r.add(shape, "Points_New" if r.header.version >= 40 else "Points")
         for _ in range(r.count("shape points")):
-            points.add("pt", r.argument('number'), r.argument('number'))
-        r.field(shape, "Locked", "boolean")
-        r.field(shape, "VectorFont", "boolean")
-        r.field(shape, "FontWidth", "number")
-        r.field(shape, "FontScale", "number")
-        shape.add("MarkingGenerated", generated)
+            r.add_into(points, "pt", r.argument('number'), r.argument('number'))
+        r.field_into(shape, "Locked", "boolean")
+        r.field_into(shape, "VectorFont", "boolean")
+        r.field_into(shape, "FontWidth", "number")
+        r.field_into(shape, "FontScale", "number")
+        r.add_into(shape, "MarkingGenerated", generated)
         shape.source = SourceSpan("dch", start, r.pos, r.source)
         shape.annotations["incomplete"] = "format text/layout projection and derived ASC fields remain to be mapped"
     part.annotations["incomplete"] = "component suffix after its shape array remains to be decoded"
@@ -190,57 +190,51 @@ def _component_shapes(r: Reader, part: Element, *, placed=True):
 def _component_pattern(r: Reader, part: Element):
     """Component pattern."""
     start = r.pos
-    pattern = part.add("Pattern")
-    connections = pattern.add("InternalConnections")
+    pattern = r.add(part, "Pattern")
+    connections = r.add(pattern, "InternalConnections")
     for _ in range(r.count("footprint internal connections")):
-        connections.add("IntCon", r.argument('integer'), r.argument('integer'))
+        r.add_into(connections, "IntCon", r.argument('integer'), r.argument('integer'))
     _pattern_parameters(r, pattern)
     for name in ("Origin_X", "Origin_Y"):
-        r.field(part, name, "number")
-    r.field(part, "ShowOrigin", "boolean")
-    fields = pattern.add("UserFields")
+        r.field_into(part, name, "number")
+    r.field_into(part, "ShowOrigin", "boolean")
+    fields = r.add(pattern, "UserFields")
     for _ in range(r.count("footprint user fields")):
-        fields.add("UserField", r.argument('text'), r.argument('text'), r.argument('integer'))
-    points = pattern.add("PadPoints")
+        r.add_into(fields, "UserField", r.argument('text'), r.argument('text'), r.argument('integer'))
+    points = r.add(pattern, "PadPoints")
     for _ in range(r.count("footprint default pad points")):
-        points.add("pt", r.argument('number'), r.argument('number'))
+        r.add_into(points, "pt", r.argument('number'), r.argument('number'))
     pattern.source = SourceSpan("dch", start, r.pos, r.source)
-    pattern.annotations["declared_pad_count"] = r.count("footprint pads")
+    pad_count = r.count("footprint pads")
     pattern.annotations["incomplete"] = "footprint pads and later settings remain to be decoded"
     part.annotations["incomplete"] = "component footprint body and later fields remain to be decoded"
-    return pattern
+    return pattern, pad_count
 
 
 
 
-def _pattern_pads(r: Reader, pattern: Element, *, omit_reserved=True):
+def _pattern_pads(r: Reader, pattern: Element, *, count):
     """Extended pad properties occur later in the component. These nodes remain
     incomplete until those extensions and the format compatibility projection
     have been applied.
     """
-    pads = pattern.add("Pads")
-    for index in range(pattern.annotations["declared_pad_count"]):
+    pads = r.add(pattern, "Pads")
+    for index in range(count):
         start = r.pos
         inverted = r.argument('boolean')
-        pad = pads.add("Pad", index)
+        pad = r.add(pads, "Pad", index)
         number = r.argument('integer')
         x, y = r.argument('number'), r.argument('number')
         name, detail = r.argument('text'), r.argument('text')
         pad.set_values(index, name, detail, x, y)
-        if index in (0, pattern.annotations["declared_pad_count"]-1):
-            pad.annotations['reserved'] = True
-        if omit_reserved and pad.annotations.get('reserved'):
-
-            # Keep the two additional records available for investigation.
-            pad.annotations["asc_omit"] = "reserved pad record outside the format export range"
-        pad.add("Number_New", number)
-        pad.add("PadAngle", Decimal(str(math.pi/2)) if inverted.value else Decimal(0))
+        r.add_into(pad, "Number_New", number)
+        r.add_into(pad, "PadAngle", Decimal(str(math.pi/2)) if inverted.value else Decimal(0))
         read_pad_geometry(r, pad)
-        r.field(pad, "Locked", "boolean")
-        r.field(pad, "Sided", "boolean")
+        r.field_into(pad, "Locked", "boolean")
+        r.field_into(pad, "Sided", "boolean")
         read_pad_mask_states(r, pad)
         for name in ("CustomSwell_New", "CustomShrink_New"):
-            r.field(pad, name, "number")
+            r.field_into(pad, name, "number")
         pad.source = SourceSpan("dch", start, r.pos, r.source)
         pad.annotations["incomplete"] = "extended pad fields and compatibility projection remain"
     pattern.annotations["incomplete"] = "footprint shapes and later fields remain to be decoded"
@@ -251,36 +245,35 @@ def _pattern_graphics(r: Reader, pattern: Element):
     shape properties into successive sibling records; that projection is a
     writer concern, not a reason to duplicate its old memory structures here.
     """
-    shapes = pattern.add("Shapes")
+    shapes = r.add(pattern, "Shapes")
     for index in range(r.count("footprint shapes")):
         start = r.pos
-        shape = shapes.add("Shape", index)
-        r.field(shape, "Type", "integer")
+        shape = r.add(shapes, "Shape", index)
+        r.field_into(shape, "Type", "integer")
         if r.header.version < 40:
             r.record(stored_data(shape), 'CompatibilityGeometry', *('number',)*6)
         else:
             for _ in range(6):
                 r.number()  # Superseded by the physical-coordinate extension.
-        r.field(shape, "Locked", "boolean")
-        r.field(shape, "Layer", "integer")
-        shape.add("TextLine").add("pt", r.argument('text'))
-        r.field(shape, "FontName", "text")
-        r.field(shape, "VectorFont", "boolean")
+        r.field_into(shape, "Locked", "boolean")
+        r.field_into(shape, "Layer", "integer")
+        r.add_into(r.add(shape, "TextLine"), "pt", r.argument('text'))
+        r.field_into(shape, "FontName", "text")
+        r.field_into(shape, "VectorFont", "boolean")
         # The flat ASC tuple does not label these arguments. Public DCHXML
 
-        r.field(shape, "FontSize", "integer")
+        r.field_into(shape, "FontSize", "integer")
         for name in ("FontScale", "FontWidth"):
-            r.field(shape, name, "number")
+            r.field_into(shape, name, "number")
         if r.header.version < 40:
-            r.field(stored_data(shape), 'TextOrientation', 'integer')
+            r.field_into(stored_data(shape), 'TextOrientation', 'integer')
         else:
             r.integer()  # Current TextAngle arrives in the extension.
-        r.field(shape, 'TextShow', 'integer')
-        r.field(shape, "Width", "number")
+        r.field_into(shape, 'TextShow', 'integer')
+        r.field_into(shape, "Width", "number")
         count = r.count("footprint shape points")
-        points = shape.add("Points_New")
-        for _ in range(count):
-            r.record(points, 'pt', 'number', 'number')
+        points = r.add(shape, "Points_New")
+        r.points(points, count)
         shape.source = SourceSpan("dch", start, r.pos, r.source)
         shape.annotations["incomplete"] = "extended geometry and legacy ASC projection remain"
     holes = read_holes(r, pattern)
@@ -298,145 +291,144 @@ def _pattern_model(r: Reader, pattern: Element):
 
 
 def _page_connectors(r: Reader, schematic: Element):
-    connectors = schematic.add("PageConnectors")
+    connectors = r.add(schematic, "PageConnectors")
     for _ in range(r.count("page connectors")):
         start = r.pos
-        node = connectors.add("PageConnector")
+        node = r.add(connectors, "PageConnector")
         for name in ("Enabled", "Selected", "Connected"):
-            r.field(node, name, "boolean")
+            r.field_into(node, name, "boolean")
         x, y = r.argument('number'), r.argument('number')
         for name in ("Page", "BusNumber", "Number", "Region", "Group"):
-            r.field(node, name, "integer")
+            r.field_into(node, name, "integer")
         node.set_values(r.argument('text'), x, y)
-        r.field(node, "Locked", "boolean")
+        r.field_into(node, "Locked", "boolean")
         node.source = SourceSpan("dch", start, r.pos, r.source)
 
 
 def _schematic_graphics(r: Reader, schematic: Element):
-    shapes = schematic.add("Shapes")
+    shapes = r.add(schematic, "Shapes")
     for index in range(r.count("schematic shapes")):
         start = r.pos
-        shape = shapes.add("Shape", index)
+        shape = r.add(shapes, "Shape", index)
         for name in ("Enabled", "Selected"):
-            r.field(shape, name, "boolean")
-        r.field(stored_data(shape), 'Orientation', 'integer')
+            r.field_into(shape, name, "boolean")
+        r.field_into(stored_data(shape), 'Orientation', 'integer')
         for name in ("Type", "FontSize"):
-            r.field(shape, name, "integer")
+            r.field_into(shape, name, "integer")
         for name in ("FontColor", "Color", "BrushColor"):
-            r.field(shape, name, "color")
+            r.field_into(shape, name, "color")
         for name in ("FontType", "Page", "Group"):
-            r.field(shape, name, "integer")
-        r.field(shape, "PenWidth", "number")
-        r.field(shape, "FontName", "text")
-        shape.add("TextLine").add("pt", r.argument('text'))
+            r.field_into(shape, name, "integer")
+        r.field_into(shape, "PenWidth", "number")
+        r.field_into(shape, "FontName", "text")
+        r.add_into(r.add(shape, "TextLine"), "pt", r.argument('text'))
         bitmap = r.field(shape, "BitmapIndex", "integer")
 
         # Earlier pictures can still need their external resource table. Later
         # file-backed drawings do not use this transient bitmap-cache index.
         if r.header.version>=42 or shape.scalar('Type')!=11:
             bitmap.set_argument(0, -1)
-        points = shape.add("Points_New" if r.header.version >= 40 else "Points")
+        points = r.add(shape, "Points_New" if r.header.version >= 40 else "Points")
         for _ in range(r.count("schematic shape points")):
-            points.add("pt", r.argument('number'), r.argument('number'))
+            r.add_into(points, "pt", r.argument('number'), r.argument('number'))
         for name in ("RelatedNet", "RelatedBus"):
-            r.field(shape, name, "integer")
-        r.field(shape, "Locked", "boolean")
-        r.field(shape, "VectorFont", "boolean")
+            r.field_into(shape, name, "integer")
+        r.field_into(shape, "Locked", "boolean")
+        r.field_into(shape, "VectorFont", "boolean")
         for name in ("FontWidth", "FontScale"):
-            r.field(shape, name, "number")
+            r.field_into(shape, name, "number")
         shape.source = SourceSpan("dch", start, r.pos, r.source)
         shape.annotations["incomplete"] = "later drawing fields and format layout projection remain"
 
 
 def _nets(r: Reader, schematic: Element):
-    nets = schematic.add("Nets")
+    nets = r.add(schematic, "Nets")
     for _ in range(r.count("nets")):
         start = r.pos
-        net = nets.add("Net")
-        r.field(net, "Enabled", "boolean")
+        net = r.add(nets, "Net")
+        r.field_into(net, "Enabled", "boolean")
         r.boolean()  # Obsolete net selection slot; not a current property.
         for name in ("UniteByName", "ConnectPinByName"):
-            r.field(net, name, "boolean")
+            r.field_into(net, name, "boolean")
         for name in ("ActiveLine", "ActivePoint", "Number"):
-            r.field(net, name, "integer")
+            r.field_into(net, name, "integer")
         r.integer()  # Discarded compatibility slot.
         net.set_values(r.argument('text'))
         for name in ("Width", "Clearance"):
-            r.field(net, name, "number")
-        r.field(net, "NetClass", "integer")
-        r.field(net, "Global", "boolean")
-        parts = net.add("Parts")
+            r.field_into(net, name, "number")
+        r.field_into(net, "NetClass", "integer")
+        r.field_into(net, "Global", "boolean")
+        parts = r.add(net, "Parts")
         for _ in range(r.count("net pin references")):
             r.record(parts, 'pt', 'integer', 'integer')
-        lines = net.add("Lines")
+        lines = r.add(net, "Lines")
         for _ in range(r.count("net lines")):
             line_start = r.pos
-            line = lines.add("Line")
+            line = r.add(lines, "Line")
             for name in ("Connect1", "Connect2", "ConnectL1", "ConnectL2", "ConnectB1", "ConnectB2",
                          "Page", "ConnectMode1", "ConnectMode2", "NetNumber", "Region", "Number"):
-                r.field(line, name, "integer")
-            r.field(line, "Hidden", "boolean")
-            points = line.add("Points")
+                r.field_into(line, name, "integer")
+            r.field_into(line, "Hidden", "boolean")
+            points = r.add(line, "Points")
             for _ in range(r.count("wire points")):
                 r.record(points, 'pt', 'number', 'number', 'integer')
-            r.field(line, "Selected", "boolean")
-            r.field(line, "Group", "integer")
-            r.field(line, "CanUnhide", "boolean")
-            r.field(line, "Arrows", "integer")
+            r.field_into(line, "Selected", "boolean")
+            r.field_into(line, "Group", "integer")
+            r.field_into(line, "CanUnhide", "boolean")
+            r.field_into(line, "Arrows", "integer")
             line.source = SourceSpan("dch", line_start, r.pos, r.source)
         for name in ("Locked", "CustomColor"):
-            r.field(net, name, "boolean")
-        r.field(net, "WireColor", "color")
+            r.field_into(net, name, "boolean")
+        r.field_into(net, "WireColor", "color")
         net.source = SourceSpan("dch", start, r.pos, r.source)
         net.annotations["incomplete"] = "later net extension fields remain"
 
 
 def _buses_and_groups(r: Reader, schematic: Element):
     """Buses and groups."""
-    buses = schematic.add("Buses")
+    buses = r.add(schematic, "Buses")
     for _ in range(r.count("buses")):
         start = r.pos
-        bus = buses.add("Bus")
-        r.field(bus, "Enabled", "boolean")
+        bus = r.add(buses, "Bus")
+        r.field_into(bus, "Enabled", "boolean")
         r.boolean()  # Obsolete bus selection slot; not a current property.
         for name in ("ActiveLine", "ActivePoint", "Number", "Region"):
-            r.field(bus, name, "integer")
+            r.field_into(bus, name, "integer")
         r.integer()  # Discarded compatibility slot.
         bus.set_values(r.argument('text'))
-        nets = bus.add("Nets")
+        nets = r.add(bus, "Nets")
         for _ in range(r.count("bus nets")):
-            nets.add("pt", r.argument('integer'))
-        lines = bus.add("Lines")
+            r.add_into(nets, "pt", r.argument('integer'))
+        lines = r.add(bus, "Lines")
         for _ in range(r.count("bus lines")):
             line_start = r.pos
-            line = lines.add("Line")
+            line = r.add(lines, "Line")
             for name in ("Connect1", "Connect2", "ConnectL1", "ConnectL2", "ConnectB1", "ConnectB2",
                          "Page", "ConnectMode1", "ConnectMode2", "BusNumber", "Region", "Number"):
-                r.field(line, name, "integer")
-            points = line.add("Points")
+                r.field_into(line, name, "integer")
+            points = r.add(line, "Points")
             for _ in range(r.count("bus wire points")):
-                points.add("pt", r.argument('number'), r.argument('number'), r.argument('integer'))
-            r.field(line, "Selected", "boolean")
-            r.field(line, "Group", "integer")
+                r.add_into(points, "pt", r.argument('number'), r.argument('number'), r.argument('integer'))
+            r.field_into(line, "Selected", "boolean")
+            r.field_into(line, "Group", "integer")
             line.source = SourceSpan("dch", line_start, r.pos, r.source)
-        r.field(bus, "Locked", "boolean")
-        numbers = bus.add("Numbers")
+        r.field_into(bus, "Locked", "boolean")
+        numbers = r.add(bus, "Numbers")
         for _ in range(r.count("bus numbers")):
-            numbers.add("pt", r.argument('integer'))
+            r.add_into(numbers, "pt", r.argument('integer'))
         bus.source = SourceSpan("dch", start, r.pos, r.source)
-    groups = schematic.add("Groups")
+    groups = r.add(schematic, "Groups")
     for _ in range(r.count("groups")):
         start = r.pos
-        group = groups.add("Group")
+        group = r.add(groups, "Group")
         for name in ("Enabled", "Selected"):
-            r.field(group, name, "boolean")
+            r.field_into(group, name, "boolean")
         group.set_values(r.argument('integer'), r.argument('number'), r.argument('number'))
         group.source = SourceSpan("dch", start, r.pos, r.source)
 
 
 def _title_grid(r: Reader, parent: Element, index: int):
-    grid = read_title_block(r, parent, index)
-    grid.annotations["asc_omit"] = "format schematic ASC does not emit page title grids"
+    read_title_block(r, parent, index)
 
 
 def _page_layouts(r: Reader, schematic: Element):
@@ -446,105 +438,105 @@ def _page_layouts(r: Reader, schematic: Element):
     r.integer()  # Repeated framing count; the page array determines this loop.
     for page in pages:
         start = r.pos
-        zones = page.add("Zones")
+        zones = r.add(page, "Zones")
         for name in ("PageWidth", "PageHeight"):
-            r.field(page, name, "number")
+            r.field_into(page, name, "number")
         for name in ("FLeft", "FTop", "FRight", "FBottom"):
-            r.field(page, name, "number")
-        titles = page.add("TitleBlocks")
-        titles.annotations["asc_omit"] = "format schematic ASC does not emit page title grids"
+            r.field_into(page, name, "number")
+        titles = r.add(page, "TitleBlocks")
         for index in range(6):
             _title_grid(r, titles, index)
         zones.set_values(r.argument('boolean'))
         for name in ("HorzZones", "VertZones", "ZoneStandard"):
-            r.field(page, name, "integer")
-        r.field(page, "ZoneFontName", "text")
-        r.field(page, "ZoneFontSize", "integer")
-        r.field(page, "ZoneBorder", "boolean")
+            r.field_into(page, name, "integer")
+        r.field_into(page, "ZoneFontName", "text")
+        r.field_into(page, "ZoneFontSize", "integer")
+        r.field_into(page, "ZoneBorder", "boolean")
         for name in ("HorzZoneBorder", "VertZoneBorder"):
-            r.field(page, name, "number")
+            r.field_into(page, name, "number")
         for name in ("PageXPos", "PageyPos"):
-            r.field(page, name, "integer")
+            r.field_into(page, name, "integer")
         scale = r.field(page, "PageScale", "number")
         original = scale.values[0]
         scale.set_argument(0, min(Decimal(1000), max(Decimal('0.01'), original)))
         # The border-zone font width uses the public XML FontLineWidth name.
-        r.field(page, 'FontLineWidth', 'number').annotations['asc_omit'] = 'zone font pen is not present in ASC'
-        r.field(page, "PageType", "integer")
-        page.annotations["layout_source"] = SourceSpan("dch", start, r.pos, r.source)
+        r.field_into(page, 'FontLineWidth', 'number')
+        r.field_into(page, "PageType", "integer")
+        if r.retain_source:
+            page.annotations["layout_source"] = SourceSpan("dch", start, r.pos, r.source)
 
 
 def _tables(r: Reader, schematic: Element):
     """Tables."""
-    tables = schematic.add("Tables")
+    tables = r.add(schematic, "Tables")
     for _ in range(r.count("tables")):
         start = r.pos
-        table = tables.add("Table")
+        table = r.add(tables, "Table")
         for name in ("Enabled", "Selected"):
-            r.field(table, name, "boolean")
+            r.field_into(table, name, "boolean")
         for name in ("Layer", "DefAlign", "DefFontSize", "Orientation", "Group", "Page"):
-            r.field(table, name, "integer")
-        r.field(table, "DefFontColor", "color")
+            r.field_into(table, name, "integer")
+        r.field_into(table, "DefFontColor", "color")
         for name in ("DefCellWidth", "DefCellHeight", "X1", "Y1", "X2", "Y2"):
-            r.field(table, name, "number")
+            r.field_into(table, name, "number")
         for name in ("DefFontName", "Name"):
-            r.field(table, name, "text")
+            r.field_into(table, name, "text")
         columns = r.count("table columns")
-        widths = table.add("ColWidths")
+        widths = r.add(table, "ColWidths")
         for _ in range(columns):
-            widths.add("pt", r.argument('number'))
+            r.add_into(widths, "pt", r.argument('number'))
         rows = r.count("table rows")
-        heights = table.add("RowHeights")
+        heights = r.add(table, "RowHeights")
         for _ in range(rows):
-            heights.add("pt", r.argument('number'))
+            r.add_into(heights, "pt", r.argument('number'))
         # Every cell requires at least its boolean, three integers, color,
         # two strings, four numbers, a second boolean and two more numbers.
         if columns * rows > (len(r.data) - r.pos) // 42:
             raise DchError(f"table dimensions exceed remaining data at byte {r.pos:#x}")
-        cells = table.add("Cells")
+        cells = r.add(table, "Cells")
         for column in range(columns):
             for row in range(rows):
                 cell_start = r.pos
-                cell = cells.add("Cell")
+                cell = r.add(cells, "Cell")
                 for kind, name in [("boolean", "FOrientation"), ("integer", "FontSize"),
                                    ("integer", "FontType"), ("integer", "Align"),
                                    ("color", "FontColor"), ("text", "Text"), ("text", "FontName")]:
-                    r.field(cell, name, kind)
+                    r.field_into(cell, name, kind)
                 cell.set_values(*(r.argument('number') for _ in range(4)))
-                r.field(cell, "VectorFont", "boolean")
+                r.field_into(cell, "VectorFont", "boolean")
                 for name in ("FontWidth", "FontScale"):
-                    r.field(cell, name, "number")
+                    r.field_into(cell, name, "number")
                 cell.source = SourceSpan("dch", cell_start, r.pos, r.source)
         for name in ("Locked", "DefVectorFont"):
-            r.field(table, name, "boolean")
+            r.field_into(table, name, "boolean")
         for name in ("DefFontWidth", "DefFontScale"):
-            r.field(table, name, "number")
-        r.field(table, "HideBorder", "boolean")
+            r.field_into(table, name, "number")
+        r.field_into(table, "HideBorder", "boolean")
         table.source = SourceSpan("dch", start, r.pos, r.source)
         table.annotations["incomplete"] = "later line-spacing settings and format cell-text projection remain"
 
 
 def _settings(r: Reader, schematic: Element):
     """Settings."""
-    settings = schematic.add("Settings")
-    r.field(settings, "GridSize", "number")
-    r.field(settings, "OriginEnabled", "boolean")
-    r.field(settings, "clAxis", "color")
+    settings = r.add(schematic, "Settings")
+    r.field_into(settings, "GridSize", "number")
+    r.field_into(settings, "OriginEnabled", "boolean")
+    r.field_into(settings, "clAxis", "color")
     for name in ("BusConnectionFont", "PinNumberFont"):
-        r.field(settings, name, "integer")
+        r.field_into(settings, name, "integer")
     for name in ("GridEnabled", "DisplayTitles", "DisplaySheet", "BusConNetName", "BusConNetNumber",
                  "ShowPinNumbers", "HidePinNumbers", "BusConAbove", "BusConBelow"):
-        r.field(settings, name, "boolean")
+        r.field_into(settings, name, "boolean")
     for name in ("BusLineWidth", "WireLineWidth", "TableLineWidth", "TitlesLineWidth", "NodeSize"):
-        r.field(settings, name, "number")
+        r.field_into(settings, name, "number")
     for name in ("UnitsMM", "UnitsMIL", "UnitsINCH", "ERC_PinType", "ERC_NotConnected", "ERC_SinglePin", "ERC_Short"):
-        r.field(settings, name, "boolean")
+        r.field_into(settings, name, "boolean")
     for name in ("ERC_VCCTemplate", "ERC_GNDTemplate"):
-        r.field(settings, name, "text")
+        r.field_into(settings, name, "text")
     if r.header.version >= 30:
-        r.field(settings, "ERC_PinSuperimpose", "boolean")
+        r.field_into(settings, "ERC_PinSuperimpose", "boolean")
     else:
-        settings.add("ERC_PinSuperimpose", True).annotations["default_for_version"] = r.header.version
+        r.add_into(settings, "ERC_PinSuperimpose", True)
 
 
 def _extensions_to_33(r: Reader, schematic: Element):
@@ -553,36 +545,36 @@ def _extensions_to_33(r: Reader, schematic: Element):
     if r.header.version >= 31:
         for part in parts:
             model = part.child("Pattern").child("Model3D")
-            r.field(model, 'Units', 'integer')
+            r.field_into(model, 'Units', 'integer')
             for pin in part.child("Pins").children("Pin"):
-                r.field(pin, "NetName", "text")
+                r.field_into(pin, "NetName", "text")
     else:
         for part in parts:
-            part.child('Pattern').child('Model3D').add('Units', -1).annotations['default_for_version'] = r.header.version
+            r.add_into(part.child('Pattern').child('Model3D'), 'Units', -1)
             for pin in part.child("Pins").children("Pin"):
-                pin.add("NetName", "").annotations["default_for_version"] = r.header.version
+                r.add_into(pin, "NetName", "")
     if r.header.version >= 32:
         for part in parts:
             pattern = part.child("Pattern")
-            r.field(pattern, "Mounting", "integer")
-            r.field(pattern, "Pattern_CategoryName", "text")
-            r.field(pattern, "Pattern_CategoryIndex", "integer")
+            r.field_into(pattern, "Mounting", "integer")
+            r.field_into(pattern, "Pattern_CategoryName", "text")
+            r.field_into(pattern, "Pattern_CategoryIndex", "integer")
             read_category_types(r, pattern, 'Pattern_CategoryTypes')
             read_possible_names(r, pattern)
-            r.field(part, "Manufacturer", "text")
-            r.field(part, "Component_CategoryName", "text")
-            r.field(part, "Component_CategoryIndex", "integer")
+            r.field_into(part, "Manufacturer", "text")
+            r.field_into(part, "Component_CategoryName", "text")
+            r.field_into(part, "Component_CategoryIndex", "integer")
             read_category_types(r, part, 'Component_CategoryTypes')
     if r.header.version >= 33:
         for page in schematic.child("Pages").children("Page"):
-            r.field(page, "PageHiddenId", "integer")
+            r.field_into(page, "PageHiddenId", "integer")
         for part in parts:
-            r.field(part, "PageHiddenId", "integer")
+            r.field_into(part, "PageHiddenId", "integer")
     else:
         # The older format component array leaves this identity zero, as does
         # its page array. Neither persistent field occurs in the older wire.
         for part in parts:
-            part.add('PageHiddenId', 0).annotations['default_for_version'] = r.header.version
+            r.add_into(part, 'PageHiddenId', 0)
 
 
 def loads(data, *, source=None, allow_partial=False, ansi_encoding="cp1252", component_limit=None, context=None) -> Document:
@@ -593,6 +585,7 @@ def loads(data, *, source=None, allow_partial=False, ansi_encoding="cp1252", com
     from ..import_context import (resolve_import_context, modernize_font_settings)
     context = resolve_import_context(context)
     r = Reader(data, source=source, ansi_encoding=ansi_encoding)
+    r.retain_source = context.retain_source
     doc = Document(representation='schematic')
     doc._automatic_structure = False
     doc.metadata.update(source_format="dch", source_path=source,
@@ -606,10 +599,10 @@ def loads(data, *, source=None, allow_partial=False, ansi_encoding="cp1252", com
         raise ValueError("component_limit must be a nonnegative integer or None")
     for _ in range(min(count, component_limit) if component_limit is not None else count):
         part = _component_head(r, components)
-        _component_pins(r, part)
-        _component_shapes(r, part)
-        pattern = _component_pattern(r, part)
-        _pattern_pads(r, pattern)
+        shape_count = _component_pins(r, part)
+        _component_shapes(r, part, count=shape_count)
+        pattern, pad_count = _component_pattern(r, part)
+        _pattern_pads(r, pattern, count=pad_count)
         _pattern_graphics(r, pattern)
         _pattern_model(r, pattern)
         part.source = SourceSpan("dch", part.source.start, r.pos, r.source)
@@ -667,10 +660,11 @@ def loads(data, *, source=None, allow_partial=False, ansi_encoding="cp1252", com
         # Old construction-stage markers describe unfinished record prefixes.
         # EOF establishes complete typed wire data. Export equivalence is a
         # separate property of each destination adapter and its chosen context.
-        for node in doc.root.walk(include_self=True):
-            if node.annotations.pop('incomplete', None) is not None:
-                node.annotations['requires_asc_projection'] = True
-        doc.root.annotations['requires_asc_projection'] = True
+        for node in doc.root._record_walk(include_self=True):
+            if node._annotations:
+                node._annotations.pop('incomplete', None)
+                if not node._annotations:
+                    node._annotations = None
     else:
         doc.diagnostics.append(f'DCH decoding stops at byte {r.pos:#x}; later records remain')
     from ...model.refs import (bind_schematic_references)
@@ -695,9 +689,10 @@ def loads(data, *, source=None, allow_partial=False, ansi_encoding="cp1252", com
             doc.diagnostics.append('Power-wire visibility deferred: unresolved attachment references')
     # Construction and version upgrades establish the loaded baseline. User
     # edits made after this point should be distinguishable from source data.
-    for node in doc.root.walk(include_self=True):
-        node._dirty = False
-        node._reordered = False
+    doc.root._mark_loaded()
+    if not context.retain_source:
+        from ....common.source_details import discard_source
+        discard_source(doc.root)
     if not allow_partial and not doc.complete:
         raise IncompleteDocumentError(doc.diagnostics[0])
     doc._automatic_structure = True

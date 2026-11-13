@@ -50,10 +50,7 @@ def expand_pattern_drawings(version, schematic):
     for pattern in footprints(schematic):
         scale = float(pattern.scalar('Width')), float(pattern.scalar('Height'))
         shapes = pattern.child('Shapes').children('Shape')
-        for index, shape in enumerate(shapes):
-            if (pattern.parent.kind == 'Part' and shape.scalar('Type') < 0
-                    and index not in (0, len(shapes)-1)):
-                shape.annotations['asc_omit'] = 'disabled interior footprint drawing'
+        for shape in shapes:
             expand_drawing(shape, scale)
 
 
@@ -78,7 +75,7 @@ def expand_drawing(shape, scale):
                         ('TextHorz', -1 if kind == 7 else 0),
                         ('TextVert', -1 if kind == 7 else 0), ('TextAlign', -1),
                         ('LineSpacing', 1.2), ('AllLayers', False), ('Group', -1)):
-        shape.add(name, value).annotations['derived_from'] = 'legacy drawing settings'
+        shape.add(name, value)
     for name in ('CompatibilityGeometry', 'CompatibilityPoints', 'TextOrientation', 'Type'):
         for field in stored.children(name):
             field.detach()

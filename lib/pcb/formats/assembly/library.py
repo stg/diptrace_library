@@ -85,7 +85,6 @@ def assemble_library(core, decoded):
             node.detach()
         for item in prepared:
             consume_paste_counts(item.pattern)
-            item.pattern.annotations.pop('declared_pad_count', None)
             for pad in item.pads.values():
                 pad.one('Number_New').detach()
             for dimension in item.pattern.select('Dimensions/Dimension'):

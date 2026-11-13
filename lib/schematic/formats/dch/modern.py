@@ -48,14 +48,14 @@ def read_drawing_extensions(r, schematic):
         return
     for name, size in (("ShowRefDes_Global", 3), ("ShowName_Global", 3), ("ShowValue_Global", 2),
                        ("ShowManufacturer_Global", 2), ("ShowDatasheet_Global", 2)):
-        schematic.add(name, *(r.argument('integer') for _ in range(size)))
-    fields = schematic.add("ShowUserfield_Global")
+        r.add_into(schematic, name, *(r.argument('integer') for _ in range(size)))
+    fields = r.add(schematic, "ShowUserfield_Global")
     for _ in range(r.count("global user-field labels")):
-        fields.add("pt", r.argument('text'), r.argument('text'), r.argument('integer'), r.argument('integer'))
+        r.add_into(fields, "pt", r.argument('text'), r.argument('text'), r.argument('integer'), r.argument('integer'))
     for part in placed_components(schematic):
-        r.field(part, "CustomMarkingFont", "boolean")
-        r.field(part, "MarkingFontSize", "integer")
-        r.field(part, "MarkingFontAll", "boolean")
+        r.field_into(part, "CustomMarkingFont", "boolean")
+        r.field_into(part, "MarkingFontSize", "integer")
+        r.field_into(part, "MarkingFontAll", "boolean")
         for name, size in (("ShowRefDes", 5), ("ShowName", 5), ("ShowValue", 4),
                            ("ShowManufacturer", 4), ("ShowDatasheet", 4)):
             _label(r, part, name, size)
@@ -64,23 +64,24 @@ def read_drawing_extensions(r, schematic):
             integers = tuple(r.argument('integer') for _ in range(4))
             x, y, angle = r.argument('number'), r.argument('number'), r.argument('number')
             field.set_values(*field.arguments, *integers, x, y, _snap_angle(angle.value))
-            field.annotations["label_source"] = SourceSpan("dch", start, r.pos, r.source)
+            if r.retain_source:
+                field.annotations["label_source"] = SourceSpan("dch", start, r.pos, r.source)
         pattern_properties(r, part.child("Pattern"))
         symbol_properties(r, part, placed=True)
     for shape in schematic.child("Shapes").children("Shape"):
         _angle(r, shape, "TextAngle")
         for name in ("TextHorz", "TextVert", "TextAlign"):
-            r.field(shape, name, "integer")
-        r.field(shape, "LineSpacing", "number")
+            r.field_into(shape, name, "integer")
+        r.field_into(shape, "LineSpacing", "number")
         _text_lines(r, shape)
     for table in schematic.child("Tables").children("Table"):
-        r.field(table, "DefLineSpacing", "number")
+        r.field_into(table, "DefLineSpacing", "number")
         for cell in table.child("Cells").children("Cell"):
-            r.field(cell, "LineSpacing", "number")
+            r.field_into(cell, "LineSpacing", "number")
     for page in schematic.child("Pages").children("Page"):
         for grid in page.child("TitleBlocks").children("TitleBlock"):
             for cell in grid.child("Contents").children("Content"):
-                r.field(cell, "LineSpacing", "number")
+                r.field_into(cell, "LineSpacing", "number")
     for definition in cached_definitions(schematic):
         pattern_properties(r, definition.child("Pattern"))
         symbol_properties(r, definition.child("Part"), placed=False)

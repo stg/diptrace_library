@@ -36,7 +36,7 @@ class PcbXmlInput:
 
 def prepare(data, *, source=None, context=None):
     context = resolve_import_context(context)
-    syntax = loads(data, source=source)
+    syntax = loads(data, source=source, retain_source=context.retain_source)
     record = XmlRecord(syntax.one('/Source'))
     if record.text('Type') != 'DipTrace-PCB':
         raise PcbError('PCB XML requires a DipTrace-PCB source')

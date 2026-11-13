@@ -1,5 +1,5 @@
 """Current board outline, layers, drawings and picture data in PCB XML."""
-from ....common.conversion import warn
+from ....common.conversion import info, warn
 from ....common.model import Element
 from ....common.picture_sources import picture_source_paths
 from ....common.xml import set_attribute
@@ -41,16 +41,29 @@ def project_non_signals(board):
     return result
 
 
-def project_layer_panel(board):
+_PANEL_FLAGS = (
+    'TopAssy', 'TopMask', 'TopPaste', 'BotAssy', 'BotMask', 'BotPaste',
+    'TopTerminals', 'BotTerminals', 'TopCourtyard', 'BotCourtyard',
+    'TopOutline', 'BotOutline', 'TopDimensions', 'BotDimensions',
+)
+
+
+def project_layer_panel(board, *, report=None):
     settings = board.child('Settings')
     source = settings.child('LayerPanel') if settings is not None else None
     rows = board.select('NonSignals/NonSignal')
     result = Element('LayerPanel')
     if source is not None:
         check_tree(source, settings_records.LAYER_PANEL, destination='DIPXML')
-        for name in settings_records.LAYER_PANEL.fields:
+        for name in _PANEL_FLAGS:
             if source.child(name) is not None:
                 set_attribute(result, name, source[name])
+        # XML carries the outline itself, but no outline display preference.
+        if (choice := source.child('Board')) is not None:
+            notice = info if source['Board'] else warn
+            notice(report, 'xml-board-outline-visibility', 'dipxml',
+                   'XML omits the board-outline display preference', (choice,),
+                   recoverability='DIP and ASC retain this choice; the destination editor uses its display preference')
     missing = False
     for row in rows:
         if row.child('Visible') is None:

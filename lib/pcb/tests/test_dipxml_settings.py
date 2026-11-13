@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.pcb.formats.assembly.board_rules import assemble_rules
 from lib.pcb.formats.dipxml.versions import XmlVersion
 from lib.pcb.tests.test_dipxml_classes import source as class_source
@@ -49,10 +50,10 @@ class PcbXmlSettingsTests(unittest.TestCase):
         result = assemble_rules(prepared(source()))
         doc, board = result.document, result.document.one('/Board')
         settings, sheet = board.one('Settings'), board.one('SheetSettings')
-        self.assertEqual((doc.root['Scale'], doc.root['Xpos'], doc.root['Ypos']),
-                         (150, Decimal('3.6'), Decimal('6.9')))
+        assert_float_facts(self,(doc.root['Scale'], doc.root['Xpos'], doc.root['Ypos']),
+                         (150, 3.6, 6.9))
         self.assertEqual((sheet['SheetWidth'], sheet['SheetHeight'], sheet['LeftMargin']), (300, 240, 15))
-        self.assertEqual(sheet.one('BorderZones')['FontLineWidth'], Decimal('.6'))
+        assert_float_facts(self,sheet.one('BorderZones')['FontLineWidth'], Decimal('.6'))
         self.assertTrue(sheet['DisplayTitles'])
         self.assertFalse(sheet['DisplaySheet'])
         self.assertEqual((board['CompFontSize'], board['PatternFontWidth']), (Decimal('5.5'), Decimal('.25')))
@@ -61,8 +62,8 @@ class PcbXmlSettingsTests(unittest.TestCase):
         field = board.one('Userfields_Global/UserField')
         self.assertEqual((field['Name'], field['Value'], field['SilkAlign']), ('Order code', 'ordercode', 2))
         self.assertIsNone(field.child('Value'))
-        self.assertEqual((settings['GridSize'], settings['YGridSize']), (Decimal('.3'), Decimal('.6')))
-        self.assertEqual(settings['SilkLineWidth'], Decimal('.75'))
+        assert_float_facts(self,(settings['GridSize'], settings['YGridSize']), (Decimal('.3'), Decimal('.6')))
+        assert_float_facts(self,settings['SilkLineWidth'], Decimal('.75'))
         self.assertEqual((settings['LayerDisplayMode'], settings['JumperLayer']), (2, 2))
         self.assertEqual(settings.one('Routing')['Router'], 1)
         self.assertTrue(settings.one('LayerPanel')['TopAssy'])
@@ -73,12 +74,12 @@ class PcbXmlSettingsTests(unittest.TestCase):
         result = assemble_rules(prepared(source()))
         routing = result.document.one('/Board/Settings/Routing')
         row = result.classes[0].one('LayProperties/LayProperty')
-        self.assertEqual((routing['TraceWidth'], row['Width']), (Decimal('1.2'), Decimal('1.2')))
+        assert_float_facts(self,(routing['TraceWidth'], row['Width']), (1.2, 1.2))
         self.assertIsNone(routing.child('TraceWidth'))
         routing['TraceWidth'] = 2
         self.assertEqual(row['Width'], 2)
         row['Clearance'] = Decimal('.9')
-        self.assertEqual(routing['TraceClearance'], Decimal('.9'))
+        assert_float_facts(self,routing['TraceClearance'], Decimal('.9'))
 
     def test_panel_metrics_follow_the_xml_compatibility_boundary(self):
         for version, metric, spacing, x, y in (

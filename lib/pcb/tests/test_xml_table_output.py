@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.units import XmlUnits
@@ -28,8 +29,8 @@ class XmlTableOutputTests(unittest.TestCase):
     def assert_facts(self, actual, expected):
         self.assertEqual(actual.keys(), expected.keys())
         for name, value in expected.items():
-            if isinstance(value, (int, Decimal)) and not isinstance(value, bool):
-                self.assertLessEqual(abs(actual[name]-value), Decimal('1e-23'), name)
+            if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+                assert_float_facts(self, actual[name], value, name)
             else:
                 self.assertEqual(actual[name], value, name)
 

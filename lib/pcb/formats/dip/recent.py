@@ -9,31 +9,31 @@ def _pair_shields(reader, pair, *, separate):
             _fields(reader, center, 'integer', 'PosShieldGroup NegShieldGroup')
             for collection, kind in (('PosPoints', 'PosPoint'), ('NegPoints', 'NegPoint')):
                 for point in center.select(collection+'/'+kind):
-                    reader.field(point, 'ShieldGroup', 'integer')
+                    reader.field_into(point, 'ShieldGroup', 'integer')
     if separate:
         for collection, kind in (('PosSeparateTraces', 'PosTrace'), ('NegSeparateTraces', 'NegTrace')):
             for point in pair.select(collection+'/'+kind+'/Points/Point'):
-                reader.field(point, 'ShieldGroup', 'integer')
+                reader.field_into(point, 'ShieldGroup', 'integer')
 
 
 def _shields(reader, board, cached_definitions):
     for component in board.select('Components/Component'):
-        reader.field(component, 'ShieldGroup', 'integer')
+        reader.field_into(component, 'ShieldGroup', 'integer')
         for collection, kind in (('Pads', 'Pad'), ('Shapes', 'Shape')):
             for node in component.select('Pattern/'+collection+'/'+kind):
-                reader.field(node, 'ShieldGroup', 'integer')
+                reader.field_into(node, 'ShieldGroup', 'integer')
     for point in board.select('Nets/Net/Traces/Trace/Points/Point'):
-        reader.field(point, 'ShieldGroup', 'integer')
+        reader.field_into(point, 'ShieldGroup', 'integer')
     for pair in board.select('DifferentialPairs/DifferentialPair'):
         _pair_shields(reader, pair, separate=True)
     for pair in board.select('RemovedDifferentialPairs/RemovedDifferentialPair'):
         _pair_shields(reader, pair, separate=False)
     for pour in board.select('CopperPours/CopperPour'):
-        reader.field(pour, 'ShieldGroup', 'integer')
-    reader.field(board, 'ShieldGroup', 'integer')
+        reader.field_into(pour, 'ShieldGroup', 'integer')
+    reader.field_into(board, 'ShieldGroup', 'integer')
     for cached in cached_definitions:
         for shape in cached.definition.select('Pattern/Shapes/Shape'):
-            reader.field(shape, 'ShieldGroup', 'integer')
+            reader.field_into(shape, 'ShieldGroup', 'integer')
 
 
 def _pattern_fonts(pattern):
@@ -72,21 +72,21 @@ def read_recent_extensions(reader, board, cached_definitions):
         _fields(reader, board.one('Panel'), 'number', 'LeftGap RightGap TopGap BottomGap')
     if version > 55:
         for net in board.select('Nets/Net'):
-            reader.field(net, 'HiddenId', 'integer')
+            reader.field_into(net, 'HiddenId', 'integer')
     if version > 56:
         _shields(reader, board, cached_definitions)
     if version > 57:
         for pour in board.select('CopperPours/CopperPour'):
-            reader.field(pour, 'TraceShieldGroup', 'integer')
+            reader.field_into(pour, 'TraceShieldGroup', 'integer')
     if version > 58:
         for shape in board.select('Shapes/Shape'):
-            reader.field(shape, 'PictureFlipped', 'boolean')
+            reader.field_into(shape, 'PictureFlipped', 'boolean')
     if version > 59:
-        reader.field(board, 'SchemNetClasses', 'boolean')
+        reader.field_into(board, 'SchemNetClasses', 'boolean')
     else:
-        board.add('SchemNetClasses', False)
+        reader.add_into(board, 'SchemNetClasses', False)
     if version > 60:
         read_font_properties(reader, _font_records(board, cached_definitions))
     if version > 61:
         for net in board.select('Nets/Net'):
-            reader.field(net, 'AllowLoops', 'boolean')
+            reader.field_into(net, 'AllowLoops', 'boolean')

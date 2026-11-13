@@ -10,8 +10,8 @@ from .xml_symbol_vocabulary import (PART_TYPES, SYMBOL_TYPES, PIN_TYPES, ELECTRI
                                     DRAWING_TYPES, TEXT_SHOW, SPICE_TYPES, SHOW)
 
 
-def project_symbol_pin(pin, *, units, pad_id, group=-1, fractional_font=True, physical_font_width=True):
-    result = Element('Pin')
+def project_symbol_pin(pin, *, units, pad_id, group=-1, fractional_font=True, physical_font_width=True, _factory=Element):
+    result = _factory('Pin')
     point_attributes(result, *pin.arguments[1:3], units)
     set_attribute(result, 'Locked', pin.scalar('Locked'))
     for public, own, labels in (('Type', 'Type', PIN_TYPES), ('ElectricType', 'ElectricType', ELECTRIC_TYPES)):
@@ -19,10 +19,10 @@ def project_symbol_pin(pin, *, units, pad_id, group=-1, fractional_font=True, ph
     orientation = pin.scalar('Orientation')
     set_attribute(result, 'Orientation', orientation*90 if 0 <= orientation <= 3 else orientation)
     set_attribute(result, 'PadId', pad_id)
-    set_attribute(result, 'Length', numeric(units.length(pin.one('Length').arguments[0])))
+    set_attribute(result, 'Length', numeric(units.length(pin._field_arguments('Length')[0])))
     set_attribute(result, 'ShowName', pin.scalar('ShowName'))
     for prefix, own in (('Num', 'PinNum'), ('Name', 'PinName')):
-        point_attributes(result, pin.one(own+'XShift').arguments[0], pin.one(own+'YShift').arguments[0],
+        point_attributes(result, pin._field_arguments(own+'XShift')[0], pin._field_arguments(own+'YShift')[0],
                          units, names=(prefix+'XShift', prefix+'YShift'))
     set_attribute(result, 'SignalDelay', numeric(pin.scalar('SignalDelay', 0)))
     for public, own in (('NumOrientation', 'PinNumRotate'), ('NameOrientation', 'PinNameRotate')):
@@ -34,29 +34,29 @@ def project_symbol_pin(pin, *, units, pad_id, group=-1, fractional_font=True, ph
             field(result, public, pin.scalar(own))
     font = result.add('NameFont')
     for public, own in (('Size', 'NameFontSize'), ('Width', 'NameFontWidth'), ('Scale', 'NameFontScale')):
-        set_attribute(font, public, stroke_width(pin.one(own).arguments[0],units)
-                      if own == 'NameFontWidth' and physical_font_width else pin.one(own).arguments[0])
+        set_attribute(font, public, stroke_width(pin._field_arguments(own)[0],units)
+                      if own == 'NameFontWidth' and physical_font_width else pin._field_arguments(own)[0])
     project_size(pin, font, size='NameFontSize', legacy='Size', mono='NameFontMono', fractional=fractional_font)
     return result
 
 
-def project_symbol_drawing(shape, *, units, group=-1, fractional_font=True, physical_font_width=True):
-    result = Element('Shape')
+def project_symbol_drawing(shape, *, units, group=-1, fractional_font=True, physical_font_width=True, _factory=Element):
+    result = _factory('Shape')
     kind = shape.scalar('Type')
     set_attribute(result, 'Type', enum_text(kind, DRAWING_TYPES))
     if kind != 10:
-        set_attribute(result, 'LineWidth', numeric(units.length(shape.one('PenWidth').arguments[0])))
+        set_attribute(result, 'LineWidth', numeric(units.length(shape._field_arguments('PenWidth')[0])))
     set_attribute(result, 'Locked', shape.scalar('Locked'))
     if kind == 10:
         for public, own in (('FontVector', 'VectorFont'), ('FontSize', 'FontSize'), ('FontWidth', 'FontWidth'),
                             ('FontScale', 'FontScale'), ('FontColor', 'FontColor'), ('LineSpacing', 'LineSpacing')):
-            set_attribute(result, public, stroke_width(shape.one(own).arguments[0],units)
-                          if own == 'FontWidth' and physical_font_width else shape.one(own).arguments[0])
+            set_attribute(result, public, stroke_width(shape._field_arguments(own)[0],units)
+                          if own == 'FontWidth' and physical_font_width else shape._field_arguments(own)[0])
         set_attribute(result, 'TextShow', enum_text(shape.scalar('FontType'), TEXT_SHOW))
         project_size(shape, result, fractional=fractional_font)
         if shape.scalar('FontName'):
             set_attribute(result, 'FontName', shape.scalar('FontName'))
-        set_attribute(result, 'Angle', shape.one('TextAngle').arguments[0])
+        set_attribute(result, 'Angle', shape._field_arguments('TextAngle')[0])
         for public, own, labels in (('HorzAlign', 'TextHorz', HORZ), ('VertAlign', 'TextVert', VERT),
                                     ('TextAlign', 'TextAlign', HORZ)):
             set_attribute(result, public, enum_text(shape.scalar(own), labels, negative=labels[-1]))
@@ -75,7 +75,7 @@ def project_symbol_drawing(shape, *, units, group=-1, fractional_font=True, phys
 
 
 def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(), connections=(),
-                   pattern_style=None, datasheet='', report=None):
+                   pattern_style=None, datasheet='', report=None, _factory=Element):
     """Serialize content selected by the owning family adapter.
 
     Groups are (key, x, y) tuples; connections are public pad-key pairs.
@@ -92,7 +92,7 @@ def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(),
         warn(report, 'cached-drawing-flags', destination,
              'XML omits cached symbol visibility and generation flags', flagged,
              recoverability='drawing geometry and text remain; these flags default to false on import')
-    result = Element('Part')
+    result = _factory('Part')
     if part.values[1]:
         set_attribute(result, 'RefDes', part.arguments[1])
     set_attribute(result, 'PartType', enum_text(part.scalar('PartType'), PART_TYPES))
@@ -102,7 +102,7 @@ def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(),
     for public, own in (('Int1', 'Number1'), ('Int2', 'Number2')):
         set_attribute(result, public, part.scalar(own))
     for name in ('Width', 'Height'):
-        set_attribute(result, name, numeric(units.length(part.one(name).arguments[0])))
+        set_attribute(result, name, numeric(units.length(part._field_arguments(name)[0])))
     set_attribute(result, 'LockTypeChange', part.scalar('LockProperties'))
     if part.scalar('SubfolderIndex', -1) >= 0:
         set_attribute(result, 'SubFolderIndex', part.scalar('SubfolderIndex'))
@@ -111,7 +111,7 @@ def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(),
     field(result, 'PartName', part.scalar('PartName'))
     if part.scalar('Value'):
         field(result, 'Value', part.scalar('Value'))
-    point_attributes(result.add('Origin'), part.one('Origin_X').arguments[0], part.one('Origin_Y').arguments[0], units)
+    point_attributes(result.add('Origin'), part._field_arguments('Origin_X')[0], part._field_arguments('Origin_Y')[0], units)
     datasheet = part.scalar('Datasheet', datasheet)
     if datasheet:
         field(result, 'Datasheet', datasheet)
@@ -125,7 +125,7 @@ def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(),
             field(details, 'Item', line.arguments[0])
     if part.scalar('Manufacturer'):
         field(result, 'Manufacturer', part.scalar('Manufacturer'))
-    category = project_category(part)
+    category = project_category(part, _factory=_factory)
     if category is not None:
         result.append(category)
     suppliers = part.child('Suppliers')

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.references import Property
 from lib.pcb.formats.assembly.board_rules import assemble_rules
 from lib.pcb.model.objects import new_document, new_layer
@@ -30,12 +31,12 @@ class StackupTests(unittest.TestCase):
         self.assertEqual([material['Name'] for material in materials],
                          ['Solder Resist', 'Copper 1 Oz', 'FR-4', 'Copper 1 Oz', 'Solder Resist'])
         self.assertEqual([material['Thickness'] for material in materials],
-                         [Decimal('.03'), Decimal('.104394'), Decimal('4.5'),
-                          Decimal('.104394'), Decimal('.03')])
+                         [0.03, 0.104394, 4.5,
+                          0.104394, 0.03])
         self.assertEqual([material['Type'] for material in materials], [2, 0, 2, 0, 2])
         self.assertEqual([item['Lay'] for item in proposal.items.children()], [-1, 0, -1, 1, -1])
         materials[1]['Thickness'] = Decimal('.2')
-        self.assertEqual(materials[3]['Thickness'], Decimal('.104394'))
+        assert_float_facts(self,materials[3]['Thickness'], Decimal('.104394'))
         self.assertIsNone(materials[1].child('Type'))
         document.validate()
 
@@ -130,7 +131,7 @@ class StackupTests(unittest.TestCase):
         self.assertEqual(result.document.one('/Board')['LayerStackName'], 'My materials')
         self.assertEqual(len(items.children()), 2)
         material = items.children()[0].one('Material')
-        self.assertEqual((material['Type'], material['Thickness']), (1, Decimal('.234')))
+        self.assertEqual((material['Type'], material['Thickness']), (1, 0.234))
         self.assertIsNone(material.child('Type'))
 
 

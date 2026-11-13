@@ -68,7 +68,7 @@ def unpack_terminals(parent, *, container='PadTerminalCount', counted=True):
 
 
 def unpack_model(model, *, fields=MODEL_FIELDS):
-    values = model.one('pt').arguments
+    values = model._field_arguments('pt')
     if len(values) != 9+len(fields):
         raise ValueError(f'{model.path}: expected {9+len(fields)} model placement values')
     model.one('pt').detach()
@@ -154,4 +154,4 @@ def unpack_pattern_shapes(container, *, pad_id=True, points_name='Points_New', h
         if shape.child('TextLine') is None:
             shape.add('TextLine').add('pt', header[9])
         if pad_id:
-            shape.add('PadId', -1).annotations['asc_omit'] = 'not present in ASC'
+            shape.add('PadId', -1)

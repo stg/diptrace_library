@@ -3,6 +3,7 @@ from decimal import Decimal
 import unittest
 from xml.etree import ElementTree
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.pcb.formats.assembly.graphics import assemble_graphics
 from lib.pcb.tests.test_dipxml_electrical import prepared
@@ -33,7 +34,7 @@ class DrcUnusedSelectorTests(unittest.TestCase):
                     self.assertIs(row['Target1'], document.one(expected))
                     self.assertEqual(row['Point1'], -1)
                     self.assertIsNone(row.child('Point1'))
-                    self.assertEqual((row['Value'], row['Rule']), (Decimal('.3'), Decimal('.6')))
+                    assert_float_facts(self,(row['Value'], row['Rule']), (0.3, 0.6))
                     self.assertIn('unused-design-error-point', [n.rule for n in report.infos])
                     self.assertNotIn('unresolved-design-error-targets', [n.rule for n in report.warnings])
                     target = row['Target1']

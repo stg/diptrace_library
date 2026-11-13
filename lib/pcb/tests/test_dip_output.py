@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.schema import MISSING
@@ -104,13 +105,13 @@ class DipOutputTests(unittest.TestCase):
         point.move_to(point.parent, 0)
         rebuilt = reopen(encode(document, report=ConversionReport()), report=ConversionReport())
         saved = rebuilt.one('/Board/Components/Component')
-        self.assertEqual((saved['RefDes'], saved['Value'], saved['X']), ('U17', 'Edited', Decimal('31.25')))
+        assert_float_facts(self,(saved['RefDes'], saved['Value'], saved['X']), ('U17', 'Edited', 31.25))
         self.assertEqual(rebuilt.one('/Board/Nets/Net')['Name'], 'Edited net')
         current = rebuilt.one('/Board/Nets/Net/Traces/Trace[1]/Points/Point[1]')
         self.assertEqual((current['X'], current['Y']), (point['X'], point['Y']))
         actual = signature(saved)
         expected = signature(component)
-        self.assertEqual({name: actual[name] for name in expected}, expected)
+        assert_float_facts(self,{name: actual[name] for name in expected}, expected)
 
     def test_application_preferences_warn_without_changing_the_source(self):
         document = configured_document()
@@ -210,7 +211,7 @@ class DipOutputTests(unittest.TestCase):
         document = configured_document(with_component_library(pair_source()))
         expected = pair_signature(document)
         rebuilt = reopen(encode(document, report=ConversionReport()), report=ConversionReport())
-        self.assertEqual(pair_signature(rebuilt), expected)
+        assert_float_facts(self,pair_signature(rebuilt), expected)
         rebuilt.references.validate()
 
     def test_cached_definitions_keep_pin_assignments_and_paths_in_complete_output(self):

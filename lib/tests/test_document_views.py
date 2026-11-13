@@ -7,6 +7,27 @@ from lib.schematic.model.refs import (bind_schematic_references)
 
 
 class DocumentViewTests(unittest.TestCase):
+    def test_normal_asc_import_matches_detached_source_conversion(self):
+        data = self.sample().to_asc_bytes(report=ExportReport())
+        source = parse_source(data)
+        original = source.to_asc_bytes()
+        detached, normal = source.as_schematic(), parse(data)
+        detached.one('/Schematic/Components/Part')['Value'] = 'only the detached model'
+        self.assertEqual(source.to_asc_bytes(), original)
+        detached.one('/Schematic/Components/Part')['Value'] = normal.one('/Schematic/Components/Part')['Value']
+        for format in ('dch', 'asc', 'dchxml'):
+            with self.subTest(format=format):
+                self.assertEqual(getattr(detached, 'to_'+format+'_bytes')(report=ExportReport()),
+                                 getattr(normal, 'to_'+format+'_bytes')(report=ExportReport()))
+        normal.validate()
+        source.validate()
+
+    def test_diagnostic_notes_do_not_change_source_output_eligibility(self):
+        source = parse_source(self.sample().to_asc_bytes(report=ExportReport()), format='asc')
+        before = source.to_asc_bytes()
+        source.root.annotations['requires_asc_projection'] = True
+        self.assertEqual(source.to_asc_bytes(), before)
+
     def sample(self):
         document = new_schematic(sheet_name='Programmatic data')
         part = document.one('/Schematic/Components').append(new_symbol('Connector', 'J1'))

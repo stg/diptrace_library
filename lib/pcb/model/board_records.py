@@ -1,5 +1,6 @@
 """Document-wide PCB authoring choices and supplied panelization data."""
 from ...common.schema import Child, Field, Record
+from ...common.measurements import nonnegative_length
 from . import markings
 
 
@@ -17,7 +18,9 @@ BOARD_FIELDS = {
     **_fields('integer', 'PanelX PanelY ProjectLibs_Type ProjectLibs_Content DesignCache_Count'),
     **_fields('number', 'PanelDX PanelDY RailLeft RailRight RailTop RailBottom OriginX OriginY',
               unit='shared length'),
-    **_fields('number', 'CompFontSize PatternFontWidth PatternFontScale'),
+    'CompFontSize': Field('CompFontSize', 'number', unit='font size'),
+    'PatternFontWidth': Field('PatternFontWidth', 'number', unit='shared length', unit_selector=nonnegative_length),
+    'PatternFontScale': Field('PatternFontScale', 'number', unit='ratio'),
 }
 
 PANEL = Record('PcbPanel', {

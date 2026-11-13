@@ -101,7 +101,7 @@ NET_CLASS = Record('PcbNetClass', {
        ('MaxUncoupledLength', 'Tolerance', 'Phase', 'Phase_ErrorLength')},
     'LengthDelta': Field('LengthDelta', 'number', default=DEFAULT_DELTA, unit='shared length'),
     'FixedLength': Field('FixedLength', 'number', default=DEFAULT_FIXED_LENGTH, unit='shared length'),
-    'MaxIncorrectWayValue': Field('MaxIncorrectWayValue', 'number', default=0,
+    'MaxIncorrectWayValue': Field('MaxIncorrectWayValue', 'number', default=0, unit='unscaled',
         description='Autorouting limit scalar, independent of display length units.'),
 }, parameters=('Name',), children={
     'LayProperties': Child('LayProperties', 'PcbClassLayerProperties'),
@@ -136,7 +136,7 @@ MATERIAL = Record('PcbLayerMaterial', {
             if (layer := material_layer(material)) is not None else (),
         description='Conductor/plane follows the copper layer; an item without a copper layer is dielectric.'),
     'VariableThickness': Field('VariableThickness', 'boolean', default=False),
-    'Constant': Field('Constant', 'number', default=0),
+    'Constant': Field('Constant', 'number', default=0, unit='ratio'),
     **{name: Field(name, 'number', default=0, unit='shared length') for name in ('Thickness', 'TraceWidth')},
 })
 STACK_ITEM = Record('PcbLayerStackItem', {'Id': _order(), **LAYER_FIELDS}, parameters=('Id',), children={

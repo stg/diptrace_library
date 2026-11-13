@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport
 from lib.pcb.formats.asc.core import prepare_core
@@ -143,7 +144,7 @@ class ResultProjectionTests(unittest.TestCase):
         rebuilt = reopen(document,report=ConversionReport())
         row = rebuilt.one('/Board/DesignErrors/DesignError')
         self.assertEqual(row['Target1']._ordinal(),1)
-        self.assertEqual((row['X'],row['Y'],row['Value'],row['Rule']),(3,-6,Decimal('.9'),Decimal('1.2')))
+        assert_float_facts(self,(row['X'],row['Y'],row['Value'],row['Rule']),(3,-6,0.9,1.2))
 
     def test_length_targets_and_class_origins_use_the_same_selected_default_export_order(self):
         document = read_length(length_source(length_error(0),length_error(1)),report=ConversionReport())

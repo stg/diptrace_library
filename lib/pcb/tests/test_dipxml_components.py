@@ -3,6 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.model import Element
 from lib.common.units import XmlUnits
 from lib.common.xml_records import XmlRecord
@@ -100,8 +101,8 @@ class PcbXmlComponentTests(unittest.TestCase):
         self.assertIs(template.schema, PATTERN)
         self.assertIs(template.schema.fields['PadWidth'], footprint_records.PATTERN.fields['PadWidth'])
         self.assertIs(pad.schema, footprint_records.PAD)
-        self.assertEqual((pad['X'], pad['Y'], pad['PadWidth_New'], pad['PadHeight_New']),
-                         (Decimal('-2.4'), 6, Decimal('3.6'), Decimal('7.2')))
+        assert_float_facts(self,(pad['X'], pad['Y'], pad['PadWidth_New'], pad['PadHeight_New']),
+                         (-2.4, 6, 3.6, 7.2))
         self.assertEqual(template.one('Pads/Pad[2]')['X'], 3)
         self.assertEqual(template.one('Model3D/Offset').values, ())
         self.assertEqual(template.one('Model3D/Offset')['Y'], 6)
@@ -158,7 +159,7 @@ class PcbXmlComponentTests(unittest.TestCase):
         self.assertIs(first['Net'], net)
         self.assertIs(net.one('Pads/Item')['Pad'], first)
         # The asymmetric drawing shifts the installed local frame by 0.6.
-        self.assertEqual(first['X'], -patterns['P'].element.one('Pads/Pad[2]')['X']+Decimal('.6'))
+        self.assertEqual(first['X'], -patterns['P'].element.one('Pads/Pad[2]')['X']+0.6)
         component['RefDes'] = 'U7'
         net['Name'] = 'Renamed'
         self.assertEqual((first['Net']['Name'], document.refdes('U').designators()), ('Renamed', ['U7']))

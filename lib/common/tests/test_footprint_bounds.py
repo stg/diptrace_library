@@ -23,6 +23,15 @@ def drawing(kind, points):
 
 
 class FootprintBoundsTests(unittest.TestCase):
+    def test_reversing_an_arc_preserves_its_envelope(self):
+        # Three integer points on x*x + y*y = 5 describe the same curve in
+        # either direction. Its left/right extrema are symmetric about zero.
+        points = ((1, 2), (2, -1), (-1, 2))
+        forward = physical_bounds(drawings=(drawing(6, points),))
+        backward = physical_bounds(drawings=(drawing(6, points[::-1]),))
+        self.assertEqual(forward, backward)
+        self.assertEqual(forward.center[0], 0)
+
     def test_reflected_asymmetric_envelope_is_exactly_the_mirrored_box(self):
         item = pad(2, width=Decimal('1.95'), height=Decimal('3.15'),
                    angle=Decimal('1.570785307179586'))
@@ -45,10 +54,10 @@ class FootprintBoundsTests(unittest.TestCase):
             for degrees in range(360):
                 item['PadAngle']=math.radians(degrees)
                 box=physical_bounds(pads=(item,))
-                self.assertEqual((box.width,box.height),(size,size))
+                self.assertEqual((float(box.width),float(box.height)),(float(size),float(size)))
         item=pad(0,width=size,height=Decimal('2.5'),angle=math.pi/2)
         box=physical_bounds(pads=(item,))
-        self.assertEqual((box.width,box.height),(Decimal('2.5'),size))
+        self.assertEqual((float(box.width),float(box.height)),(2.5,float(size)))
 
     def test_rotated_ellipse_uses_its_analytic_extrema(self):
         item=pad(angle=math.pi/4)
@@ -118,12 +127,15 @@ class FootprintBoundsTests(unittest.TestCase):
         cx,cy=first.center
         with localcontext() as context:
             context.prec=100
-            item['X'],item['Y']=item['X']-cx,item['Y']-cy
+            item['X'],item['Y']=Decimal(str(item['X']))-cx,Decimal(str(item['Y']))-cy
             for row in shape.select('Points_New/pt'):
                 row.set_values(Decimal(str(row.values[0]))-cx,Decimal(str(row.values[1]))-cy)
         second=physical_bounds(pads=(item,),drawings=(shape,))
-        self.assertEqual(second.center,(0,0))
-        self.assertEqual((second.width,second.height),(first.width,first.height))
+        error = 2*math.ulp(float(max(first.width,first.height)))
+        for value in second.center:
+            self.assertAlmostEqual(float(value), 0, delta=error)
+        for actual, expected in zip((second.width,second.height),(first.width,first.height)):
+            self.assertAlmostEqual(float(actual),float(expected),delta=error)
         self.assertEqual(physical_bounds(pads=(item,),drawings=(shape,)),second)
         self.assertEqual(item['PadCorner'],75)
 

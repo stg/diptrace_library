@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import loads, dumps
 from lib.common.model import Element
 from lib.pcb.formats.asc.core import prepare_core
@@ -98,7 +99,7 @@ class AscDocumentSettingsTests(unittest.TestCase):
         self.assertTrue(settings['EditInactiveLayer'])
         self.assertFalse(settings['ShowCompFiducials'])
         self.assertFalse(settings['GridSnap'])
-        self.assertEqual([settings[name] for name in
+        assert_float_facts(self,[settings[name] for name in
                           ('AssemblyWidth', 'CompOutlineWidth', 'CourtyardWidth')],
                          list(map(Decimal, ('.36', '.15', '.18'))))
         self.assertIsNone(settings.child('ContrastEdit'))

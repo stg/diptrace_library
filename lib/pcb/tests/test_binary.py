@@ -30,7 +30,7 @@ class DipBinaryTests(unittest.TestCase):
     def test_common_scalar_encodings_work_from_board_body(self):
         cursor = Cursor(header(54)+bytes.fromhex('0f423f 3b9afa39 01 563412'))
         self.assertEqual(cursor.integer(), -1)
-        self.assertEqual(cursor.number(), Decimal('1.2345'))
+        self.assertEqual(cursor.number(), 1.2345)
         self.assertIs(cursor.boolean(), True)
         self.assertEqual(cursor.color(), 0x123456)
         with self.assertRaises(DipError):

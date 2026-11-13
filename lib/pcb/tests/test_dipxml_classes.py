@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.references import ReferenceError
 from lib.pcb.formats.assembly.board_rules import assemble_rules
 from lib.pcb.tests.test_dipxml_electrical import prepared
@@ -44,9 +45,9 @@ class PcbXmlClassTests(unittest.TestCase):
         self.assertEqual(special['MaxIncorrectWayValue'], Decimal('12.5'))
         rows = special.select('LayProperties/LayProperty')
         self.assertEqual([row['LayerName'] for row in rows], ['Top', 'Inner', 'Bottom'])
-        self.assertEqual([row['Width'] for row in rows], [Decimal('.6'), Decimal('.75'), Decimal('.9')])
+        assert_float_facts(self,[row['Width'] for row in rows], [0.6, 0.75, 0.9])
         self.assertEqual(rows[0]['Neck_MaxLength'], Decimal('1.5'))
-        self.assertEqual(rows[2].one('ClearanceDetails')['TraceToVia'], Decimal('.6'))
+        assert_float_facts(self,rows[2].one('ClearanceDetails')['TraceToVia'], Decimal('.6'))
         self.assertEqual([item['Via'] for item in special.select('AllowedVias/ViaStyle')],
                          [result.via_styles[1], result.via_styles[0]])
         self.assertEqual([item['Layer'] for item in special.select('RouteLayers/Item')], list(result.layers.values()))
@@ -76,22 +77,22 @@ class PcbXmlClassTests(unittest.TestCase):
         default = result.classes[0]
         self.assertTrue(default['AllVias'])
         self.assertEqual((default['Phase'], default['Phase_ErrorLength'], default['LengthDelta']),
-                         (6, 15, Decimal('7.62')))
+                         (6, 15, 7.62))
         self.assertEqual(default['FixedLength'], -1)
         for name in ('MinLength', 'MaxLength'):
             self.assertNotIn(name, default.schema.fields)
             self.assertIsNone(default.child(name))
         row = default.one('LayProperties/LayProperty')
-        self.assertEqual((row['MinWidth'], row['MaxWidth'], row['Neck_Width']), (Decimal('.03'), 300, -1))
+        assert_float_facts(self,(row['MinWidth'], row['MaxWidth'], row['Neck_Width']), (Decimal('.03'), 300, -1))
         # XML's property loader overrides the constructor's zero default.
         self.assertEqual(row['Neck_MaxLength'], -1)
 
     def test_display_units_scale_lengths_but_not_the_autorouting_limit_scalar(self):
         result = assemble_rules(prepared(source().replace('Units="mm"', 'Units="mil"')))
         special = result.classes[1]
-        self.assertEqual(special['Phase'], Decimal('.19050'))
+        self.assertEqual(special['Phase'], 0.1905)
         self.assertEqual(special['MaxIncorrectWayValue'], Decimal('12.5'))
-        self.assertEqual(special.schema.fields['MaxIncorrectWayValue'].unit, '')
+        self.assertEqual(special.schema.fields['MaxIncorrectWayValue'].unit, 'unscaled')
 
     def test_unknown_ids_ambiguous_layer_names_and_invalid_flags_fail(self):
         for before, after in (('NetClass="70"', 'NetClass="71"'),

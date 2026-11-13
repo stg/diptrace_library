@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 
-from .files import atomic_write, json_bytes
+from .files import atomic_write, digest, json_bytes
 from .locking import ACTIVE
 
 
@@ -99,7 +99,8 @@ class Repository:
         git_dir, worktree = matcher / 'git', matcher / 'worktree'
         worktree.mkdir(parents=True, exist_ok=True)
         env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
-        env['GIT_INDEX_FILE'] = str((matcher / 'index').resolve())
+        index = matcher / 'index'
+        env['GIT_INDEX_FILE'] = str(index.resolve())
         prefix = ['git', '--git-dir=' + str(git_dir.resolve()), '--work-tree=' + str(worktree.resolve()),
                   '-c', 'core.longpaths=true', '-c', 'core.fsmonitor=',
                   '-c', 'core.hooksPath=' + str((matcher / 'no-hooks').resolve())]
@@ -111,14 +112,26 @@ class Repository:
             return result.stdout
         if not (git_dir / 'HEAD').exists():
             subprocess.run(['git', '-c', 'core.longpaths=true', 'init', '--bare', '-q', str(git_dir)], env=env, check=True)
-        inventory = json_bytes({'names': sorted(names)})
+        def index_digest():
+            try:
+                return digest(index.read_bytes())
+            except FileNotFoundError:
+                return None
+        # The inventory and index form one disposable cache. A saved name list
+        # alone cannot prove that Git's matching index still exists or agrees.
+        inventory = {'names': sorted(names), 'index_sha256': index_digest()}
         saved = matcher / 'names.json'
-        if not saved.exists() or saved.read_bytes() != inventory:
+        if (inventory['index_sha256'] is None or not saved.exists()
+                or saved.read_bytes() != json_bytes(inventory)):
             oid = run('hash-object', '-w', '--stdin', data=b'').strip()
+            index.unlink(missing_ok=True)
             run('read-tree', '--empty')
             data = b''.join(b'100644 ' + oid + b'\t' + os.fsencode(name) + b'\0' for name in sorted(names))
             run('update-index', '-z', '--index-info', data=data)
-            atomic_write(saved, inventory)
+            inventory['index_sha256'] = index_digest()
+            if inventory['index_sha256'] is None:
+                raise ValueError('Git did not create its temporary selection index')
+            atomic_write(saved, json_bytes(inventory))
         chosen = set()
         for rule in rules:
             found = {os.fsdecode(n) for n in run('ls-files', '-z', '--', *rule['pathspecs']).split(b'\0') if n}
@@ -126,6 +139,8 @@ class Repository:
                 chosen.update(found)
             else:
                 chosen.difference_update(found)
+        if index_digest() != inventory['index_sha256']:
+            raise ValueError('Git selection cache changed during matching; retry the operation')
         return chosen
 
     def stage(self, names):

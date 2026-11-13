@@ -1,5 +1,6 @@
 """Shared mask/paste input distinguishes a complete style from an overlay."""
 from decimal import Decimal
+import math
 import unittest
 
 from lib.common.footprint_objects import new_pad, new_pattern
@@ -35,8 +36,8 @@ class XmlPadMaskTests(unittest.TestCase):
         self.assertEqual(target['DisableTopMask'], 0)
         self.assertEqual(target['CustomSwell_New'], -1000)
         self.assertEqual(target['CustomShrink_New'], -1000)
-        self.assertEqual(target['PadMask_SegmentSide'], Decimal('.1524'))
-        self.assertEqual(target['PadMask_SegmentGap'], Decimal('.0762'))
+        self.assertEqual(target['PadMask_SegmentSide'], 0.1524)
+        self.assertEqual(target['PadMask_SegmentGap'], .0762)
         self.assertFalse(target.one('PadMask_TopSegments').children())
         self.assertFalse(target.one('PadMask_BotSegments').children())
 
@@ -45,12 +46,12 @@ class XmlPadMaskTests(unittest.TestCase):
         source['DisableTopPaste'] = 3
         output = project_mask_paste(source, units=XmlUnits('mm'), complete=True)
         self.assertEqual(output['TopPaste'], 'Segments')
-        self.assertAlmostEqual(output.one('TopSegments/Item')['Y1'], Decimal(-2)/3, places=24)
+        self.assertAlmostEqual(output.one('TopSegments/Item')['Y1'], -2/3, delta=math.ulp(-2/3))
         read_mask_paste(XmlRecord(output), target, units=XmlUnits('mm'), partial=True)
-        # Decimal division in XML units may round at the last decimal place.
+        # One physical-unit projection may round at the last binary place.
         for name in ('PadMask_TopSegments', 'PadMask_BotSegments'):
             for actual, expected in zip(target.one(name+'/pt').values, source.one(name+'/pt').values):
-                self.assertAlmostEqual(actual, expected, places=24)
+                self.assertAlmostEqual(actual, expected, delta=2*math.ulp(float(expected)))
         self.assertEqual(target['DisableTopPaste'], 3)
 
     def test_segment_side_is_a_fractional_length_for_pads_patterns_and_styles(self):
@@ -59,7 +60,7 @@ class XmlPadMaskTests(unittest.TestCase):
                 source = Element('MaskPaste')
                 source.add('Segment_Side', Decimal('.35'))
                 read_mask_paste(XmlRecord(source), result, units=XmlUnits('mm'), partial=True)
-                self.assertEqual(result['PadMask_SegmentSide'], Decimal('1.05'))
+                self.assertAlmostEqual(result['PadMask_SegmentSide'], 1.05, delta=2*math.ulp(1.05))
                 result['PadMask_SegmentSide'] = Decimal('2.125')
                 self.assertEqual(result['PadMask_SegmentSide'], Decimal('2.125'))
         source = Element('PadStyle')
@@ -73,7 +74,7 @@ class XmlPadMaskTests(unittest.TestCase):
             result.add(name)
         read_pad_style(XmlRecord(source), result, units=XmlUnits('mm'))
         result.bind_schema(PAD_STYLE)
-        self.assertEqual(result['PadMask_SegmentSide'], Decimal('1.05'))
+        self.assertAlmostEqual(result['PadMask_SegmentSide'], 1.05, delta=2*math.ulp(1.05))
         result['PadMask_SegmentSide'] = Decimal('2.125')
         self.assertEqual(result['PadMask_SegmentSide'], Decimal('2.125'))
 
@@ -84,7 +85,7 @@ class XmlPadMaskTests(unittest.TestCase):
         read_mask_paste(XmlRecord(source), result, units=XmlUnits('mm'), partial=True)
         self.assertEqual(result['DisableTopMask'], 2)
         self.assertEqual(result['PadMask_EdgeGap'], 7)
-        self.assertEqual(result['CustomSwell_New'], Decimal('.6'))
+        self.assertAlmostEqual(result['CustomSwell_New'], 0.6, delta=2*math.ulp(.6))
         self.assertEqual(result['CustomShrink_New'], -1000)
         self.assertEqual(result.one('PadMask_TopSegments/pt').values, (1, 2, 3, 4))
 
@@ -116,7 +117,7 @@ class XmlPadMaskTests(unittest.TestCase):
             row.add(name, value)
         read_mask_paste(XmlRecord(source), result, units=XmlUnits('mm'), partial=True)
         self.assertEqual(result['PadMask_Percent'], 25)
-        self.assertEqual(result['PadMask_SegmentGap'], Decimal('.9'))
+        self.assertAlmostEqual(result['PadMask_SegmentGap'], 0.9, delta=2*math.ulp(.9))
         self.assertEqual(result.one('PadMask_TopSegments/pt').values, (3, -6, 9, -12))
 
 

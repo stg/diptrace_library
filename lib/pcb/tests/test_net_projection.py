@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps, loads
 from lib.common.conversion import ConversionReport
 from lib.common.schema import MISSING
@@ -134,7 +135,7 @@ class NetProjectionTests(unittest.TestCase):
             with self.subTest(end=end):
                 points = [new_point(x=x, y=y) for x, y in (start, end)]
                 self.assertEqual(list(point_directions(points)), [0, expected])
-                self.assertEqual((points[1]['X'], points[1]['Y']), tuple(Decimal(str(x)) for x in end))
+                assert_float_facts(self,(points[1]['X'], points[1]['Y']), tuple(Decimal(str(x)) for x in end))
         points = [new_point(x=x, y=y) for x, y in ((0, 0), (10, 0), (20, .1), (30, .1))]
         points[1]['Arc'] = True
         self.assertEqual(list(point_directions(points)), [0, 0, 0, 1])

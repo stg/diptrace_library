@@ -37,8 +37,8 @@ class DipScalePrecisionTests(unittest.TestCase):
                             with localcontext() as context:
                                 context.prec = precision
                                 reader = Reader(prefix(document, version))
-                                self.assertEqual(reader.number(), Decimal(expected))
-                            self.assertEqual(document.root['Scale'], Decimal(percent))
+                                self.assertEqual(reader.number(), float(expected))
+                            self.assertEqual(document.root['Scale'], float(percent))
 
     def test_import_limits_precede_exact_percent_conversion(self):
         data = prefix(new_document(), DIP.default_write_version)
@@ -64,7 +64,7 @@ class DipScalePrecisionTests(unittest.TestCase):
             with self.subTest(version=version):
                 data = encode(document, version=version, report=ConversionReport())
                 loaded = reopen(data, report=ConversionReport())
-                self.assertEqual(loaded.root['Scale'], Decimal('1.06'))
+                self.assertEqual(loaded.root['Scale'], 1.06)
                 self.assertEqual(encode(loaded, version=version, report=ConversionReport()), data)
                 self.assertEqual(dumps(document, preserve=False), before)
 

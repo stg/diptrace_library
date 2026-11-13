@@ -13,10 +13,12 @@ from collections import deque
 from uuid import uuid4
 
 from .model import (Element, Value)
+from .validation_scope import _active as _checked_preparation
 from .structural_edits import preview_structure, validate_child_change
 from .computed_dependencies import ComputedDependencies
 from .reference_edits import pending_changes, preview_references
 from .field_edits import named_field
+from .numbers import same_number
 
 
 class ReferenceError(ValueError):
@@ -525,7 +527,8 @@ class References:
 
     @staticmethod
     def _same_value(first, second):
-        return (first.kind, first.value, first.unit) == (second.kind, second.value, second.unit)
+        return ((first.kind, first.unit) == (second.kind, second.unit)
+                and same_number(first.value, second.value))
 
     @staticmethod
     def _projected_value(item, position, domain, *, source=None):
@@ -666,12 +669,13 @@ class References:
         for slot in overrides:
             schedule(slot)
         plans = {}
-        from .field_edits import preview_slots
+        from .field_edits import PreparedSlots
+        preview = PreparedSlots(overrides)
         while pending or calculation_queue:
             if calculation_queue:
                 slot = calculation_queue.popleft()
                 scheduled_calculations.remove(slot)
-                with preview_slots(overrides):
+                with preview:
                     outputs = self.document._calculation_outputs(slot)
                     if outputs:
                         calculation_cycle(slot)
@@ -685,6 +689,7 @@ class References:
                             previous = overrides.get(output, field.arguments[index])
                             if not self._same_value(previous, value):
                                 overrides[output] = value
+                                preview.invalidate()
                                 schedule(output)
                 continue
             uid = pending.popleft()
@@ -712,6 +717,7 @@ class References:
                 previous = overrides[slot] if slot in overrides else slot[0].arguments[slot[1]]
                 if not self._same_value(previous, value):
                     overrides[slot] = value
+                    preview.invalidate()
                     schedule(slot)
         # Check collective constraints after every copy has its final value;
         # an intermediate cache state can temporarily contain duplicate keys.
@@ -1340,6 +1346,8 @@ class References:
         parent._items.append(node)
         node._parent = parent
         parent._touch(reordered=True)
+        if (scope := _checked_preparation.get()) is not None:
+            scope.attach(parent, node)
         reference = self._register_binding(*prepared, preserve=False)
         self.finish_structure((parent,))
         return reference

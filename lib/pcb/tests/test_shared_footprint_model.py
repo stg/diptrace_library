@@ -36,7 +36,8 @@ class SharedFootprintModelTests(unittest.TestCase):
         # The established schematic adapter keeps its boundary-slot policy.
         schematic_pattern = new_schematic_pattern('Shared')
         self.assertEqual(len(schematic_pattern.select('Pads/Pad')), 2)
-        self.assertTrue(all(p.annotations['reserved'] for p in schematic_pattern.select('Pads/Pad')))
+        self.assertEqual([p.values[0] for p in schematic_pattern.select('Pads/Pad')], [0, 1])
+        self.assertTrue(all(not p._annotations for p in schematic_pattern.select('Pads/Pad')))
 
     def test_placement_does_not_own_duplicate_template_collections(self):
         template = new_pattern('Template')

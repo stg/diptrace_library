@@ -5,6 +5,16 @@ from types import MappingProxyType
 from .schema import Record
 
 
+def declared_child(schema, kind, records):
+    """Resolve a single declared child type from the family's own catalogue.
+
+    Unbound parents, undeclared types and child unions need the family's
+    ownership-based resolver. Do not guess a union member from its spelling.
+    """
+    child = schema.children.get(kind) if schema is not None else None
+    return records.get(child.record) if child is not None else None
+
+
 def record_catalogue(*modules, overrides=(), roots=()):
     """Collect public records, checking names and owned-child type references.
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from ....common.asc import loads, loads_bytes
 from ....common.model import Element, Value
+from ....common.import_tree import move_children
 from ....common.units import display_units
 from ...model.definitions import NET
 from .values import booleans as _flags
@@ -83,7 +84,7 @@ def _net(net):
     return NetInput(net, tuple(prepared))
 
 
-def prepare_core(text, *, source=None, encoding=None):
+def prepare_core(text, *, source=None, encoding=None, retain_source=True):
     """Prepare components, membership, routing and rules from one ASC input.
 
     The source version is diagnostic input syntax, not a binary geometry gate.
@@ -91,8 +92,8 @@ def prepare_core(text, *, source=None, encoding=None):
     Returned input can enter the shared core assembler; its document remains
     incomplete until the remaining adapter stages have been implemented.
     """
-    syntax = (loads(text, source=source) if isinstance(text, str) else
-              loads_bytes(text, source=source, encoding=encoding))
+    syntax = (loads(text, source=source, retain_source=retain_source) if isinstance(text, str) else
+              loads_bytes(text, source=source, encoding=encoding, retain_source=retain_source))
     try:
         header = syntax.one('/Source')
         board = syntax.one('/Board')
@@ -108,10 +109,8 @@ def prepare_core(text, *, source=None, encoding=None):
         raise PcbError('PCB ASC requires one unit selection')
     units.set_values(display_units(units.values[0]))
     root = Element('')
-    # Transfer the parser-owned top-level records through normal tree operations;
-    # this avoids cloning a large design solely to acquire an unowned root.
-    for child in tuple(syntax.root.children()):
-        child.move_to(root)
+    # Relationships have not been bound: transfer parser ownership as one batch.
+    move_children(syntax.root, root)
     for component in board.one('Components').children():
         if component.kind != 'Component':
             raise PcbError(f'{component.path}: expected a component')

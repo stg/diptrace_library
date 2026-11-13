@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.conversion import ConversionReport, import_diagnostics
 from lib.common.references import ReferenceError
 from lib.pcb.model.dimensions import BOARD_ROLES
@@ -42,7 +43,7 @@ class PcbXmlDimensionTests(unittest.TestCase):
         self.assertIs(target(document, dims[2], 1), result.pours[37].one('Points/pt[3]'))
         self.assertIs(target(document, dims[3]), board.one('Components/Component/Pattern/Shapes/Shape/Points_New/pt[1]'))
         self.assertEqual((dims[2]['PointerMode'], dims[2]['PointerText']), (1, 'Note'))
-        self.assertEqual((dims[0]['ArrowSize'], dims[0]['Y1'], dims[0]['YD']), (Decimal('2.4'), -6, -18))
+        assert_float_facts(self,(dims[0]['ArrowSize'], dims[0]['Y1'], dims[0]['YD']), (2.4, -6, -18))
         document.references.validate()
 
     def test_reordering_and_copying_retain_the_endpoint_identity(self):
@@ -83,7 +84,7 @@ class PcbXmlDimensionTests(unittest.TestCase):
         self.assertFalse(dim['ShowUnits'])
         older = text().replace('Version="5.3.5.1"', 'Version="4.3.0.3"').replace('MinimumArea="4"', '')
         dim = design(older).document.one('/Board/Dimensions/Dimension[1]')
-        self.assertEqual(dim['ArrowSize'], Decimal('.8'))
+        self.assertEqual(dim['ArrowSize'], 0.8)
 
 
 if __name__ == '__main__':

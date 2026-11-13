@@ -15,6 +15,8 @@ from .common.model import (Element, IncompleteDocumentError, SourceSpan, Value)
 from .schematic.formats.asc.syntax import (loads as parse_asc, read as read_asc)
 from .schematic.formats.dchxml.syntax import (loads as parse_dchxml, read as read_dchxml)
 from .common.references import (References, Reference, ReferenceError, UnresolvedReference, Index, Key, Property, Guard, OrdinalGuard, Segment)
+from .common.unit_views import UnitDocument, UnitElement, canonical as _canonical
+from .common.measurements import LengthUnits, get_default_units, set_default_units, using_units
 from .common.geometry import (Bounds, circular_arc_bounds, ellipse_points)
 from .schematic.layout.geometry import (symbol_bounds, pattern_bounds)
 from .schematic.editing.edit import (coalesce_routes, RemovedRoutePoint)
@@ -190,6 +192,7 @@ def read(path, *, format: str | None = None, family: str | None = None, context=
 
 @export_diagnostics()
 def write(document: Document, path, *, format: str | None = None, family: str | None = None, context=None, report=None, label=None, **options):
+    document = _canonical(document)
     key = (format or Path(path).suffix).lower().lstrip(".")
     writer = _WRITERS.get(key)
     if writer is None:
@@ -210,6 +213,7 @@ def serialize(document: Document, *, format: str, family: str | None = None, con
 
     Uses the same adapters, options and report contract as write().
     """
+    document = _canonical(document)
     key = format.lower().lstrip('.')
     adapter = _output_adapter(document, key, family, version=options.get('version'))
     return adapter.serialize(document, format=key, context=context, report=report, **options)
@@ -217,6 +221,7 @@ def serialize(document: Document, *, format: str, family: str | None = None, con
 
 __all__ = ["FormatCapabilities", "format_capabilities", "document_family", "UnsupportedFileError", "RefDesFamily", "split_refdes",
            "Document", "Element", "Value", "SourceSpan", "IncompleteDocumentError",
+           "UnitDocument", "UnitElement", "LengthUnits", "get_default_units", "set_default_units", "using_units",
            "References", "Reference", "ReferenceError", "UnresolvedReference", "Index", "Key", "Property", "Guard", "OrdinalGuard", "Segment",
            "Bounds", "circular_arc_bounds", "ellipse_points", "symbol_bounds", "pattern_bounds",
            "coalesce_routes", "RemovedRoutePoint",

@@ -1,5 +1,6 @@
 """Binary output through schema 52 by named traversal, without source replay."""
 from ....common.binary import NUMBER_LIMIT
+from ....common.numbers import decimal_scale
 from ....common.binary_records import RecordWriter
 from ....common.footprint_codec import (write_parameters, write_pad_geometry,
                                         write_holes, write_model)
@@ -362,17 +363,17 @@ class Writer(RecordWriter):
         self.buffer.extend(b'\x07DTSCHEM')
         self.integer(self.version)
         scale=document.one('/Scale')
-        factor = Decimal(str(scale.values[0]))
-        if factor.is_finite():
-            sign, digits, exponent = factor.as_tuple()
-            factor = Decimal((sign, digits, exponent-2))
+        factor = decimal_scale(scale.values[0], -2)
         self.number(factor)
         for name in ('Xpos','Ypos'):
             field=document.one('/'+name)
             self.integer(round(float(field.values[0])))
         schematic=document.one('/Schematic')
-        self.field(schematic,'PictureCount','integer')
         pages=schematic.select('Pages/Page')
+        active=schematic.get('ActiveSheet', 0)
+        if isinstance(active, bool) or not isinstance(active, int) or not 0 <= active < len(pages):
+            raise ValueError('ActiveSheet must identify an existing page')
+        self.integer(active)
         self.integer(len(pages))
         for page in pages:
             self.text(page.values[0])

@@ -9,5 +9,4 @@ def stored_data(parent):
     node = parent.child('StoredData')
     if node is None:
         node = parent.add('StoredData')
-        node.annotations['asc_omit'] = 'temporary drawing decoding inputs'
     return node

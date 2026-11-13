@@ -3,6 +3,7 @@ from decimal import Decimal, localcontext
 from types import SimpleNamespace
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport
 from lib.common.font_codec import read_font_properties, write_font_properties
@@ -201,7 +202,7 @@ class DipDocumentOutputTests(unittest.TestCase):
         self.assertTrue(content['FontMono'])
         self.assertEqual(content.one('Placement').values, (3, -6, 9, -12))
         self.assertEqual(rebuilt.one('SheetSettings')['SheetWidth'], 300)
-        self.assertEqual(rebuilt.one('SheetSettings/BorderZones')['FontLineWidth'], Decimal('.6'))
+        self.assertEqual(rebuilt.one('SheetSettings/BorderZones')['FontLineWidth'], 0.6)
         self.assertEqual(dumps(document, preserve=False), before)
         document.references.validate()
 
@@ -243,10 +244,10 @@ class DipDocumentOutputTests(unittest.TestCase):
         before = dumps(document, preserve=False)
         board, display = read_settings_sections(document, precision=2)
         self.assertEqual(display.unit_choices, (True, False, False))
-        self.assertEqual(board.one('Settings')['GridSize'], Decimal('.000012345'))
-        self.assertEqual(board.one('Settings/Routing')['TraceWidth'], Decimal('.7498'))
-        self.assertEqual(board.one('Settings/Routing')['TraceClearance'], Decimal('.3749'))
-        self.assertEqual(board.one('Settings')['SolderMaskSwell'], Decimal('.4'))
+        self.assertEqual(board.one('Settings')['GridSize'], 1.2345e-05)
+        assert_float_facts(self,board.one('Settings/Routing')['TraceWidth'], Decimal('.7498'))
+        assert_float_facts(self,board.one('Settings/Routing')['TraceClearance'], Decimal('.3749'))
+        assert_float_facts(self,board.one('Settings')['SolderMaskSwell'], Decimal('.4'))
         self.assertEqual(board.one('Settings/LayerPanel')['TopAssy'], True)
         self.assertEqual(board.one('DRC')['CheckKeepouts'], document.one('/Board/DRC').get('CheckKeepouts', False))
         self.assertEqual(board.one('LastDRC')['SilkClearance'], 0)
@@ -283,11 +284,11 @@ class DipDocumentOutputTests(unittest.TestCase):
             expected = next(source for source in drc.select('LayClearances/LayClearance') if source['Layer'] is layer)
             first, second = expected.one('ClearanceDetails'), row.one('ClearanceDetails')
             for name in DRC_CLEARANCE_NAMES:
-                self.assertEqual(second[name], first.get(name, -1))
+                assert_float_facts(self,second[name], first.get(name, -1))
         for layer, row in zip(board.select('Layers/Layer'), current.select('LaySizes/LaySize')):
             expected = next(source for source in drc.select('LaySizes/LaySize') if source['Layer'] is layer)
             for name in ('MinTrace', 'MinDrill', 'MinRing', 'MaxRing', 'MaxPlatedHole', 'MaxNonPlatedHole'):
-                self.assertEqual(row[name], expected.get(name, -1))
+                assert_float_facts(self,row[name], expected.get(name, -1))
         self.assertEqual(dumps(document, preserve=False), before)
         document.references.validate()
 

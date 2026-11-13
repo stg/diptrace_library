@@ -6,6 +6,7 @@ from ....common.xml_library_output import project_category
 from ....common.xml_output import enum_text, field, numeric
 from ....common.xml_output import point_attributes
 from ....common.model import (Element)
+from ....common.xml_plan import XmlBuilder
 from .fonts import uses_physical_width
 from ....common.xml_footprint_output import project_model3d, project_drawing as _project_drawing, project_dimension as _project_dimension
 from ...model.local_keys import (project_key, public_keys, reserved_keys, missing_key)
@@ -13,14 +14,14 @@ from ...model.local_keys import (project_key, public_keys, reserved_keys, missin
 
 
 
-def project_pattern_drawing(shape, *, index, units, pad_ids=True, pad_keys=None, group_keys=None, version=46):
+def project_pattern_drawing(shape, *, index, units, pad_ids=True, pad_keys=None, group_keys=None, version=46, _factory=Element):
     group = project_key(shape,'Group',shape.scalar('Group'),group_keys)
     pad = project_key(shape,'PadId',shape.scalar('PadId',-1),pad_keys) if pad_ids else -1
     return _project_drawing(shape,index=index,units=units,group=group,pad_id=pad,
-                            fractional_font=version >= 52,physical_font_width=uses_physical_width(version))
+                            fractional_font=version >= 52,physical_font_width=uses_physical_width(version), _factory=_factory)
 
 
-def project_dimension(dimension, *, units, pad_keys=None, shape_keys=None, hole_keys=None, group_keys=None, version=46):
+def project_dimension(dimension, *, units, pad_keys=None, shape_keys=None, hole_keys=None, group_keys=None, version=46, _factory=Element):
     attachments = []
     for side in ('1','2'):
         mode = dimension.scalar('Connected'+side)
@@ -30,16 +31,16 @@ def project_dimension(dimension, *, units, pad_keys=None, shape_keys=None, hole_
         attachments.append((mode,dimension.scalar('Object'+side),member,dimension.scalar('Point'+side)))
     group = project_key(dimension,'Group',dimension.scalar('Group'),group_keys)
     return _project_dimension(dimension,units=units,attachments=attachments,group=group,
-        fractional_font=version >= 52,physical_font_width=uses_physical_width(version),none_label='None' if version >= 52 else None)
+        fractional_font=version >= 52,physical_font_width=uses_physical_width(version),none_label='None' if version >= 52 else None, _factory=_factory)
 
 
-def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad_ids=True, pad_keys=None, version=46):
+def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad_ids=True, pad_keys=None, version=46, _factory=Element):
     """Project current footprint data with explicitly selected pad-style keys.
 
     ``pad_styles`` maps physical pad ordinals to public style names. Reserved
     array-boundary slots are omitted, while their ordinals remain meaningful.
     """
-    result = Element('Pattern')
+    result = _factory('Pattern')
     members = [*pattern.select('Pads/Pad'), *pattern.select('Shapes/Shape'),
                *pattern.select('Holes/Hole'), *pattern.select('Dimensions/Dimension')]
     group_keys = public_keys(pattern.select('Pattern_Groups/pt'), reserved_keys(members, ('Group',)))
@@ -56,13 +57,13 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
         set_attribute(result, 'RefDes', pattern.scalar('RefDes'))
     set_attribute(result, 'Mounting', enum_text(pattern.scalar('Mounting'), ('Through', 'SMD', 'Chassis', 'Mixed'), negative='None' if version >= 52 else None))
     for name in ('Width', 'Height'):
-        set_attribute(result, name, numeric(units.length(pattern.one(name).arguments[0])))
+        set_attribute(result, name, numeric(units.length(pattern._field_arguments(name)[0])))
     orientation = pattern.scalar('PatternOrientation')
     set_attribute(result, 'Orientation', orientation*90 if 0 <= orientation <= 3 else orientation)
     set_attribute(result, 'LockTypeChange', pattern.scalar('LockProperties'))
     set_attribute(result, 'Type', enum_text(pattern.scalar('Type'), PATTERN_TYPES))
     for index in range(1, 4):
-        set_attribute(result, 'Float'+str(index), numeric(units.length(pattern.one('Spacing'+str(index)).arguments[0])))
+        set_attribute(result, 'Float'+str(index), numeric(units.length(pattern._field_arguments('Spacing'+str(index))[0])))
     for index in (1, 2):
         set_attribute(result, 'Int'+str(index), pattern.scalar('Number'+str(index)))
     field(result, 'Name', pattern.arguments[0])
@@ -75,11 +76,11 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
         target = result.add('PossibleNames')
         for name in names:
             field(target, 'PossibleName', name.arguments[0])
-    category = project_category(pattern)
+    category = project_category(pattern, _factory=_factory)
     if category is not None:
         result.append(category)
     origin = result.add('Origin')
-    point_attributes(origin, pattern.one('OriginX').arguments[0], pattern.one('OriginY').arguments[0], units)
+    point_attributes(origin, pattern._field_arguments('OriginX')[0], pattern._field_arguments('OriginY')[0], units)
     for public, own in (('Cross', 'OriginCross'), ('Circle', 'OriginCircle')):
         set_attribute(origin, public, pattern.scalar(own))
     set_attribute(origin, 'Common', enum_text(pattern.scalar('OriginCommon'), ('Show', 'Hide')))
@@ -115,7 +116,7 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
             if version >= 52:
                 set_attribute(item, 'DefStyle', pad.scalar('Standard'))
             point_attributes(item, *pad.arguments[3:5], units)
-            set_attribute(item, 'Angle', pad.one('PadAngle').arguments[0])
+            set_attribute(item, 'Angle', pad._field_arguments('PadAngle')[0])
             set_attribute(item, 'Locked', pad.scalar('Locked'))
             set_attribute(item, 'Side', 'Bottom' if pad.scalar('Sided') else 'Top')
             group = project_key(pad, 'Group', pad.scalar('Group'), group_keys)
@@ -130,7 +131,7 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
         target = result.add('Shapes')
         for index, shape in shapes:
             target.append(project_pattern_drawing(shape, index=shape_keys[index], units=units,
-                          pad_ids=pad_ids, pad_keys=pad_keys, group_keys=group_keys, version=version))
+                          pad_ids=pad_ids, pad_keys=pad_keys, group_keys=group_keys, version=version, _factory=_factory))
     holes = pattern.select('Holes/Hole')
     holes = [(index, hole) for index, hole in enumerate(holes) if index not in (0, len(holes)-1) and hole.values[0]]
     if holes:
@@ -150,6 +151,10 @@ def project_pattern(pattern, *, style, default_pad_style, pad_styles, units, pad
         target = result.add('Dimensions')
         for dimension in dimensions:
             target.append(project_dimension(dimension, units=units, pad_keys=pad_keys,
-                          shape_keys=shape_keys, hole_keys=hole_keys, group_keys=group_keys, version=version))
-    result.append(project_model3d(pattern.one('Model3D'), units=units))
+                          shape_keys=shape_keys, hole_keys=hole_keys, group_keys=group_keys, version=version, _factory=_factory))
+    result.append(project_model3d(pattern.one('Model3D'), units=units, _factory=_factory))
     return result
+
+
+def plan_pattern(pattern, **options):
+    return project_pattern(pattern, **options, _factory=XmlBuilder).freeze()

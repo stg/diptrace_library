@@ -2,6 +2,7 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.references import ReferenceError
 from lib.pcb.formats.assembly.board_rules import assemble_rules
 from lib.pcb.formats.errors import PcbError
@@ -49,18 +50,18 @@ class PcbXmlDesignRuleTests(unittest.TestCase):
         self.assertTrue(drc['CheckCourtyard'])
         self.assertTrue(drc['CheckKeepouts'])
         self.assertEqual((drc['ShowList'], drc['RealTimeMode'], drc['DRCDone']), (True, 2, False))
-        self.assertEqual(drc['SilkClearance'], Decimal('.6'))
+        assert_float_facts(self,drc['SilkClearance'], 0.6)
         rows = drc.select('LayClearances/LayClearance')
         self.assertEqual([row['Layer'] for row in rows], list(result.layers.values()))
-        self.assertEqual(rows[2]['SameSmdToVia'], Decimal('.9'))
+        assert_float_facts(self,rows[2]['SameSmdToVia'], Decimal('.9'))
         self.assertEqual(rows[0]['SameSmdToVia'], 0)
-        self.assertEqual(rows[0].one('ClearanceDetails')['TraceToTrace'], Decimal('.3'))
-        self.assertEqual(rows[2].one('ClearanceDetails')['TraceToBoard'], Decimal('1.2'))
-        self.assertEqual(rows[1].one('ClearanceDetails')['DrillToDrill'], Decimal('.6'))
+        assert_float_facts(self,rows[0].one('ClearanceDetails')['TraceToTrace'], Decimal('.3'))
+        assert_float_facts(self,rows[2].one('ClearanceDetails')['TraceToBoard'], Decimal('1.2'))
+        assert_float_facts(self,rows[1].one('ClearanceDetails')['DrillToDrill'], Decimal('.6'))
         self.assertEqual(rows[0].one('ClearanceDetails')['DrillToBoard'], -1)
         sizes = drc.select('LaySizes/LaySize')
         self.assertEqual([row['Layer'] for row in sizes], list(result.layers.values()))
-        self.assertEqual(sizes[0]['MaxRing'], Decimal('1.2'))
+        assert_float_facts(self,sizes[0]['MaxRing'], Decimal('1.2'))
         self.assertIsNone(result.document.one('/Board').child('LastDRC'))
         result.document.references.validate()
 
@@ -76,7 +77,7 @@ class PcbXmlDesignRuleTests(unittest.TestCase):
         self.assertIs(cells[1]['Class2'], result.classes[0])
         rows = cells[1].select('LayerClearances/LayerClearance')
         self.assertEqual([row['Layer'] for row in rows], list(result.layers.values()))
-        self.assertEqual([row['Clearance'] for row in rows], [None, None, Decimal('.6')])
+        assert_float_facts(self,[row['Clearance'] for row in rows], [None, None, 0.6])
         self.assertFalse(cells[1]['AllLayers'])
 
     def test_layer_and_class_edits_follow_their_targets_and_clones(self):
@@ -91,7 +92,7 @@ class PcbXmlDesignRuleTests(unittest.TestCase):
         self.assertIs(drc_row['Layer'], bottom)
         self.assertEqual(class_row['Lay'], 1)
         class_row['Clearance'] = Decimal('.8')
-        self.assertEqual(class_row['Clearance'], Decimal('.8'))
+        self.assertEqual(class_row['Clearance'], 0.8)
         clone = result.document.clone()
         other = clone.one('/Board/ClassClearances/Cell[2]/LayerClearances/LayerClearance[3]')
         self.assertIsNot(other['Layer'], bottom)
@@ -115,7 +116,7 @@ class PcbXmlDesignRuleTests(unittest.TestCase):
         self.assertEqual(current['RealTimeMode'], 2)
         row = previous.one('LayClearances/LayClearance')
         self.assertIsNone(row['Layer'])
-        self.assertEqual(row.one('ClearanceDetails')['TraceToVia'], Decimal('2.1'))
+        assert_float_facts(self,row.one('ClearanceDetails')['TraceToVia'], 2.1)
         self.assertIsNone(previous.one('LaySizes/LaySize')['Layer'])
 
     def test_legacy_pour_spelling_is_selected_at_its_real_version_boundary(self):

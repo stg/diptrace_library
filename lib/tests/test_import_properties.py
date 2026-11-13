@@ -2,6 +2,7 @@
 import unittest
 
 from lib import AscExportContext, ExportReport, new_schematic, parse, parse_dch
+from lib.schematic import ImportContext
 from lib.schematic.formats.dch.binary import (read_header)
 from lib.schematic.model.objects import (new_symbol)
 from lib.schematic.model.refs import (bind_schematic_references)
@@ -14,7 +15,7 @@ def older_input(version):
     part.one('Pattern/Model3D').set_field('Model3DFile', 'package.step')
     bind_schematic_references(source)
     data = source.to_dch_bytes()
-    decoded = parse_dch(data)
+    decoded = parse_dch(data, context=ImportContext(retain_source=True))
     part = decoded.one('/Schematic/Components/Part')
     # These append-only layouts precede supplier data and variable paths.
     # Controlled streams exercise the real decoder; they are not editor exports.

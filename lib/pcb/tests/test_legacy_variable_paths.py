@@ -69,7 +69,7 @@ class LegacyVariablePathTests(unittest.TestCase):
         class Reader:
             header = SimpleNamespace(version=53)
 
-            def field(self, owner, name, kind):
+            def field_into(self, owner, name, kind):
                 owner.add(name, False if kind == 'boolean' else '')
 
             def boolean(self):

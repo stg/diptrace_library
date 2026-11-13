@@ -1,6 +1,9 @@
 """Named schematic record definitions, independent of serialized field layout."""
-from ...common.schema import Child, Field, Record, MISSING
+from ...common.schema import Child, Field, Record, MISSING, with_units
+from ...common.measurements import nonnegative_length
 from ...common.model import Value
+from ...common.schema_catalogue import declared_child
+from .catalogue import schematic_schema
 from ...common.footprint_records import PATTERN, PAD, PAD_STYLE, PATTERN_SHAPE, DIMENSION, HOLE
 from ...common.library_records import SLOT, DEFINITION, CACHE
 from ...common.library_metadata import CATALOG_CATEGORY, CATALOG_TYPE, CATALOG_SUBTYPE
@@ -163,8 +166,37 @@ SCHEMATIC = record('Schematic', names.SCHEMATIC_MODEL_FIELDS,
                    optional=('PartFontVector', 'PartFontWidth', 'PartFontScale'))
 SCHEMATIC = replace(SCHEMATIC, fields={**SCHEMATIC.fields,
     'ActiveSheet': Field('ActiveSheet', 'integer',
-                         description='Selected page position; a resolved link follows page identity. Absent selection uses the first page on XML output.')})
+                         description='Selected page position in DCH and XML; a resolved link follows page identity. Absent selection uses the first page on output. ASC omits selection.')})
 TABLE = record('Table', names.TABLE_FIELDS, extra=('DefFontMono',))
+
+# Placement and cached symbols use the same measurements without sharing their
+# different presence, identity or connectivity constraints.
+PIN = with_units(PIN, {name: field.unit for name, field in CACHED_PIN.fields.items()
+                       if name in PIN.fields and field.unit},
+                 selectors={name: field.unit_selector for name, field in CACHED_PIN.fields.items()
+                            if name in PIN.fields and field.unit_selector})
+PART = with_units(PART, {'MarkingFontSize': 'font size'})
+NET = with_units(NET, dict.fromkeys(('Width', 'Clearance'), 'shared length'),
+                 sentinels={'Width': (-1,), 'Clearance': (-1,)})
+PAGE = with_units(PAGE, {
+    **dict.fromkeys('PageWidth PageHeight PageXPos PageyPos FLeft FTop FRight FBottom FontLineWidth'.split(), 'shared length'),
+    'ZoneFontSize': 'font size', 'PageScale': 'ratio',
+}, selectors={'FontLineWidth': nonnegative_length})
+SCHEMATIC = with_units(SCHEMATIC, {
+    **dict.fromkeys(('OriginX', 'OriginY', 'PartFontWidth'), 'shared length'), 'PartFontScale': 'ratio',
+}, selectors={'PartFontWidth': nonnegative_length})
+SETTINGS = with_units(SETTINGS, {
+    **dict.fromkeys('GridSize BusLineWidth WireLineWidth TableLineWidth TitlesLineWidth NodeSize'.split(), 'shared length'),
+    **dict.fromkeys(('BusConnectionFont', 'PinNumberFont', 'PartFontSize', 'NetNameFontSize'), 'font size'),
+})
+SHEET_SHAPE = with_units(SHEET_SHAPE, {
+    'FontSize': 'font size', 'FontWidth': 'shared length', 'FontScale': 'ratio',
+    'LineSpacing': 'ratio', 'Picture_Transparent': 'opacity',
+}, selectors={'FontWidth': nonnegative_length, 'PenWidth': nonnegative_length})
+TABLE = with_units(TABLE, {
+    **dict.fromkeys('DefFontWidth DefCellWidth DefCellHeight X1 Y1 X2 Y2'.split(), 'shared length'),
+    'DefFontSize': 'font size', 'DefFontScale': 'ratio', 'DefLineSpacing': 'ratio',
+}, selectors={'DefFontWidth': nonnegative_length})
 
 
 def _owned(schema, **children):
@@ -206,6 +238,14 @@ _BASE_DEFINITIONS = {'Settings': SETTINGS, 'Schematic': SCHEMATIC, 'Table': TABL
 
 def definition(node):
     """Select a record definition by its meaning and ownership, not input format."""
+    parent = node.parent
+    if parent is not None and parent.schema is not None:
+        if (record := declared_child(parent.schema, node.kind, schematic_schema())) is not None:
+            return record
+    return _definition_by_ownership(node)
+
+
+def _definition_by_ownership(node):
     kind = node.kind
     parent = node.parent
     owner = parent.parent if parent is not None else None
@@ -363,7 +403,7 @@ def establish(document):
 
 def establish_records(root):
     """Establish named storage only for the supplied record subtree."""
-    for node in root.walk(include_self=True):
+    for node in root._record_walk(include_self=True):
         schema = definition(node)
         if schema is not None:
             if schema is collection_definition(node):
@@ -383,9 +423,9 @@ def has_derived_index(node):
 
 def complete_output_defaults(document):
     """Restore codec-required defaults only on an already detached output view."""
-    for node in document.root.walk():
+    for node in document.root._record_walk():
         if node.schema is None:
             continue
         for name, field in node.schema.fields.items():
-            if field.default is not MISSING and not field.readonly and node.child(name) is None:
+            if field.default is not MISSING and field.getter is None and name not in node:
                 node.set_field(name, *(field.default if field.kind == 'tuple' else (field.default,)))

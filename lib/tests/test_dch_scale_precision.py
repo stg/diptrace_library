@@ -23,8 +23,8 @@ class DchScalePrecisionTests(unittest.TestCase):
                         with localcontext() as context:
                             context.prec = precision
                             reader = Reader(encode_header(document, version=version))
-                            self.assertEqual(reader.number(), Decimal(expected))
-                        self.assertEqual(document.root['Scale'], Decimal(percent))
+                            self.assertEqual(reader.number(), float(expected))
+                        self.assertEqual(document.root['Scale'], float(percent))
 
     def test_import_zoom_limits_are_applied_before_percent_conversion(self):
         header = encode_header(lib.new_schematic(), version=DCH.default_write_version)
@@ -50,10 +50,10 @@ class DchScalePrecisionTests(unittest.TestCase):
                 data = lib.serialize(document, format='dch', version=version,
                                      report=lib.ConversionReport())
                 loaded = lib.parse(data, report=lib.ConversionReport())
-                self.assertEqual(loaded.root['Scale'], Decimal('1.06'))
+                self.assertEqual(loaded.root['Scale'], 1.06)
                 self.assertEqual(lib.serialize(loaded, format='dch', version=version,
                                               report=lib.ConversionReport()), data)
-                self.assertEqual(document.root['Scale'], Decimal('1.055'))
+                self.assertEqual(document.root['Scale'], 1.055)
 
 
 if __name__ == '__main__':

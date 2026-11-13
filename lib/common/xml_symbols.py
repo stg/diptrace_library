@@ -33,9 +33,7 @@ def read_symbol_pin(record, *, index, units, groups, policy, physical_font_width
     for prefix, own in (('Num', 'PinNum'), ('Name', 'PinName')):
         for axis, value in zip(('X', 'Y'), point(record, units, (prefix+'XShift', prefix+'YShift'), 0)):
             pin.set_field(own+axis+'Shift', value)
-    delay = pin.add('SignalDelay', record.number('SignalDelay', 0))
-    if not delay.values[0]:
-        delay.annotations['asc_omit'] = 'not present in cached schematic ASC/DCH'
+    pin.add('SignalDelay', record.number('SignalDelay', 0))
     for public, own in (('NumOrientation', 'PinNumRotate'), ('NameOrientation', 'PinNameRotate')):
         pin.set_field(own, record.integer(public, 0))
     pin.set_field('Group', mapped_group(record, groups, pin, resolve_key=policy.resolve_key))
@@ -98,9 +96,7 @@ def read_symbol(record, *, units, policy, physical_font_width=True):
     part.set_field('LockProperties', record.boolean('LockTypeChange', False))
     for name in ('PartName', 'Value', 'Manufacturer'):
         part.set_field(name, record.text(name, ''))
-    datasheet = part.add('Datasheet', record.text('Datasheet', ''))
-    if not datasheet.values[0]:
-        datasheet.annotations['asc_omit'] = 'not present in cached schematic ASC/DCH'
+    part.add('Datasheet', record.text('Datasheet', ''))
     origin = record.take('Origin')
     if origin is not None:
         for name, value in zip(('Origin_X', 'Origin_Y'), point(origin, units, default=0)):

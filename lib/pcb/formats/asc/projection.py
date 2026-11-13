@@ -29,7 +29,7 @@ def fields(node, output, *, exclude=(), names=None):
     for name, field in node.schema.fields.items():
         if field.getter is not None or name in exclude:
             continue
-        if node.child(name) is None and field.default is MISSING:
+        if name not in node and field.default is MISSING:
             continue
         current = value(node, name)
         output.add(names.get(name, name), flag(current) if field.kind == 'boolean' else current)

@@ -9,12 +9,53 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from lib import FormatCapabilities, UnsupportedFileError, new_schematic, serialize
+from lib import Document, FormatCapabilities, Index, Segment, UnsupportedFileError, new_schematic, serialize
 from apps.diptrace_check.check import check_file, main
-from apps.diptrace_check.comparison import compare
+from apps.diptrace_check.comparison import compare, compare_ordered, snapshot
 
 
 class CheckTests(unittest.TestCase):
+    def test_ordered_comparison_matches_dictionary_counts_maxima_and_examples(self):
+        before = {f'a{i}': ('number', 'shared length', 0) for i in range(30)}
+        after = {name: ('number', 'shared length', Decimal('.0001')) for name in before}
+        before.update(integer=('serialized-number', '', 1), removed=('text', '', 'old'),
+                      optional=('text', '', None), text=('text', '', 'before'),
+                      angle=('number', 'radians', 1))
+        after.update(integer=('serialized-number', '', 2), added=('text', '', None),
+                     optional=('text', '', ''), text=('text', '', 'after'),
+                     angle=('number', 'radians', Decimal('1.1')))
+        for examples in (0, 2, 20):
+            with self.subTest(examples=examples):
+                options = dict(tolerance=Decimal('.001'), examples=examples)
+                expected = compare(before, after, **options)
+                self.assertEqual(compare_ordered(iter(sorted(before.items())),
+                    iter(sorted(after.items())), **options), expected)
+        self.assertEqual(compare_ordered([], [], tolerance=0), compare({}, {}, tolerance=0))
+
+    def test_ordered_comparison_rejects_duplicate_and_unsorted_paths_on_either_side(self):
+        fact = ('text', '', 'value')
+        for paths in (('a', 'a'), ('b', 'a')):
+            for side in (0, 1):
+                with self.subTest(paths=paths, side=side):
+                    rows = [[], []]
+                    rows[side] = [(path, fact) for path in paths]
+                    with self.assertRaisesRegex(ValueError, 'sorted and unique'):
+                        compare_ordered(*rows, tolerance=0)
+
+    def test_snapshots_compare_segment_targets_and_detect_retargeting(self):
+        document = Document()
+        points = document.root.add('Points')
+        first, second, third = [points.add('pt', x, 0) for x in (0, 1, 2)]
+        join = document.root.add('Join', 0)
+        link = document.references.bind(join, Segment(first, second), Index(join), role='wire-segment-1')
+        before = snapshot(document)
+        same = compare(before, snapshot(document.clone()), tolerance=Decimal(10))
+        self.assertEqual(same['counts'], {})
+        document.references.retarget(link, Segment(second, third))
+        changed = compare(before, snapshot(document), tolerance=Decimal(10))
+        self.assertTrue(changed['needs_review'])
+        self.assertEqual(changed['counts'], {'data': 1})
+
     def test_tolerance_never_hides_integer_settings_text_or_reference_changes(self):
         before = {'count': ('integer', '', 1), 'text': ('text', '', 'A'),
                   'link': ('reference', '', '/A'), 'x': ('number', 'shared length', 0)}

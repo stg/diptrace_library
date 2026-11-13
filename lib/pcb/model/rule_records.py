@@ -9,7 +9,8 @@ from .relationships import reference_field, index_field, linked
 
 
 def lengths(names, *, default=-1):
-    return {name: Field(name, 'number', default=default, unit='shared length') for name in names.split()}
+    return {name: Field(name, 'number', default=default, unit='shared length',
+                        unit_sentinels=(-1,) if default == -1 else ()) for name in names.split()}
 
 
 LAYER_FIELDS = {'Layer': reference_field('Layer', 'copper-layer'),

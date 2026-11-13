@@ -11,8 +11,8 @@ from unittest.mock import patch
 from lib import ConversionReport, new_schematic, new_symbol, parse, read, serialize
 from lib.pcb.tests.test_dip_output import configured_document
 from apps.diptrace_check.check import check_file, main
-from apps.diptrace_check.comparison import compare
-from apps.diptrace_check.reference import source_document, source_snapshot
+from apps.diptrace_check.comparison import compare, compare_ordered
+from apps.diptrace_check.reference import source_document, source_rows, source_snapshot
 
 
 class ReferenceTests(unittest.TestCase):
@@ -43,6 +43,29 @@ class ReferenceTests(unittest.TestCase):
     def reference_result(self, source, reference, **options):
         result, _ = check_file(source, references=[reference], report=ConversionReport(), **options)
         return result, next(item for lane in result['results'] for item in lane['references'])
+
+    def test_lean_syntax_keeps_all_comparison_facts_including_unknown_fields(self):
+        for family, format, version in (('schematic', 'asc', 46), ('schematic', 'dchxml', 52),
+                                       ('pcb', 'asc', 53), ('pcb', 'dipxml', 54)):
+            with self.subTest(family=family, format=format):
+                _, reference = self.pair(family, format, version)
+                data = reference.read_bytes()
+                if format == 'asc':
+                    data += b'\n(Extra_Field "unknown text" 1.2500 (Nested_Scalar "%"))\n'
+                else:
+                    extension = b'<Extra_Field Flag="unknown"><Nested>1.2500</Nested>tail</Extra_Field>'
+                    data = data.rsplit(b'</Source>', 1)[0] + extension + b'</Source>'
+                detailed = source_document(data, format=format, family=family, retain_source=True)
+                lean = source_document(data, format=format, family=family)
+                self.assertEqual(source_snapshot(lean), source_snapshot(detailed))
+                self.assertEqual(list(source_rows(lean)), sorted(source_snapshot(lean).items()))
+                if format == 'asc':
+                    self.assertTrue(any(node.source is not None for node in detailed.root.walk()))
+                else:
+                    self.assertTrue(any('xml_line' in node.annotations for node in detailed.root.walk()))
+                    self.assertFalse(any('xml_line' in node.annotations for node in lean.root.walk()))
+                self.assertTrue(all(node.source is None for node in lean.root.walk()))
+                self.assertTrue(any('Extra_Field' in path for path in source_snapshot(lean)))
 
     def test_matching_asc_and_xml_exports_use_their_version_and_units_for_both_families(self):
         for family, format, version in (('schematic', 'asc', 46), ('schematic', 'dchxml', 52),
@@ -148,6 +171,26 @@ class ReferenceTests(unittest.TestCase):
 class SourceComparisonTests(unittest.TestCase):
     def facts(self, text):
         return source_snapshot(source_document(text.encode(), format='dchxml', family='schematic'))
+
+    def test_streamed_paths_keep_lexical_ordinals_attributes_arguments_and_unknown_content(self):
+        bodies = (
+            ('asc', (b'(Repeated '+b' '.join(str(i).encode() for i in range(12))+b') ')*12),
+            ('dchxml', b'<Source Type="DipTrace-Schematic" Version="5.3.5.1" Units="mm">'
+             b'<!-- note --><Comment>authored</Comment><?probe preserved?>'
+             + b'<Repeated unknown="yes">before<Nested/>after</Repeated>'*12 + b'</Source>'))
+        for format, data in bodies:
+            with self.subTest(format=format):
+                document = source_document(data, format=format, family='schematic')
+                expected = source_snapshot(document)
+                rows = list(source_rows(document))
+                self.assertEqual(rows, sorted(expected.items()))
+                self.assertEqual(len(rows), len(dict(rows)))
+                self.assertEqual(compare_ordered(iter(rows), iter(rows), tolerance=0)['counts'], {})
+                self.assertTrue(any('[12]' in key for key, value in rows))
+                if format == 'asc':
+                    self.assertTrue(any(key.endswith('/@10') for key, value in rows))
+                else:
+                    self.assertTrue(any(value[2] == 'authored' for key, value in rows))
 
     def test_xml_attribute_order_indentation_comments_and_numeric_spelling_are_ignored(self):
         a = '<Source Type="DipTrace-Schematic" Version="5.3.5.1" Units="mm"><Point X="1.00" Y="2"/></Source>'

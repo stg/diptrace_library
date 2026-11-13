@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import lib
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.asc import dumps
 from lib.common.conversion import ConversionReport
 from lib.common.errors import UnsupportedFileError
@@ -74,7 +75,7 @@ class PcbIoTests(unittest.TestCase):
                 self.assertEqual(current.one('/Board')['CompFontSize'], 3)
                 self.assertFalse(current.one('/Board')['PatternFontVector'])
                 self.assertEqual(current.one('/Board/Settings')['GridSize'], Decimal('.75'))
-                self.assertEqual(current.one('/Board/SheetSettings')['SheetWidth'], 900)
+                assert_float_facts(self,current.one('/Board/SheetSettings')['SheetWidth'], 900)
         self.assertEqual(dumps(document, preserve=False), before)
 
     def test_capability_queries_and_adapter_versions_have_one_policy(self):

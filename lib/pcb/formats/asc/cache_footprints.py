@@ -50,6 +50,23 @@ def _pad(pad, *, index, boundary=False, report=None):
     return output
 
 
+def _cached_angle(shape, report):
+    """Project PCB ASC's integer-radian slot without changing the stored angle."""
+    angle = shape['TextAngle']
+    projected = round(angle)
+    if not -(2**31) <= projected < 2**31:
+        raise PcbError(f'{shape.path}: cached drawing angle is outside ASC\'s signed integer range')
+    if projected != angle:
+        if shape['Type'] == 7:
+            warn(report, 'cached-text-angle', 'asc',
+                 'PCB ASC rounds cached footprint text angles to whole radians', (shape,),
+                 recoverability='The full angle remains in the document; use binary or XML output to retain it.')
+        else:
+            info(report, 'cached-drawing-angle', 'asc',
+                 'PCB ASC normalizes an unused cached text-angle slot to integer radians', (shape,))
+    return projected
+
+
 def _drawing(shape, report):
     check(shape, model.PATTERN_DRAWING)
     if shape.child('UnresolvedKeys') is not None:
@@ -57,7 +74,7 @@ def _drawing(shape, report):
     lines = collection(shape,'TextLine',drawing_records.TEXT_LINES,drawing_records.TEXT_LINE)
     output = Element('Shape', shape['Type'],flag(shape['Locked']),shape['Layer'],
         0,0,0,0,0,0,lines[0]['Text'] if lines else '',shape['FontName'],flag(shape['VectorFont']),
-        shape['FontSize'],shape['FontScale'],shape['FontWidth'],shape['TextAngle'],shape['Width'],shape['TextShow'])
+        shape['FontSize'],shape['FontScale'],shape['FontWidth'],_cached_angle(shape, report),shape['Width'],shape['TextShow'])
     fields(shape,output,exclude=(*shape.schema.parameters,'Type','Locked','Layer','FontName','VectorFont',
         'FontSize','FontScale','FontWidth','TextAngle','Width','TextShow','PadId','ShieldGroup','FontMono','UnresolvedGroupId'))
     output.add('Group',group_selection(shape, destination='asc', report=report))

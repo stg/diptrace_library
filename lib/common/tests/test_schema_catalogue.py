@@ -3,10 +3,19 @@ from types import SimpleNamespace
 import unittest
 
 from lib.common.schema import Child, Field, Record
-from lib.common.schema_catalogue import record_catalogue
+from lib.common.schema_catalogue import record_catalogue, declared_child
 
 
 class SchemaCatalogueTests(unittest.TestCase):
+    def test_single_child_uses_the_catalogue_and_unions_need_domain_selection(self):
+        row, other = Record('Row', {}), Record('Other', {})
+        parent = Record('Parent', {}, children={'Item': Child('Item', 'Row'),
+            'Choice': Child('Choice', 'Row|Other'), 'Unknown': Child('Unknown', 'Unavailable')})
+        records = {'Row': row, 'Other': other}
+        self.assertIs(declared_child(parent, 'Item', records), row)
+        for schema, name in ((None, 'Item'), (parent, 'Choice'), (parent, 'Unknown'), (parent, 'Absent')):
+            self.assertIsNone(declared_child(schema, name, records))
+
     def test_aliases_and_mapping_exports_preserve_definition_identity(self):
         row = Record('Row', {'Name': Field('Name', 'text')})
         root = Record('Root', {}, children={'Row': Child('Row', row.name, maximum=None)})

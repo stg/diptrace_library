@@ -82,10 +82,12 @@ def read_component(record, definition, pattern, *, units, sheets):
     part = new_symbol(record.text('Name', definition.values[0]), record.text('RefDes', ''))
     for name in ('PartType', 'Type', 'Number1', 'Number2', 'Width', 'Height', 'LockProperties',
                  'Origin_X', 'Origin_Y', 'ModelType', 'ModelString', 'Manufacturer'):
-        part.set_field(name, *definition.one(name).arguments)
+        part.set_field(name, *definition._field_arguments(name))
     part.set_field('Datasheet', definition.scalar('Datasheet', ''))
-    part.set_field('BaseName', definition.values[0])
-    part.set_field('BaseRefDes', definition.values[1])
+    # Placed base strings are independent of the definition's name and prefix.
+    # XML supplies BaseName separately when present; missing fields are empty.
+    part.set_field('BaseName', '')
+    part.set_field('BaseRefDes', '')
     for name in ('PartNumber', 'Manufacturer', 'Pattern', 'Supplier', 'SourceLocator', 'Currency'):
         part.one('Suppliers').set_field(name, definition.one('Suppliers').scalar(name, ''))
     replace_rows(part, 'ModelBody', [line.clone() for line in definition.select('ModelBody/Line')])

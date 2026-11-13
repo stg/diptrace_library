@@ -5,10 +5,18 @@ adapters. A reader receives the text mode selected by that adapter; schema
 numbers have different meanings in different document families.
 """
 from decimal import Context, Decimal, ROUND_HALF_EVEN
+from functools import lru_cache
 
 
 NUMBER_LIMIT = 100_000
 _NUMBER_QUANTUM = Decimal('.0001')
+
+
+@lru_cache(maxsize=8192)
+def _decoded_number(units):
+    # The wire always has four fractional places. Share immutable common
+    # coordinates/defaults without depending on the caller's decimal context.
+    return units/10000
 
 
 def _number_units(value, format_name):
@@ -26,6 +34,13 @@ def _number_units(value, format_name):
 def quantized_number(value, *, format_name='binary'):
     """Project a value with exactly the scalar writer's precision and range."""
     return Decimal(f'{_number_units(value, format_name)}e-4')
+
+
+def number_is_representable(value, *, format_name='binary'):
+    """Whether decoding the writer's grid recovers the current numeric value."""
+    units = _number_units(value, format_name)
+    return (units/10000 == value if isinstance(value, float)
+            else Decimal(f'{units}e-4') == value)
 
 
 class BinaryReader:
@@ -55,9 +70,10 @@ class BinaryReader:
         return int.from_bytes(self.take(3), 'big') - 1_000_000
 
     def number(self):
-        # Decimal construction is exact, even with a low caller precision.
+        # The fixed wire grid fits well within float64 precision. Decimal
+        # contexts are unrelated to decoding this scalar representation.
         units = int.from_bytes(self.take(4), 'big') - 1_000_000_000
-        return Decimal(f'{units}e-4')
+        return _decoded_number(units)
 
     def boolean(self):
         start = self.pos

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
+import time
 import unittest
 from unittest.mock import patch
 
@@ -26,10 +27,25 @@ def design(value='10k', version=52):
     return serialize(document, format='dch', version=version, report=ConversionReport())
 
 
+def cleanup_fixture(temporary):
+    # Windows can keep a fixture directory busy briefly after Git finishes.
+    # Retry teardown only; test operations and their failures remain untouched.
+    deadline = time.monotonic()+5
+    while True:
+        try:
+            temporary.cleanup()
+            return
+        except OSError as error:
+            if (os.name != 'nt' or getattr(error,'winerror',None) not in (32,145)
+                    or time.monotonic() >= deadline):
+                raise
+            time.sleep(.05)
+
+
 class GitTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = TemporaryDirectory(dir=Path(__file__).parent)
-        self.addCleanup(self.temporary.cleanup)
+        self.temporary = TemporaryDirectory()
+        self.addCleanup(cleanup_fixture,self.temporary)
         self.folder = Path(self.temporary.name).resolve()
         self.root = self.folder / 'working tree'
         self.root.mkdir()
@@ -179,7 +195,9 @@ class GitTests(unittest.TestCase):
             with redirect_stdout(output), redirect_stderr(errors):
                 status = main(['--repo', str(self.root), *arguments])
             self.assertEqual(status, 0, errors.getvalue())
-            self.assertIn('Info: export', output.getvalue())
+            self.assertIn('Info: export', output.getvalue(),
+                          f'{arguments!r}; text exists={self.text.exists()}; '
+                          f'metadata exists={self.metadata.exists()}; fixture={self.root}')
             self.assertFalse(self.text.exists())  # check remains read-only.
 
     def test_asc_is_an_alternative_not_a_second_companion(self):

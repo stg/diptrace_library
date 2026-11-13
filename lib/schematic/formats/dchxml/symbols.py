@@ -1,31 +1,33 @@
 """Schematic XML symbol selection and key policy over the shared serializer."""
 from ....common import xml_symbol_output
+from ....common.model import Element
+from ....common.xml_plan import XmlBuilder
 from ...model.pad_keys import project_pad_id
 from ...model.local_keys import project_key, public_keys, reserved_keys
 from .fonts import uses_physical_width
 
 
-def project_symbol_pin(pin, *, units, pad_keys=None, group_keys=None, version=46):
+def project_symbol_pin(pin, *, units, pad_keys=None, group_keys=None, version=46, _factory=Element):
     return xml_symbol_output.project_symbol_pin(
         pin, units=units, pad_id=project_pad_id(pin, pad_keys),
         group=project_key(pin, 'Group', pin.scalar('Group'), group_keys),
-        fractional_font=version >= 52, physical_font_width=uses_physical_width(version))
+        fractional_font=version >= 52, physical_font_width=uses_physical_width(version), _factory=_factory)
 
 
-def project_symbol_drawing(shape, *, units, group_keys=None, version=46):
+def project_symbol_drawing(shape, *, units, group_keys=None, version=46, _factory=Element):
     return xml_symbol_output.project_symbol_drawing(
         shape, units=units, group=project_key(shape, 'Group', shape.scalar('Group'), group_keys),
-        fractional_font=version >= 52, physical_font_width=uses_physical_width(version))
+        fractional_font=version >= 52, physical_font_width=uses_physical_width(version), _factory=_factory)
 
 
-def project_symbol(part, *, units, pattern=None, pattern_style=None, datasheet='', pad_keys=None, version=46):
+def project_symbol(part, *, units, pattern=None, pattern_style=None, datasheet='', pad_keys=None, version=46, _factory=Element):
     """Select current content without inferring instance geometry."""
     groups = part.select('Groups/pt')
     group_keys = public_keys(groups, reserved_keys(
         [*part.select('Pins/Pin'), *part.select('Shapes/Shape')], ('Group',)))
-    pins = (project_symbol_pin(pin, units=units, pad_keys=pad_keys, group_keys=group_keys, version=version)
+    pins = (project_symbol_pin(pin, units=units, pad_keys=pad_keys, group_keys=group_keys, version=version, _factory=_factory)
             for pin in part.select('Pins/Pin') if pin.scalar('Enabled'))
-    drawings = (project_symbol_drawing(shape, units=units, group_keys=group_keys, version=version)
+    drawings = (project_symbol_drawing(shape, units=units, group_keys=group_keys, version=version, _factory=_factory)
                 for shape in part.select('Shapes/Shape')
                 if shape.scalar('Enabled'))
     connections = pattern.select('InternalConnections/IntCon') if pattern is not None else ()
@@ -36,4 +38,9 @@ def project_symbol(part, *, units, pattern=None, pattern_style=None, datasheet='
         connections=(tuple(project_key(connection, name, value.value, pad_keys)
                            for name, value in zip(('X', 'Y'), connection.arguments))
                      for connection in connections),
-        pattern_style=pattern_style, datasheet=datasheet)
+        pattern_style=pattern_style, datasheet=datasheet, _factory=_factory)
+
+
+def plan_symbol(part, **options):
+    """Build the complete public symbol before allocating an editable style."""
+    return project_symbol(part, **options, _factory=XmlBuilder).freeze()

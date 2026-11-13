@@ -12,12 +12,17 @@ class ImportContext:
     Vector layout is self-contained. A missing system-font provider uses the
     optional Windows backend lazily, only when a placement needs measurement.
     Other environments can supply TextLayout(measure_system=...).
+    retain_source keeps available source positions/spelling for investigation;
+    ordinary imports discard it after normalization to reduce retained memory.
     """
     font_size: int = 2
     font_name: str = ''
     text_layout: TextLayout | None = None
+    retain_source: bool = False
 
     def __post_init__(self):
+        if type(self.retain_source) is not bool:
+            raise TypeError('import retain_source must be a Boolean')
         if isinstance(self.font_size, bool) or not isinstance(self.font_size, int) or self.font_size <= 0:
             raise ValueError('import font_size must be a positive integer')
         if not isinstance(self.font_name, str):

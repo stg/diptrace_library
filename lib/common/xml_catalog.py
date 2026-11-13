@@ -1,5 +1,5 @@
 """Own XML library catalogs and exact sharing of generated public records."""
-from .xml import set_attribute
+from .xml import set_attribute, syntax_role
 from .xml_output import field
 from .model import Element, Value
 
@@ -10,6 +10,21 @@ def _text(node):
     if len(node.arguments) != 1 or node.arguments[0].kind != 'string':
         raise ValueError('category labels require plain text')
     return node.values[0]
+
+
+def _include_label(parent, name, label, *, before=None):
+    """Complete resolved text in the field order used by named projections."""
+    node = parent.child(name)
+    if label and not _text(node):
+        if node is None:
+            node = field(parent, name, label)
+        else:
+            node.set_values(label)
+    if node is not None and before is not None:
+        children = parent.children()
+        index = children.index(before)
+        if children.index(node) > index:
+            node.move_to(parent, index)
 
 
 def _index(node):
@@ -131,6 +146,7 @@ class CategoryCatalog:
             return
         if include:
             set_attribute(category, 'Index', entry['index'])
+            _include_label(category, 'Name', entry['label'], before=category.child('CategoryTypes'))
         for row in category.select('CategoryTypes/CategoryType'):
             kind = row.child('Type')
             child = getattr(entry['children'], operation)(_text(kind), _index(kind))
@@ -138,11 +154,13 @@ class CategoryCatalog:
                 continue
             if include:
                 set_attribute(kind, 'Index', child['index'])
+                _include_label(row, 'Type', child['label'])
             subtype = row.child('SubType')
             if subtype is not None:
                 sub = getattr(child['children'], operation)(_text(subtype), _index(subtype))
                 if include and sub is not None:
                     set_attribute(subtype, 'Index', sub['index'])
+                    _include_label(row, 'SubType', sub['label'])
 
     def reserve(self, references):
         """Reserve unresolved keys before allocating new named classifications."""
@@ -153,6 +171,13 @@ class CategoryCatalog:
     def include(self, category):
         self.reserve((category,))
         self._visit(category, include=True)
+
+    def include_plan(self, category):
+        """Allocate classification keys in a detached destination plan."""
+        from .xml_plan import XmlPlan
+        element = category.element()
+        self.include(element)
+        return XmlPlan.from_element(element)
 
     def seed(self, categories):
         """Declare all current resources, including unnamed and unused entries."""
@@ -172,10 +197,14 @@ def record_key(node, *, omit_attribute=None):
     """
     def values(item):
         return tuple((value.kind, value.value, value.unit) for value in item.arguments)
-    attributes = tuple(sorted((child.kind, values(child)) for child in node.children()
-                             if child.annotations.get('xml_role') == 'attribute' and child.kind != omit_attribute))
-    children = tuple(record_key(child) for child in node.children() if child.annotations.get('xml_role') != 'attribute')
-    return node.kind, values(node), attributes, children
+    attributes, children = [], []
+    for child in node._child_sequence():
+        if syntax_role(child) == 'attribute':
+            if child.kind != omit_attribute:
+                attributes.append((child.kind, values(child)))
+        else:
+            children.append(record_key(child))
+    return node.kind, values(node), tuple(sorted(attributes)), tuple(children)
 
 
 class StyleTable:
@@ -195,6 +224,25 @@ class StyleTable:
         if node.kind != self.record or node.parent is not None:
             raise ValueError('style tables require a detached record of the declared kind')
         key = record_key(node, omit_attribute=self.attribute)
+        return self._include(key, lambda: node, exclude=exclude, name=name)
+
+    def include_plan(self, plan, *, exclude=(), name=None):
+        """Materialize a complete style only when it introduces a resource."""
+        if plan.kind != self.record:
+            raise ValueError('style tables require a plan of the declared kind')
+        return self._include(plan.key(omit_attribute=self.attribute), plan.element,
+                             exclude=exclude, name=name)
+
+    def _include(self, key, build, *, exclude, name):
+        name = self._select_name(key, exclude=exclude, name=name)
+        if name not in self._names:
+            node = build()
+            set_attribute(node, self.attribute, name)
+            self.element.append(node)
+            self._remember(key, name)
+        return name
+
+    def _select_name(self, key, *, exclude, name):
         candidates = self._keys.get(key, ())
         if name is not None:
             if not isinstance(name, str) or name in self._names:
@@ -202,14 +250,53 @@ class StyleTable:
         else:
             name = next((name for name in candidates if name not in exclude), None)
         if name is None:
-            ordinal = len(self.element.children())
+            ordinal = len(self._names)
             name = self.prefix + str(ordinal)
             while name in self._names:
                 ordinal += 1
                 name = self.prefix + str(ordinal)
-        if name not in self._names:
-            set_attribute(node, self.attribute, name)
-            self.element.append(node)
-            self._keys.setdefault(key, []).append(name)
-            self._names.add(name)
         return name
+
+    def _remember(self, key, name):
+        self._keys.setdefault(key, []).append(name)
+        self._names.add(name)
+
+
+class StylePlans:
+    """Allocate local style keys before any editable records are needed."""
+    def __init__(self, container, record, attribute, prefix):
+        self._table = StyleTable(container, record, attribute, prefix)
+        self.entries = []
+        self._element = None
+        self._plan = None
+
+    def include_plan(self, plan, *, exclude=(), name=None):
+        if plan.kind != self._table.record:
+            raise ValueError('style plans require the declared record kind')
+        key = plan.key(omit_attribute=self._table.attribute)
+        name = self._table._select_name(key, exclude=exclude, name=name)
+        if name not in self._table._names:
+            self.entries.append((name, plan))
+            self._table._remember(key, name)
+            self._element = None
+            self._plan = None
+        return name
+
+    @property
+    def _names(self):
+        return self._table._names
+
+    @property
+    def plan(self):
+        from .xml_plan import XmlPlan
+        if self._plan is None:
+            self._plan = XmlPlan(self._table.element.kind, children=tuple(
+                plan.with_attribute(self._table.attribute, name)
+                for name, plan in self.entries))
+        return self._plan
+
+    @property
+    def element(self):
+        if self._element is None:
+            self._element = self.plan.element()
+        return self._element

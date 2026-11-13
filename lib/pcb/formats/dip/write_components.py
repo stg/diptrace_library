@@ -42,7 +42,7 @@ def component_outputs(board):
         pattern = component.one('Pattern')
         check(pattern, definitions.PATTERN, destination='DIP')
         for owner in (component, pattern):
-            for child in owner.children():
+            for child in owner._record_children():
                 if child.kind in owner.schema.fields or child is pattern:
                     continue
                 if child.schema is None or child.schema.name != owner.schema.children[child.kind].record:

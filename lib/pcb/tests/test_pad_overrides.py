@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from lib.common.tests.numeric_assertions import assert_float_facts
 from lib.common.model import Value
 from lib.common.references import Property, ReferenceError
 from lib.pcb.formats.assembly.board_rules import assemble_rules
@@ -43,15 +44,15 @@ class PadOverrideTests(unittest.TestCase):
         self.assertIs(blind['Layer'], result.layers[0])
         self.assertEqual(hidden.values, (1,))
         self.assertIs(specific['Layer'], result.layers[1])
-        self.assertEqual(specific.values, (1, 1, 4, Decimal('.99')))
+        self.assertEqual(specific.values, (1, 1, 4, 0.99))
         self.assertIsNone(global_setting['Layer'])
-        self.assertEqual(global_setting.values, (-1, 0, 0, Decimal('.33')))
+        assert_float_facts(self,global_setting.values, (-1, 0, 0, Decimal('.33')))
         self.assertIsNone(specific.child('Lay'))
         self.assertFalse(any(isinstance(item, Value) for item in hidden.items))
         self.assertIs(pad.one('TeardropParams').schema, TEARDROP)
         self.assertIs(result.document.one('/Board/Nets/Net/TeardropParams').schema, TEARDROP)
         pad.one('TeardropParams')['PadViaLength'] = Decimal('.8')
-        self.assertEqual(pad.one('TeardropParams')['PadViaLength'], Decimal('.8'))
+        assert_float_facts(self,pad.one('TeardropParams')['PadViaLength'], Decimal('.8'))
 
     def test_reordering_and_retargeting_update_projections_without_global_scans(self):
         result = design()
