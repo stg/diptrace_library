@@ -6,23 +6,10 @@ the quoted-text sanitizer. Applying these rules never mutates the document.
 """
 from decimal import Decimal
 import math
-from ....common.asc_text import quoted_text, project_text as _project_text
+from ....common.asc_text import number_text, quoted_text, project_text as _project_text
 
 
 
-
-
-def number_text(value: int | float | Decimal) -> str:
-    """Number text."""
-    number = float(value)
-    if not math.isfinite(number):
-        raise ValueError("ASC numbers must be finite")
-    scaled = round(number * 10_000)
-    whole, fraction = divmod(abs(scaled), 10_000)
-    rendered = str(whole)
-    if fraction:
-        rendered += '.' + f'{fraction:04d}'.rstrip('0')
-    return ('-' if scaled < 0 else '') + rendered
 
 
 def _redundant_cell_text(node):

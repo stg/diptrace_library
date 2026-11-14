@@ -12,7 +12,7 @@ from ...common.schema import Child, Field, Record
 from . import internal_connections
 from .connection_groups import groups, ratlines
 from .membership import component_of
-from .relationships import linked, reference_field
+from ...common.relationship_fields import linked, reference_field
 
 
 ROLE = 'internal-group-policy'

@@ -7,7 +7,7 @@ data until the caller replaces or removes that result.
 from ...common.references import ReferenceError
 from ...common.reference_edits import resolve_unavailable_reference
 from ...common.schema import Child, Field, Record
-from .relationships import assign, linked, optional_reference_fields
+from ...common.relationship_fields import assign, linked, optional_reference_fields
 from . import length_matching
 
 

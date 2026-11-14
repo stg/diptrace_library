@@ -1,5 +1,31 @@
 """Shared ASC library catalogues and explicit project path pairs."""
+import re
 from .model import Element, Value
+
+
+_END_RECORD = re.compile(r'\(\s*\)\s*\Z')
+
+
+def loads_library(text, **options):
+    """Read library syntax, consuming its optional empty final expression.
+
+    The terminator carries no design data. Empty expressions inside a library
+    remain malformed; the ordinary design-document lexer is unchanged.
+    """
+    from .asc import loads
+    if (marker := _END_RECORD.search(text)) is not None:
+        text = text[:marker.start()]
+    return loads(text, **options)
+
+
+def loads_library_bytes(data, *, encoding=None, retain_source=True, **options):
+    """Use the ordinary ASC byte policy with the library's optional terminator."""
+    from .asc import decode_text
+    text, encoding = decode_text(data, encoding=encoding)
+    document = loads_library(text, retain_source=retain_source, **options)
+    document._source_bytes = bytes(data) if retain_source else None
+    document._source_encoding = encoding
+    return document
 
 
 def unprefix(cache):
@@ -22,11 +48,9 @@ def _count(owner, count):
     owner.set_values()
 
 
-def unpack_catalogs(cache):
-    """Consume only catalogue counts, retaining declared keys and ordering."""
-    categories, folders = cache.one('Categories'), cache.one('Subfolders')
+def unpack_categories(categories):
+    """Consume catalogue counts, retaining declared keys and ordering."""
     _count(categories, len(rows(categories, 'Category')))
-    _count(folders, len(rows(folders, 'Subfolder')))
     for category in categories.children():
         types = rows(category, 'Type')
         if len(category.arguments) != 3 or category.values[2] != len(types):
@@ -41,6 +65,13 @@ def unpack_catalogs(cache):
                 if subtype.children() or len(subtype.arguments) != 2:
                     raise ValueError(f'{subtype.path}: unsupported category subtype')
                 subtype.kind = 'Subtype'
+
+
+def unpack_catalogs(cache):
+    """Consume cache catalogue/folder counts without changing declared keys."""
+    unpack_categories(cache.one('Categories'))
+    folders = cache.one('Subfolders')
+    _count(folders, len(rows(folders, 'Subfolder')))
     for folder in folders.children():
         if folder.children() or len(folder.arguments) != 1:
             raise ValueError(f'{folder.path}: unsupported cache subfolder')

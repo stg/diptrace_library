@@ -8,7 +8,7 @@ from ....common.xml_plan import XmlPlan, XmlBuilder
 from ....common.xml import set_attribute
 from ....common.xml_catalog import StylePlans
 from ....common.xml_footprint_output import project_model3d, project_drawing, project_dimension
-from ....common.xml_library_output import project_category
+from ....common.xml_pattern_metadata import project_pattern_header, project_pattern_user_fields
 from ....common.xml_output import enum_text, field, numeric, point_attributes
 from ....common.xml_pad_output import plan_pad_style
 from ....common.xml_footprint_vocabulary import PATTERN_TYPES
@@ -171,50 +171,9 @@ def _build_pattern(pattern, *, style, units, explicit_pad_style=True,
         _unavailable(node)
     result, styles = XmlBuilder('Pattern'),StylePlans('PadStyles','PadStyle','Name','Pad')
     set_attribute(result,'PatternStyle',style)
-    set_attribute(result,'Type',_physical_type(pattern, report))
-    set_attribute(result,'Mounting',enum_text(pattern['Mounting'],('Through','SMD','Chassis','Mixed'),negative='None'))
-    orientation = pattern['PatternOrientation']
-    set_attribute(result,'Orientation',orientation*90 if orientation in (0,1,2,3) else orientation)
-    set_attribute(result,'LockTypeChange',pattern['LockProperties'])
-    for name in ('Width','Height'):
-        set_attribute(result,name,numeric(units.length(pattern._field_arguments(name)[0])))
-    for index in (1,2,3):
-        set_attribute(result,'Float'+str(index),numeric(units.length(pattern._field_arguments('Spacing'+str(index))[0])))
-    for index in (1,2):
-        set_attribute(result,'Int'+str(index),pattern['Number'+str(index)])
-    field(result,'Name',pattern['Name'])
-    if pattern.get('RefDes',''):
-        set_attribute(result,'RefDes',pattern['RefDes'])
-    for public, own in (('Value','Value'),('Name_Description','Name_Description'),('Name_Unique','Name_Unique'),
-                        ('Datasheet','Datasheet'),('Manufacturer','Pattern_Manufacturer')):
-        if pattern.get(own,''):
-            field(result,public,pattern[own])
-    if category := project_category(pattern, _factory=XmlBuilder):
-        result.append(category)
-    names = pattern.select('PossibleNames/PossibleName')
-    if names:
-        target = result.add('PossibleNames')
-        for name in names:
-            field(target,'PossibleName',name['Name'])
-    origin = result.add('Origin')
-    point_attributes(origin,pattern['OriginX'],pattern['OriginY'],units)
-    for public, own in (('Cross','OriginCross'),('Circle','OriginCircle')):
-        set_attribute(origin,public,pattern[own])
-    set_attribute(origin,'Common',enum_text(pattern['OriginCommon'],('Show','Hide')))
-    set_attribute(origin,'Courtyard',enum_text(pattern['OriginCourtyard'],('Show','Hide','Show if not center')))
-    if pattern['RecoveryCode']:
-        target = field(result,'RecoveryCode',pattern['RecoveryCode'])
-        for name in ('Generator','Model'):
-            set_attribute(target,name,pattern['RecoveryCode_'+name])
+    project_pattern_header(pattern,result,units=units,type_label=_physical_type(pattern,report))
     _groups(pattern,result,keys,units,report)
-    users = pattern.select('UserFields/UserField')
-    if users:
-        target = result.add('AddFields')
-        for user in users:
-            row = target.add('AddField')
-            set_attribute(row,'Type',enum_text(user['Type'],('Text','Link')))
-            field(row,'Name',user['Name'])
-            field(row,'Text',user['Value'])
+    project_pattern_user_fields(pattern,result)
     default = styles.include_plan(plan_pad_style(pattern,name='',units=units))
     set_attribute(result.add('DefPad'),'Style',default)
     pads = result.add('Pads')

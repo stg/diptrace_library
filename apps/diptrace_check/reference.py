@@ -6,6 +6,7 @@ from pathlib import Path
 
 from lib import Element, format_capabilities, input_identity, parse
 from lib.common import asc, xml
+from lib.common.asc_library import loads_library_bytes
 from apps.common.cli import PROCESSING_ERRORS
 from .comparison import compare, compare_ordered, snapshot
 
@@ -13,7 +14,8 @@ from .comparison import compare, compare_ordered, snapshot
 def source_document(data, *, format, family, retain_source=False):
     """Retain unknown fields and ordered values, without unused spelling spans."""
     if format == 'asc':
-        return asc.loads_bytes(data, retain_source=retain_source)
+        reader = loads_library_bytes if family in ('pattern', 'component') else asc.loads_bytes
+        return reader(data, retain_source=retain_source)
     dialect = import_module(f'lib.{family}.formats.{format}.syntax').DIALECT
     return xml.loads(data, dialect=replace(dialect, representation='xml'), retain_source=retain_source)
 
@@ -95,8 +97,14 @@ class Reference:
             raise ValueError(f'{path}: output schema {selected} does not match '
                              f'reference version {identity.version!r}')
         raw = source_document(data, format=identity.format, family=family)
-        units = raw.root.one('Units').values if identity.format == 'asc' else (raw.metadata.get('units'),)
-        if len(units) != 1 or not isinstance(units[0], str):
+        # Standalone ASC has fixed shared units rather than a display-unit
+        # declaration. XML and placed-design ASC carry their chosen units.
+        fixed_units = identity.format == 'asc' and family in ('pattern', 'component')
+        if identity.format == 'asc':
+            units = (None,) if fixed_units else raw.root.one('Units').values
+        else:
+            units = (raw.metadata.get('units'),)
+        if len(units) != 1 or not (fixed_units or isinstance(units[0], str)):
             raise ValueError(f'{path}: reference must declare its display units')
         result = cls(path, identity.format, selected, identity.version, candidates, units[0], data)
         # Only bytes and header choices survive loading. Release the temporary
@@ -108,6 +116,8 @@ class Reference:
     def context(self, family):
         # Match the reference's declared display units, without borrowing its
         # design data or substituting it for the supplied source model.
+        if self.units is None:
+            return None
         package = import_module('lib.'+family)
         return package.ExportContext(units=self.units)
 

@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from collections.abc import Mapping
 
-from ....common.dimension_refs import local_attachment
+from ....common.dimension_refs import local_attachment, local_scopes
 from ....common.references import Guard, Index
 from ....common.conversion import import_notice
 from ...model.dimensions import LOCAL_ROLES, BOARD_ROLES, BOARD_VERTEX_TYPES
@@ -53,21 +53,8 @@ def _bind(document, dimension, role, attachment, scopes):
 
 
 def _scopes(footprint, dimension, side):
-    mode = dimension['Connected'+side]
-    pattern = footprint.pattern
-    collection = pattern.child({0: 'Pads', 1: 'Shapes', 2: 'Holes', 3: 'Pads'}.get(mode, ''))
-    scopes = [collection] if collection is not None else []
-    if mode == 1:
-        shape = footprint.shapes.get(dimension['SubObject'+side])
-        if shape is not None and (points := shape.child('Points_New')) is not None:
-            scopes.append(points)
-    elif mode == 3:
-        pad = footprint.pads.get(dimension['Object'+side])
-        if pad is not None:
-            scopes.append(pad)
-            scopes.extend(points for terminal in pad.children('PadTerminal')
-                          if (points := terminal.child('ShapePoints')) is not None)
-    return tuple(scopes)
+    return local_scopes(footprint.pattern, dimension, side,
+                        {0: footprint.pads, 1: footprint.shapes, 2: footprint.holes})
 
 
 def _detach_unavailable(dimension, side, domain):

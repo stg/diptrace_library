@@ -1,7 +1,7 @@
 """Named routing geometry and identity-based endpoint access."""
 from ...common.schema import Child, Field, Record
 from . import routing, pair_routing, pair_membership, pair_ranges
-from .relationships import reference_field, index_field
+from ...common.relationship_fields import reference_field, index_field
 from .membership import component_of, component_inputs
 from .board_rules import LAYER_FIELDS, VIA_FIELDS, CLASS_FIELDS
 from .graphic_records import GROUP_FIELDS

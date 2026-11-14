@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .xml_footprint_vocabulary import HORZ, VERT
-from .xml_library_values import read_points, read_groups, mapped_group, read_category, read_user_fields
+from .xml_library_values import read_points, read_groups, mapped_group, read_category, read_user_fields, read_supplier
 from .xml_records import enum_value, length, point, replace_rows
 from .xml_symbol_vocabulary import (PART_TYPES, SYMBOL_TYPES, PIN_TYPES, ELECTRIC_TYPES,
                                     DRAWING_TYPES, TEXT_SHOW, SPICE_TYPES, SHOW)
@@ -17,6 +17,7 @@ class SymbolImportPolicy:
     pin_factory: Callable
     drawing_factory: Callable
     resolve_key: Callable
+    user_field_choices: bool = True
 
 
 def read_symbol_pin(record, *, index, units, groups, policy, physical_font_width=True):
@@ -111,17 +112,13 @@ def read_symbol(record, *, units, policy, physical_font_width=True):
             line.finish(allow_text=True)
         model.finish()
     read_category(record.take('Category'), part)
-    supplier = record.take('Suppliers')
-    if supplier is not None:
-        for name in ('PartNumber', 'Manufacturer', 'Pattern', 'Supplier', 'Currency'):
-            part.one('Suppliers').set_field(name, supplier.text(name, ''))
-        supplier.finish()
+    read_supplier(record.take('Suppliers'), part.one('Suppliers'))
     groups = read_groups(record, part, units=units)
     for index, source in enumerate(record.rows('Pins', 'Pin')):
         part.one('Pins').append(read_symbol_pin(source, index=index, units=units, groups=groups, policy=policy, physical_font_width=physical_font_width))
     for index, source in enumerate(record.rows('Shapes', 'Shape')):
         part.one('Shapes').append(read_symbol_drawing(source, index=index, units=units, groups=groups, policy=policy, physical_font_width=physical_font_width))
-    read_user_fields(record, part)
+    read_user_fields(record, part, symbol_choices=policy.user_field_choices)
     pattern = record.take('Pattern')
     pattern_style = None
     if pattern is not None:

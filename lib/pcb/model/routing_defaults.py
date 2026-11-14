@@ -1,6 +1,6 @@
 """Routing defaults expose the default class's authoritative width/clearance."""
 from ...common.schema import Field, Record
-from .relationships import linked
+from ...common.relationship_fields import linked
 
 
 def default_row(settings):

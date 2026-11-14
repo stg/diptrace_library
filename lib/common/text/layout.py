@@ -26,9 +26,9 @@ def _measure_system(text, family, size):
     return _system_metrics().measure(text, family, size)
 
 
-def default_layout():
+def default_layout(*, vector_metrics=None):
     """Self-contained vector layout with a lazy optional Windows font backend."""
-    return TextLayout(measure_system=_measure_system)
+    return TextLayout(measure_system=_measure_system, vector_metrics=vector_metrics)
 
 
 def visible_text(text):
@@ -48,6 +48,7 @@ class TextLayout:
     measure_system: object = None
     resolution: float = 10.
     font_scale: float = 1.
+    vector_metrics: object = None
 
     def __post_init__(self):
         if not math.isfinite(self.resolution) or self.resolution <= 0:
@@ -58,13 +59,13 @@ class TextLayout:
     def symbol_bounds(self, shape):
         """Two compatibility box corners; the authoring anchor stays unchanged."""
         if shape.scalar('VectorFont') in (True, 'Y'):
-            return symbol_vector_text_bounds(shape)
+            return symbol_vector_text_bounds(shape, font=self.vector_metrics)
         return self._system_bounds(shape, kind=10, minimum_size=1.)
 
     def pattern_bounds(self, shape):
         """Footprint text bounds over all lines and the full authored angle."""
         if shape.scalar('VectorFont') in (True, 'Y'):
-            return footprint_vector_text_bounds(shape)
+            return footprint_vector_text_bounds(shape, font=self.vector_metrics)
         return self._system_bounds(shape, kind=7, minimum_size=.3)
 
     def _system_bounds(self, shape, *, kind, minimum_size):

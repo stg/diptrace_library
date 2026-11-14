@@ -12,7 +12,7 @@ from ....common.asc_model_body import project_model_body
 from .policy import (number_text, component_orientation)
 from ....common.asc_footprints import model3d_arguments, project_terminals
 from ....common.numbers import (calculation_number as _calculation)
-from .pad_geometry import (PadContour, legacy_pad_contour, requires_modern_points)
+from ....common.asc_pad_geometry import (PadContour, legacy_pad_contour, requires_modern_points)
 from ....common.pad_masks import MASK_FIELDS, mask_state
 from ...model.simulation import ARGUMENT_SCHEMAS, argument_values
 

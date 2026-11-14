@@ -24,6 +24,35 @@ def pad():
 
 
 class XmlPadMaskTests(unittest.TestCase):
+    def test_style_output_keeps_inactive_segment_dimensions_and_lists(self):
+        fields = ('PadMask_Percent', 'PadMask_EdgeGap', 'PadMask_SegmentGap', 'PadMask_SegmentSide')
+        for factory in (lambda: new_pad('1'), lambda: new_pattern('Package')):
+            for values in ((50, .9, .6, 3), (37, .33, .66, 2.31), (50, 0, 0, 0)):
+                for units in ('mm', 'mil', 'inch'):
+                    source, target = factory(), factory()
+                    with self.subTest(kind=source.kind, values=values, units=units):
+                        for name, value in zip(fields, values):
+                            source[name] = value
+                        source.one('PadMask_BotSegments').add('pt', 1, 2, 3, 4)
+                        output = project_mask_paste(source, units=XmlUnits(units))
+                        read_mask_paste(XmlRecord(output), target, units=XmlUnits(units))
+                        for name, value in zip(fields, values):
+                            self.assertAlmostEqual(target[name], value, delta=4*math.ulp(float(value)))
+                        self.assertEqual(target['BotPaste_State'] if source.kind != 'Pad'
+                                         else target['DisableBottomPaste'], 0)
+                        for actual, expected in zip(target.one('PadMask_BotSegments/pt').values, (1, 2, 3, 4)):
+                            self.assertAlmostEqual(actual, expected, delta=4*math.ulp(float(expected)))
+                        # Scaling may move the first result by a floating step;
+                        # repeated output must not keep moving the same settings.
+                        stable = tuple(target[name] for name in fields)
+                        stable_points = target.one('PadMask_BotSegments/pt').values
+                        for _ in range(3):
+                            output = project_mask_paste(target, units=XmlUnits(units))
+                            target = factory()
+                            read_mask_paste(XmlRecord(output), target, units=XmlUnits(units))
+                            self.assertEqual(stable, tuple(target[name] for name in fields))
+                            self.assertEqual(stable_points, target.one('PadMask_BotSegments/pt').values)
+
     def test_complete_output_clears_template_values_and_keeps_inactive_settings(self):
         source, target = new_pad('1'), pad()
         source['PadMask_SegmentSide'] = Decimal('.1524')

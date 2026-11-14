@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Library Type="DipTrace-PatternLibrary" Name="Metadata control" Hint="Independent scalar and text examples" Version="5.3.5.1" Units="mm">
+<PadStyles><PadStyle Name="Default" Type="Surface" Side="Top" HoleType="Round" Hole="0">
+<MainStack Shape="Rectangle" Width="2" Height="1" XOff="0" YOff="0"/>
+</PadStyle></PadStyles>
+<Patterns><Pattern Type="Free" RefDes="X" Width="10" Height="5">
+<Name>Metadata footprint</Name><Value>Example value</Value>
+<Suppliers><PartNumber>Demo-456</PartNumber><Manufacturer>Example manufacturer</Manufacturer><Pattern>Example package</Pattern><Supplier>Example supplier</Supplier><Currency>eur</Currency></Suppliers>
+<DefPad Style="Default"/>
+<Pads><Pad Id="1" Style="Default" X="-2" Y="0"><Number>1</Number></Pad>
+<Pad Id="2" Style="Default" X="2" Y="0"><Number>2</Number></Pad></Pads>
+<Shapes><Shape Id="1" Type="Text" PadId="2" Locked="Y" Layer="Top Silk" FontVector="Y" FontName="Tahoma" FontSize="7.25" FontMono="Y" FontScale="1.5" FontWidth="-2" TextShow="Any Text" HorzAlign="Left" VertAlign="Top" TextAlign="Left" LineSpacing="1.4" Angle="0" AllLayers="N">
+<Points><Item X="0" Y="0"/></Points>
+<TextLines><TextLine>First line</TextLine><TextLine>Second line</TextLine></TextLines>
+</Shape></Shapes>
+<Model3D Mirror="Y" NoSearch="Y" Units="mm" IPC_XOff="1.1" IPC_YOff="2.2" AutoHeight="3.3" AutoColor="1193046" Type="File" KeepPins="Y">
+<Filename><Path>example.step</Path><Var>example.step</Var></Filename>
+<Rotate X="11" Y="22" Z="33"/><Offset X="4.4" Y="5.5" Z="6.6"/><Zoom X="1.1" Y="1.2" Z="1.3"/>
+</Model3D>
+</Pattern></Patterns></Library>

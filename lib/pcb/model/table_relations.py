@@ -110,7 +110,7 @@ def prepare_attachment(root):
 
 def set_component(member, target):
     """Retarget, disconnect or explicitly resolve an unknown component slot."""
-    from .relationships import assign
+    from ...common.relationship_fields import assign
     document = member._owner()
     if document is None:
         raise ReferenceError('attach the row to a PCB before assigning its component')

@@ -3,7 +3,7 @@ from dataclasses import replace
 
 from ...common.references import ReferenceError
 from ...common.schema import Child, Field, Record
-from .relationships import optional_reference_fields
+from ...common.relationship_fields import optional_reference_fields
 
 
 EXCLUSION_ROLE = 'assembly-exclusion'

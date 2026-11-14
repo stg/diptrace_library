@@ -38,7 +38,7 @@ def set_field(cell, target):
         raise ReferenceError('attach the title cell before selecting its field')
     missing = cell.child(MISSING)
     if missing is None:
-        from .relationships import assign
+        from ...common.relationship_fields import assign
         assign(cell, ROLE, target)
     else:
         resolve_unavailable_reference(cell, target, role=ROLE, missing=missing)

@@ -21,6 +21,8 @@ class PatternImportPolicy:
     resolve_key: Callable
     pattern_types: tuple = PATTERN_TYPES
     read_defaults: Callable | None = None
+    style_attribute: str | None = 'PatternStyle'
+    unassigned_drawing_pad_keys: tuple = ()
 
 
 @dataclass
@@ -65,7 +67,10 @@ def _drawing(record, *, index, units, groups, pads, policy, physical_font_width=
     shape.set_field('AllLayers', record.boolean('AllLayers', False))
     shape.set_field('Group', mapped_group(record, groups, shape, resolve_key=policy.resolve_key))
     key = record.integer('PadId', -1)
-    shape.set_field('PadId', policy.resolve_key(shape, 'PadId', key, pads))
+    # Selector sentinels belong to the importing family, rather than to the
+    # shared public-key allocator. Other unavailable keys stay explicit.
+    shape.set_field('PadId', -1 if key in policy.unassigned_drawing_pad_keys
+                    else policy.resolve_key(shape, 'PadId', key, pads))
     shape.set_field('Width', length(record.number('LineWidth'), units) if record.has('LineWidth') else -1)
     if shape.scalar('Type') == 7:
         from .xml_font_import import read_font, read_text_extent
@@ -116,14 +121,15 @@ def _dimension(record, *, index, units, groups, objects, policy, physical_font_w
            Angle=record.number('Angle', 0), ExternalRadius=record.integer('ExternalRadius', 0),
            PointerMode=enum_value(record.value('PointerMode', 0), POINTER_MODES),
            PointerText=record.text('PointerText', ''))
-    from .xml_font_import import read_font
+    from .xml_font_import import read_font, read_text_extent
     read_font(record, result)
+    read_text_extent(record)
     record.finish()
     return result
 
 
 def read_pattern(record, *, units, styles, policy, physical_font_width=True):
-    style = record.text('PatternStyle')
+    style = record.text(policy.style_attribute) if policy.style_attribute is not None else None
     defaults = policy.read_defaults(record) if policy.read_defaults is not None else {}
     if record.has('Id'):
         record.integer('Id')  # PatternStyle is the reference key in schematic libraries.
@@ -143,6 +149,8 @@ def read_pattern(record, *, units, styles, policy, physical_font_width=True):
     for public, own in (('Name_Description', 'Name_Description'), ('Name_Unique', 'Name_Unique'),
                         ('Datasheet', 'Datasheet'), ('Manufacturer', 'Pattern_Manufacturer')):
         if public in defaults:
+            continue
+        if public == 'Datasheet' and not record.has(public):
             continue
         pattern.set_field(own, record.text(public, ''))
     for name in record.rows('PossibleNames', 'PossibleName'):

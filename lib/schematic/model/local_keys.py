@@ -1,5 +1,5 @@
 """Unresolved public references are current facts, distinct from assignments."""
-from ...common.local_keys import map_key
+from ...common.local_keys import map_key, public_keys
 
 
 _FIELDS = dict(Pin=('Group', 'PadId'), Pad=('Group',), Shape=('Group', 'PadId'),
@@ -51,19 +51,6 @@ def project_key(owner, name, value, mapping=None):
     if missing is not None:
         return missing.values[1]
     return mapping.get(value, value) if mapping is not None else value
-
-
-def public_keys(records, reserved=(), *, start=0):
-    """Assign stable-in-order keys without giving an unresolved key a target."""
-    used = set(reserved)
-    result = {}
-    for index, _ in enumerate(records, start):
-        key = index
-        while key in used:
-            key += 1
-        result[index] = key
-        used.add(key)
-    return result
 
 
 def reserved_keys(owners, names):

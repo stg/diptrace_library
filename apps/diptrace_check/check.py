@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from lib import ConversionReport, document_family, format_capabilities, input_identity, parse, read, serialize
-from apps.common.cli import Console, PROCESSING_ERRORS, add_report_argument
+from apps.common.cli import Console, PROCESSING_ERRORS, add_report_argument, version_argument
 from apps.common.paths import require_distinct_paths
 from .comparison import compare, snapshot
 from .reference import Reference
@@ -111,7 +111,8 @@ def main(argv=None):
     parser.add_argument('--format', action='append', dest='formats', help='format to exercise; repeat for multiple formats (default: input and reference formats)')
     parser.add_argument('--reference', action='append', type=Path, default=[],
                         help='matching ASC/XML export from DipTrace; repeat for multiple references')
-    parser.add_argument('--version', type=int, help='output schema for one format; default: reference version or library output version')
+    parser.add_argument('--version', type=version_argument,
+                        help='output schema or application version for one format; default: reference version or library output version')
     parser.add_argument('--cycles', type=int, default=3, help='save/reopen cycles, at least 2 (default: 3)')
     parser.add_argument('--tolerance', type=nonnegative, default=Decimal('.0005'), help='initial numerical review threshold in model units (default: 0.0005)')
     parser.add_argument('--drift-tolerance', type=nonnegative, default=Decimal('1e-9'), help='numerical stability threshold after the first output (default: 1e-9)')

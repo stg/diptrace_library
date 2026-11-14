@@ -102,7 +102,8 @@ def _detach_flat_fields(container, records):
     return True
 
 
-def unpack_pattern_shapes(container, *, pad_id=True, points_name='Points_New', header_fields=()):
+def unpack_pattern_shapes(container, *, pad_id=True, points_name='Points_New', header_fields=(),
+                          text_lines_counted=False, empty_nontext_lines=False):
     records, current = [], None
     for record in list(container.children()):
         if record.kind == 'Shape':
@@ -143,15 +144,19 @@ def unpack_pattern_shapes(container, *, pad_id=True, points_name='Points_New', h
         if shape.child('Points_New') is None:
             shape.add('Points_New')
         if (lines := shape.child('TextLines')) is not None:
-            if shape.child('TextLine') is not None or lines.values:
+            expected = (len(lines.children()),) if text_lines_counted else ()
+            if shape.child('TextLine') is not None or lines.values != expected:
                 raise ValueError(f'{shape.path}: duplicate or invalid current drawing text')
+            lines.set_values()
             for line in lines.children():
-                if (line.kind != 'TextLine' or len(line.values) != 1 or line.children()
+                if (line.kind != ('pt' if text_lines_counted else 'TextLine') or len(line.values) != 1 or line.children()
                         or not isinstance(line.values[0], str)):
                     raise ValueError(f'{line.path}: expected one text line')
                 line.kind = 'pt'
             lines.kind = 'TextLine'
         if shape.child('TextLine') is None:
-            shape.add('TextLine').add('pt', header[9])
+            lines = shape.add('TextLine')
+            if not (empty_nontext_lines and header[0].value != 7 and header[9].value == ''):
+                lines.add('pt', header[9])
         if pad_id:
             shape.add('PadId', -1)

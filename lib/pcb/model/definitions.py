@@ -10,7 +10,7 @@ from ...common.library_metadata import definition as metadata_definition
 from ...common.local_keys import definition as local_key_definition
 from .membership import get_net, set_net, net_number, net_dependencies, net_ordinal, MEMBER
 from . import routing_records, board_rules
-from .relationships import reference_field, index_field
+from ...common.relationship_fields import reference_field, index_field
 from . import graphic_records, pad_records, internal_connections, hierarchy_records
 from . import connection_policies
 from . import settings_records, markings, board_records

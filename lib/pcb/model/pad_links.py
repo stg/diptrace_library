@@ -1,7 +1,7 @@
 """Placed-pad references and their derived component/position views."""
 from ...common.schema import Field
 from .membership import component_of, component_inputs
-from .relationships import linked, reference_field
+from ...common.relationship_fields import linked, reference_field
 
 
 def pad_fields(end, role):

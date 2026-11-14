@@ -6,7 +6,7 @@ The groups do not calculate or constrain copper geometry.
 """
 from ...common.references import ReferenceError
 from ...common.schema import Child, Field, Record
-from .relationships import linked, reference_field
+from ...common.relationship_fields import linked, reference_field
 
 
 ROLE = 'pour-region'

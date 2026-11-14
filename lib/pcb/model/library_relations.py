@@ -1,6 +1,6 @@
 """Pad identities within placed footprints and cached component definitions."""
 from ...common.references import ReferenceError
-from .relationships import reference_field, index_field
+from ...common.relationship_fields import reference_field, index_field
 
 
 PIN_PAD_ROLE = 'symbol-pin-pad'

@@ -34,6 +34,8 @@ from .schematic.formats.import_context import ImportContext
 _FAMILY_ADAPTERS = {
     'schematic': __name__+'.schematic.formats.io',
     'pcb': __name__+'.pcb.formats.io',
+    'component': __name__+'.component.formats.io',
+    'pattern': __name__+'.pattern.formats.io',
 }
 
 

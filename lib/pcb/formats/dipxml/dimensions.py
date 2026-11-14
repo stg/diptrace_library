@@ -1,7 +1,7 @@
 """Board dimensions and temporary XML attachment keys for shared assembly."""
 from ....common.xml_records import enum_value, length, point
 from ....common.xml_footprint_vocabulary import LAYERS, POINTER_MODES
-from ....common.xml_font_import import read_font
+from ....common.xml_font_import import read_font, read_text_extent
 from .font import read_width
 
 
@@ -55,4 +55,5 @@ def read_dimensions(record, board, *, units, placements, version):
         dimension.add('ExternalRadius', source.integer('ExternalRadius', -1))
         dimension.add('PointerMode', enum_value(source.value('PointerMode', 'Coordinates'), POINTER_MODES))
         dimension.add('PointerText', source.text('PointerText', ''))
+        read_text_extent(source)
         source.finish()

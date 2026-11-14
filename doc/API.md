@@ -4,11 +4,13 @@ The public entry point is `lib`. This page describes call signatures, arguments,
 results and failure behavior. For a first workflow, use
 [Getting started](GETTING_STARTED.md); for ownership and design meaning, use
 [The data model](MODEL.md). Record and field definitions are in the
-[schematic](SCHEMATIC.md) and [PCB](PCB.md) catalogues.
+[schematic](SCHEMATIC.md), [PCB](PCB.md), [component](COMPONENT.md) and
+[pattern](PATTERN.md) catalogues.
 
 `Document`, `Element` and the relationship/schema infrastructure provide the
-shared editing API. Schematics and PCB layouts have their own document classes,
-constructors, contexts and adapters. Generic I/O selects their family from content.
+shared editing API. Each document family supplies its own model, constructors
+and adapters. The standalone library families share their context types.
+Generic I/O selects the family from content.
 
 | Area | Entries |
 | --- | --- |
@@ -46,6 +48,8 @@ read(path, *, format=None, family=None, context=None, report=None, label=None, *
 
 Read one file into the family's editable model. DCH, schematic ASC and DCHXML
 return `representation == "schematic"`; DIP, PCB ASC and DIPXML return `"pcb"`.
+ELI/component ASC/ELIXML return `"component"`; LIB/pattern ASC/LIBXML return
+`"pattern"`.
 
 | Argument | Meaning |
 | --- | --- |
@@ -156,15 +160,15 @@ It cannot reinterpret an identified output model as another family. There is no
 preferred family for ASC. Headerless syntax fragments
 require an explicit format and family for source inspection.
 
-Schematic and PCB adapters are available. An unavailable family, unknown
+Adapters are available for all four families. An unavailable family, unknown
 format or unrecognized input raises `UnsupportedFileError`, a `ValueError`
 subclass; import/export reports collect the failure as usual. Known unsupported
 versions use this same exception family. Ordinary parsing errors and file access
 failures retain their existing exception types.
 
-`lib.schematic` and `lib.pcb` expose the same conversion operations with their
-family selected, plus their own models, contexts and constructors. The
-`lib.component` and `lib.pattern` conversion facades remain unavailable placeholders.
+`lib.schematic`, `lib.pcb`, `lib.component` and `lib.pattern` expose the same
+conversion operations with their family selected, plus their own models,
+contexts, constructors and schema queries.
 
 `document_family(document) -> str` returns the current family using the same
 model/declaration rules as export. It does not use provenance metadata. An
@@ -187,7 +191,8 @@ reuse the input version. See [Versions](#versions) for selection and
 | DCH | `component_limit` | `None`; optional limit for inspection |
 | DIP | `encoding` | `None`; Windows-1252 for older non-Unicode strings |
 | ASC | `encoding` | `None`; UTF-8 with BOM, otherwise Windows-1252 |
-| DCHXML / DIPXML | — | XML declaration controls byte decoding |
+| ELI / LIB | `encoding` | Optional override of the import context’s binary ANSI code page |
+| XML | — | XML declaration controls byte decoding |
 
 | Output | Option | Default and behavior |
 | --- | --- | --- |
@@ -202,8 +207,11 @@ round trips through the shared model.
 
 ### Document output methods
 
-These use the same options and diagnostic contract as `write()`/`serialize()`.
-The `version` default is the relevant adapter's default.
+These schematic convenience methods use the same options and diagnostic
+contract as `write()`/`serialize()`. The `version` default is the relevant
+adapter's default. PCB convenience methods are in [the PCB guide](PCB_GUIDE.md);
+component/pattern documents use the common `write()`, `serialize()` and their
+family adapter's `project()` for detached text trees.
 
 | Method | Result | Accepted keyword options |
 | --- | --- | --- |
@@ -218,18 +226,19 @@ The `version` default is the relevant adapter's default.
 
 ## Document
 
-Normally obtain a document from `read()`, `parse()` or `new_schematic()`.
-Use `lib.schematic.Document` or `lib.pcb.Document` for a low-level family class;
-neither constructor populates a design. `lib.Document` remains the schematic
-class for compatibility. Both extend `lib.common.model.Document`. Prefer
-`new_schematic()` or `lib.pcb.new_document()` for a populated starting document.
+Normally obtain a document from `read()`, `parse()` or a family constructor.
+Each family namespace exports its low-level Document class; these classes extend
+`lib.common.model.Document`. Their bare constructors do not populate a design.
+`lib.Document` remains the schematic class for compatibility. Prefer
+`new_schematic()`, `lib.pcb.new_document()`, `lib.component.new_library()` or
+`lib.pattern.new_library()` for an initialized document.
 
 ### State
 
 | Attribute | Meaning |
 | --- | --- |
 | `root` | Outer owning `Element` |
-| `representation` | Current API view; `"schematic"` or `"pcb"` for normal design imports |
+| `representation` | Current API view: `"schematic"`, `"pcb"`, `"component"` or `"pattern"` for ordinary imports |
 | `references` | Identity-based `References` graph |
 | `complete` | Whether the import is complete |
 | `diagnostics` | Retained diagnostic strings |
@@ -604,6 +613,22 @@ part = design.one("/Schematic/Components").append(new_symbol("Resistor", "R1"))
 part["Value"] = "10k"
 ```
 
+### Library constructors
+
+Import from the owning namespace. These create data records without loading
+external definitions or generating template geometry. Attach a record before
+assigning relationships to other owned objects.
+
+| Namespace | Constructors |
+| --- | --- |
+| `lib.pattern` | `new_library(name="Library", *, hint="Untitled Library")`, `new_pattern(name="")`, `new_pad(number="", name="", *, x=0, y=0)`, `new_drawing(*, kind=1)`, `new_group()`, `new_internal_connection()` |
+| `lib.component` | `new_library(name="Library", *, hint="Untitled Library")`, `new_component(name="", reference="", *, part_name="Part 1")`, `new_part(name="Part 1")`, `new_pin()`, `new_drawing(*, kind=1)`; physical `new_pattern`, `new_pad`, `new_pattern_drawing`, `new_group`, `new_internal_connection` |
+
+`new_library()` returns a Document; other constructors return detached Elements.
+The common [ownership rules](#attach-move-and-detach) apply. See
+[the library guide](LIBRARIES.md) for construction, pin-to-pad assignment and
+classification examples. The generated catalogues describe every record.
+
 ### PCB constructors
 
 Import constructors from `lib.pcb`, including `new_document`, `new_component`,
@@ -908,6 +933,29 @@ context with effective `units` and `project_dir`; other fields remain fallbacks.
 `format` may validate `dip`, `asc` or `dipxml`; there are no PCB destination
 subclasses. Use `dataclasses.replace()` to modify a resolved context.
 
+### Component and pattern contexts
+
+Import these immutable types from `lib.component` or `lib.pattern`; both
+namespaces expose the same implementations. Contexts remain optional.
+
+```text
+ImportContext(ansi_encoding="cp1252")
+ExportContext(units="mm", line_width=.3, text_layout=None, target_application=None)
+```
+
+| Field | Meaning |
+| --- | --- |
+| `ansi_encoding` | Code page for binary strings in earlier revisions; explicit input `encoding` overrides it |
+| `units` | XML output units: mm, mil or inch |
+| `line_width` | Nonnegative shared-length fallback for drawings using a receiver default; also accepts `line_width(layer)` |
+| `text_layout` | Optional common service for calculated text geometry and group centres in every output format |
+| `target_application` | Optional ASC receiver release for layout/font conventions; the ASC dialect itself is unchanged |
+
+Binary and XML target versions choose their default receiver conventions.
+ASC byte encoding is an I/O option; XML output is UTF-8. Use
+`dataclasses.replace(ExportContext(), units="mil")` to modify defaults. These
+contexts need no installation preferences and do not discover companion files.
+
 ### Font and layout services
 
 These supplementary types are imported from their owning modules.
@@ -915,7 +963,7 @@ These supplementary types are imported from their owning modules.
 | Type / import | Constructor fields |
 | --- | --- |
 | `lib.common.text.markings.MarkingStyle` | `font_size=2`, `font_name=""`, `vector=True`, `font_width=-2.0`, `font_scale=1.0`, `font_color=0`, `pen_width=1.0`, `mono=False` |
-| `lib.common.text.layout.TextLayout` | `measure_system=None`, `resolution=10.0`, `font_scale=1.0` |
+| `lib.common.text.layout.TextLayout` | `measure_system=None`, `resolution=10.0`, `font_scale=1.0`, `vector_metrics=None` |
 | `lib.common.text.windows.WindowsFontMetrics` | `dpi=96` (keyword-only) |
 
 The previous schematic import paths remain available for these same types.
@@ -926,6 +974,10 @@ A system-font callback has signature `(text, family, point_size)` and returns
 an object with pixel `width`/`height`. `WindowsFontMetrics.measure`
 provides that interface on Windows; other platforms can supply a service.
 Resolution/scale must be finite and positive.
+
+`vector_metrics` optionally supplies a `VectorFontMetrics` service from
+`lib.common.text.vector`. It overrides vector measurements for both symbol and
+footprint text without changing the drawing's font fields or anchor.
 
 Vector layout is self-contained. The default service loads Windows measurement
 lazily only when system text needs it. If required measurement is unavailable,
@@ -1056,8 +1108,11 @@ raises `ValueError`. Unknown names and unavailable families raise
 
 DCH revisions are schema integers. DCHXML input revisions are vocabulary strings
 such as `"5.3"`; its output revisions are target schematic schema integers.
-These numbers are not application release numbers. Current ranges and known
-release mappings are listed in [the support table](../README.md#schematics).
+LIB/ELI also use integer binary and ASC revisions. Standalone LIBXML/ELIXML
+output selectors are application release strings, such as `"5.3.5.1"`; their
+input vocabulary revisions are major/minor strings. Ask the selected adapter
+for its declarations rather than inferring one family's version from another.
+Current ranges and known release mappings are in the README's family tables.
 
 ### `FormatCapabilities` methods
 

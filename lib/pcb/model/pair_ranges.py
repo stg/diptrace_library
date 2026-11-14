@@ -2,7 +2,7 @@
 from ...common.reference_edits import resolve_unavailable_reference
 from ...common.references import ReferenceError
 from ...common.schema import Field
-from .relationships import assign, linked
+from ...common.relationship_fields import assign, linked
 from .pair_routing import RANGES, center_segment, segment_trace
 
 

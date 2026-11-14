@@ -5,7 +5,7 @@ to the layer itself, so collection positions never determine their meaning.
 Class-pair clearances are flat records rather than an asymmetric saved matrix.
 """
 from ...common.schema import Child, Field, Record
-from .relationships import reference_field, index_field, linked
+from ...common.relationship_fields import reference_field, index_field, linked
 
 
 def lengths(names, *, default=-1):

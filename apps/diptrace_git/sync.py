@@ -249,7 +249,9 @@ def _synchronize(repo, *, direction='auto', force=False, stage=False, untrack=Fa
                 if metadata is None or refresh_version:
                     metadata = manifest(binary, input_identity(data).version, text_format)
                 version = output_version()
-                options = {'version': version} if text_format.endswith('xml') else {}
+                text_capabilities = format_capabilities(text_format, family=family)
+                options = ({'version': version} if text_format.endswith('xml')
+                           and text_capabilities.supports_write(version) else {})
                 generated = serialize(binary_design, format=text_format, family=family, report=report,
                                       label=text, **options)
                 return generated

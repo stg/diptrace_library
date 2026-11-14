@@ -55,8 +55,7 @@ def project_pad_style(source, *, name, units, _factory=Element):
             point_attributes(item, terminal._field_arguments('X')[0], terminal._field_arguments('Y')[0], units)
             set_attribute(item, 'Angle', terminal._field_arguments('Angle')[0])
             _stack(item, terminal, units=units, terminal=True)
-    if (masks := project_mask_paste(source, units=units, _factory=_factory)) is not None:
-        result.append(masks)
+    result.append(project_mask_paste(source, units=units, _factory=_factory))
     return result
 
 
@@ -70,6 +69,8 @@ def project_mask_paste(source, *, units, complete=False, _factory=Element):
 
     A complete overlay supplies even common modes and empty segment lists, so
     it cannot accidentally inherit different values from a physical template.
+    Segment dimensions remain authored settings while another paste mode is
+    selected. Write them explicitly rather than relying on style defaults.
     """
     individual = source.kind == 'Pad'
     states = []
@@ -81,29 +82,26 @@ def project_mask_paste(source, *, units, complete=False, _factory=Element):
         state = mask_state(source,own) if individual else source.scalar(default)
         states.append((public, state, labels))
     swell, shrink = (source._field_arguments(name)[0] for name in ('CustomSwell_New', 'CustomShrink_New'))
-    if complete or any(state for _, state, _ in states) or swell.value != -1000 or shrink.value != -1000:
-        target = _factory('MaskPaste')
-        for public, state, labels in states:
-            if complete or state > 0:
-                set_attribute(target, public, enum_text(state, labels))
-        if complete or any(state == 3 for _, state, _ in states[2:]):
-            for public, own in (('Segment_Percent', 'PadMask_Percent'), ('Segment_EdgeGap', 'PadMask_EdgeGap'),
-                                ('Segment_Gap', 'PadMask_SegmentGap'), ('Segment_Side', 'PadMask_SegmentSide')):
-                value = source._field_arguments(own)[0]
-                set_attribute(target, public, value if public == 'Segment_Percent' else numeric(units.length(value)))
-        for public, value in (('CustomSwell', swell), ('CustomShrink', shrink)):
-            if value.value != -1000:
-                set_attribute(target, public, numeric(units.length(value)))
-        for public, own in (('TopSegments', 'PadMask_TopSegments'), ('BotSegments', 'PadMask_BotSegments')):
-            segments = source.select(own+'/pt')
-            if complete or segments:
-                parent = target.add(public)
-                for segment in segments:
-                    if len(segment.arguments) != 4:
-                        raise ValueError(f'{segment.path}: paste segment requires two points')
-                    item = parent.add('Item')
-                    for side in (0, 1):
-                        point_attributes(item, *segment.arguments[side*2:side*2+2], units,
-                                         names=('X'+str(side+1), 'Y'+str(side+1)))
-        return target
-    return None
+    target = _factory('MaskPaste')
+    for public, state, labels in states:
+        if complete or state > 0:
+            set_attribute(target, public, enum_text(state, labels))
+    for public, own in (('Segment_Percent', 'PadMask_Percent'), ('Segment_EdgeGap', 'PadMask_EdgeGap'),
+                        ('Segment_Gap', 'PadMask_SegmentGap'), ('Segment_Side', 'PadMask_SegmentSide')):
+        value = source._field_arguments(own)[0]
+        set_attribute(target, public, value if public == 'Segment_Percent' else numeric(units.length(value)))
+    for public, value in (('CustomSwell', swell), ('CustomShrink', shrink)):
+        if value.value != -1000:
+            set_attribute(target, public, numeric(units.length(value)))
+    for public, own in (('TopSegments', 'PadMask_TopSegments'), ('BotSegments', 'PadMask_BotSegments')):
+        segments = source.select(own+'/pt')
+        if complete or segments:
+            parent = target.add(public)
+            for segment in segments:
+                if len(segment.arguments) != 4:
+                    raise ValueError(f'{segment.path}: paste segment requires two points')
+                item = parent.add('Item')
+                for side in (0, 1):
+                    point_attributes(item, *segment.arguments[side*2:side*2+2], units,
+                                     names=('X'+str(side+1), 'Y'+str(side+1)))
+    return target

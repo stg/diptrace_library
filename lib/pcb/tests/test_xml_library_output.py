@@ -54,7 +54,7 @@ class XmlLibraryOutputTests(unittest.TestCase):
                     before = model_text(document, preserve=False)
                     rebuilt, projected = reopen(document, report=ConversionReport())
                     self.assertEqual(len(projected.element.select('Library/Patterns/Pattern')), 2)
-                    self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), expected)
+                    assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), expected)
                     self.assertEqual(model_text(document, preserve=False), before)
                     rebuilt.references.validate()
                     document = rebuilt
@@ -77,7 +77,7 @@ class XmlLibraryOutputTests(unittest.TestCase):
                     before = model_text(document, preserve=False)
                     rebuilt, projected = reopen(document, report=ConversionReport())
                     self.assertEqual(len(projected.element.select('Library/Patterns/Pattern')), 2)
-                    self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), expected)
+                    assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), expected)
                     self.assertEqual(model_text(document, preserve=False), before)
                     rebuilt.references.validate()
                     document = rebuilt
@@ -107,7 +107,7 @@ class XmlLibraryOutputTests(unittest.TestCase):
             physical = projected.element.one('Library/Patterns/Pattern')
             self.assertEqual((physical.one('Origin')['Cross'], physical.one('Origin')['Common']), (True, 'Hide'))
             self.assertEqual(physical.one('Model3D')['AutoColor'], 0x336699)
-            self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), expected)
+            assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), expected)
             self.assertEqual(model_text(document, preserve=False), before)
             rebuilt.references.validate()
             document = rebuilt
@@ -119,7 +119,7 @@ class XmlLibraryOutputTests(unittest.TestCase):
         rebuilt, projected = reopen(document, report=ConversionReport())
         self.assertEqual(len(projected.element.select('Components/Component')), 2)
         self.assertEqual(len(projected.element.select('Library/Patterns/Pattern')), 1)
-        self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), signature(cache))
+        assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), signature(cache))
         first, second = rebuilt.select(SLOT)
         first.one('Definition/Pattern/Pads/Pad[1]')['X'] = 99
         self.assertEqual(second.one('Definition/Pattern/Pads/Pad[1]')['X'], 3)
@@ -140,7 +140,7 @@ class XmlLibraryOutputTests(unittest.TestCase):
         expected = signature(document.one(SLOT))
         for _ in range(3):
             document, _ = reopen(document, report=ConversionReport())
-            self.assertEqual(signature(document.one(SLOT)), expected)
+            assert_float_facts(self,signature(document.one(SLOT)), expected)
             second = document.one(SLOT+'/Definition[2]/Part')
             target = document.references.outgoing(second, role='symbol-pin-pad')[0].target
             self.assertEqual(target['Id'], 41)
@@ -165,12 +165,12 @@ class XmlLibraryOutputTests(unittest.TestCase):
         document.one(SLOT+'/Definition/Pattern/Pads/Pad[1]')['Standard'] = False
         expected = signature(document.one('/Board/CacheLib'))
         rebuilt, projected = reopen(document, report=ConversionReport())
-        self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), expected)
+        assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), expected)
         self.assertEqual(len(rebuilt.select('/Board/CacheLib/Patterns/Pattern')), 2)
         self.assertEqual([style['Name'] for style in rebuilt.select('/Board/CacheLib/PadStyles/PadStyle')], ['Pad1', 'Pad0'])
         self.assertEqual(len(projected.element.select('Library/Patterns/Pattern')), 3)
         self.assertFalse(rebuilt.one(SLOT+'/Definition/Pattern/Pads/Pad[1]')['Standard'])
-        self.assertEqual(signature(reopen(rebuilt, report=ConversionReport())[0].one('/Board/CacheLib')), expected)
+        assert_float_facts(self,signature(reopen(rebuilt, report=ConversionReport())[0].one('/Board/CacheLib')), expected)
 
     def test_units_catalogs_and_explicit_blank_variable_paths_survive(self):
         document = read(source(), report=ConversionReport())

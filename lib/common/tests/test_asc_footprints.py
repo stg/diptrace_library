@@ -21,6 +21,28 @@ def flat_shapes(count):
 
 
 class AscFootprintGroupingTests(unittest.TestCase):
+    def test_library_text_lines_use_their_counted_point_rows(self):
+        source = flat_shapes(1)
+        lines = source.one('/Shapes/TextLines')
+        lines.set_values(2)
+        for line in lines.children():
+            line.kind = 'pt'
+        unpack_pattern_shapes(source.one('/Shapes'), text_lines_counted=True)
+        shape = source.one('/Shapes/Shape')
+        self.assertEqual(['first-0','second-0'], [row.values[0] for row in shape.select('TextLine/pt')])
+        self.assertEqual((), shape.one('TextLine').values)
+
+    def test_library_text_count_and_row_dialect_are_checked(self):
+        for count,kind in ((1,'pt'),(2,'TextLine')):
+            with self.subTest(count=count,kind=kind):
+                source = flat_shapes(1)
+                lines = source.one('/Shapes/TextLines')
+                lines.set_values(count)
+                for line in lines.children():
+                    line.kind = kind
+                with self.assertRaises(ValueError):
+                    unpack_pattern_shapes(source.one('/Shapes'), text_lines_counted=True)
+
     def test_flat_fields_keep_identity_order_and_current_values(self):
         document = flat_shapes(3)
         container = document.one('/Shapes')

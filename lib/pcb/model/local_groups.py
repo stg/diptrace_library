@@ -4,7 +4,7 @@ from dataclasses import replace
 from ...common.group_records import LOCAL_GROUP
 from ...common.references import ReferenceError
 from ...common.schema import Child, Field, Record
-from .relationships import optional_reference_fields
+from ...common.relationship_fields import optional_reference_fields
 
 
 PATTERN_GROUP = 'pattern-group'

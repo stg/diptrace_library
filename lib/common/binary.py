@@ -47,16 +47,19 @@ class BinaryReader:
     error_type = ValueError
 
     def __init__(self, data, *, offset=0, unicode_text=True, source=None,
-                 ansi_encoding='cp1252'):
+                 ansi_encoding='cp1252', ansi_length_bytes=3):
         if not isinstance(data, (bytes, bytearray, memoryview)):
             raise TypeError('binary input must be bytes, bytearray or memoryview')
         if type(offset) is not int or not 0 <= offset <= len(data):
             raise ValueError('binary starting offset is outside the input')
+        if type(ansi_length_bytes) is not int or ansi_length_bytes not in (1, 3):
+            raise ValueError('ANSI string length must use one byte or a biased integer')
         self.data = bytes(data)
         self.pos = offset
         self.source = source
         self.unicode_text = unicode_text
         self.ansi_encoding = ansi_encoding
+        self.ansi_length_bytes = ansi_length_bytes
 
     def take(self, length):
         if length < 0 or self.pos + length > len(self.data):
@@ -90,7 +93,7 @@ class BinaryReader:
             length = int.from_bytes(self.take(2), 'big')
             return self.take(length*2).decode('utf-16-be', errors='surrogatepass')
         start = self.pos
-        length = self.integer()
+        length = self.take(1)[0] if self.ansi_length_bytes == 1 else self.integer()
         if length < 0:
             raise self.error_type(f'negative string length at byte {start:#x}')
         raw = self.take(length)

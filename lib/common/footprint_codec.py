@@ -49,13 +49,14 @@ def read_pad_mask_states(reader, pad, *, extended=False):
     return pad
 
 
-def read_holes(reader, pattern):
+def read_holes(reader, pattern, *, grouped=False):
     holes = reader.add(pattern, 'Holes')
     for _ in range(reader.count('footprint holes')):
         hole = reader.record(holes, 'Hole', 'boolean', *('number',)*4, 'boolean')
         values = hole.arguments
         # Named tuple order groups the two flags before the geometric values.
-        hole.set_values(values[0], values[-1], *values[1:-1])
+        group = (reader.argument('integer'),) if grouped else ()
+        hole.set_values(values[0], values[-1], *values[1:-1], *group)
     return holes
 
 
@@ -95,8 +96,19 @@ def read_model_extensions(reader, pattern):
         reader.field_into(model, name, kind)
 
 
-def read_pattern_extensions(reader, pattern, *, angle_reader=read_angle):
-    """Read the shared definition extension, without placement-specific fields."""
+def read_pad_extensions(reader, pad, *, angle_reader=read_angle):
+    """Current physical geometry and paste facts, after an owner's selectors."""
+    reader.field_into(pad, 'PadCorner', 'number')
+    angle_reader(reader, pad, 'PadAngle')
+    reader.fields(pad, ((name, 'number') for name in ('PadShape_X', 'PadShape_Y')))
+    read_terminals(reader, pad, angle_reader=angle_reader)
+    reader.fields(pad, ((name, 'number') for name in ('PadMask_Percent', 'PadMask_EdgeGap',
+        'PadMask_SegmentGap', 'PadMask_SegmentSide')))
+    read_mask_segments(reader, pad)
+
+
+def read_pattern_authoring(reader, pattern, *, angle_reader=read_angle):
+    """Read origin display, descriptive metadata and the default physical style."""
     reader.fields(pattern, ((name, 'boolean') for name in ('OriginCross', 'OriginCircle')))
     reader.fields(pattern, ((name, 'integer') for name in ('OriginCommon', 'OriginCourtyard')))
     reader.fields(pattern, ((name, 'text') for name in ('Name_Description', 'Name_Unique', 'RecoveryCode')))
@@ -108,15 +120,14 @@ def read_pattern_extensions(reader, pattern, *, angle_reader=read_angle):
     reader.fields(pattern, ((name, 'number') for name in ('CustomSwell_New', 'CustomShrink_New',
         'PadMask_Percent', 'PadMask_EdgeGap', 'PadMask_SegmentGap', 'PadMask_SegmentSide')))
     read_mask_segments(reader, pattern)
+
+
+def read_pattern_extensions(reader, pattern, *, angle_reader=read_angle):
+    """Read the shared definition extension, without placement-specific fields."""
+    read_pattern_authoring(reader, pattern, angle_reader=angle_reader)
     for pad in pattern.one('Pads').children('Pad'):
         reader.field_into(pad, 'Group', 'integer')
-        reader.field_into(pad, 'PadCorner', 'number')
-        angle_reader(reader, pad, 'PadAngle')
-        reader.fields(pad, ((name, 'number') for name in ('PadShape_X', 'PadShape_Y')))
-        read_terminals(reader, pad, angle_reader=angle_reader)
-        reader.fields(pad, ((name, 'number') for name in ('PadMask_Percent', 'PadMask_EdgeGap',
-            'PadMask_SegmentGap', 'PadMask_SegmentSide')))
-        read_mask_segments(reader, pad)
+        read_pad_extensions(reader, pad, angle_reader=angle_reader)
     for shape in pattern.one('Shapes').children('Shape'):
         replace_point_coordinates(reader, shape)
         read_text_properties(reader, shape, angle_reader=angle_reader)
@@ -203,9 +214,8 @@ def write_pad_extensions(writer, pad):
     write_mask_segments(writer, pad)
 
 
-def write_pattern_extensions(writer, pattern, *, pads=None, drawings=None, holes=None):
-    """Unplaced layout, with optional explicit arrays for generated boundaries."""
-    from .drawing_codec import write_text_properties
+def write_pattern_authoring(writer, pattern):
+    """Write origin display, descriptive metadata and the default physical style."""
     writer.fields(pattern, 'boolean', 'OriginCross OriginCircle')
     writer.fields(pattern, 'integer', 'OriginCommon OriginCourtyard')
     writer.fields(pattern, 'text', 'Name_Description Name_Unique RecoveryCode')
@@ -217,6 +227,12 @@ def write_pattern_extensions(writer, pattern, *, pads=None, drawings=None, holes
     writer.fields(pattern, 'number', 'CustomSwell_New CustomShrink_New PadMask_Percent '
                   'PadMask_EdgeGap PadMask_SegmentGap PadMask_SegmentSide')
     write_mask_segments(writer, pattern)
+
+
+def write_pattern_extensions(writer, pattern, *, pads=None, drawings=None, holes=None):
+    """Unplaced layout, with optional explicit arrays for generated boundaries."""
+    from .drawing_codec import write_text_properties
+    write_pattern_authoring(writer, pattern)
     for pad in pattern.select('Pads/Pad') if pads is None else pads:
         writer.field(pad, 'Group', 'integer')
         write_pad_extensions(writer, pad)

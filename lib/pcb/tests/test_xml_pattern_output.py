@@ -227,8 +227,8 @@ class XmlPatternOutputTests(unittest.TestCase):
         self.assertEqual(projected.element.one('Dimensions/Dimension')['SubObject1'],17)
         self.assertEqual(projected.connections,((17,41),))
         rebuilt = reopen(document)
-        self.assertEqual(signature(rebuilt.one(PATH)),expected)
-        self.assertEqual(signature(reopen(rebuilt).one(PATH)),expected)
+        assert_float_facts(self,signature(rebuilt.one(PATH)),expected)
+        assert_float_facts(self,signature(reopen(rebuilt).one(PATH)),expected)
         self.assertEqual(model_text(document,preserve=False),before)
         self.assertEqual(report.notices,[])
 

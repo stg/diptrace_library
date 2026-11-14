@@ -9,7 +9,7 @@ from dataclasses import replace
 from ...common.references import ReferenceError
 from ...common.reference_edits import preview_references
 from .membership import component_of, get_net
-from .relationships import linked
+from ...common.relationship_fields import linked
 
 
 ENDS = ('trace-end-1', 'trace-end-2')

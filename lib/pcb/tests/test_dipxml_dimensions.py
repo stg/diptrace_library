@@ -29,6 +29,22 @@ def target(document, dimension, side=0):
 
 
 class PcbXmlDimensionTests(unittest.TestCase):
+    def test_calculated_text_extents_do_not_override_dimension_facts(self):
+        original = design(text()).document.select('/Board/Dimensions/Dimension')
+        supplied = text().replace('<Dimension Id=',
+            '<Dimension TextWidth="777" TextHeight="999" Id=')
+        restored = design(supplied).document.select('/Board/Dimensions/Dimension')
+        for before, after in zip(original, restored):
+            self.assertEqual([(child.kind, child.values) for child in before.children()],
+                             [(child.kind, child.values) for child in after.children()])
+            self.assertIsNone(after.child('TextWidth'))
+            self.assertIsNone(after.child('TextHeight'))
+
+    def test_calculated_text_extents_still_require_numeric_values(self):
+        for name in ('TextWidth', 'TextHeight'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                design(text().replace('<Dimension Id=', f'<Dimension {name}="bad" Id='))
+
     def test_source_keys_and_literal_vertices_bind_to_current_geometry(self):
         result = design(text())
         document, board = result.document, result.document.one('/Board')

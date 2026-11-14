@@ -2,7 +2,7 @@
 from ...common.references import ReferenceError
 from ...common.schema import Child, Field, Record
 from .membership import component_of
-from .relationships import linked, reference_field
+from ...common.relationship_fields import linked, reference_field
 
 
 ROLES = ('internal-pad-1', 'internal-pad-2')

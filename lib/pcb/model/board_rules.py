@@ -4,7 +4,7 @@ from dataclasses import replace
 from ...common.references import ReferenceError
 from ...common.schema import Child, Field, Record
 from ...common.reference_edits import preview_references
-from .relationships import linked, reference_field, index_field
+from ...common.relationship_fields import linked, reference_field, index_field
 from .length_matching import DEFAULT_FIXED_LENGTH, DEFAULT_DELTA
 
 
@@ -212,7 +212,7 @@ def validate_reference(document, reference, target):
             with preview_references(document.references, {reference.uid: replace(reference, target=target)}):
                 validate_span(document, reference.source)
     if role in ('net-class-1', 'net-class-2'):
-        from .relationships import linked
+        from ...common.relationship_fields import linked
         other_role = 'net-class-2' if role == 'net-class-1' else 'net-class-1'
         other = linked(reference.source, other_role)
         if other is not None:

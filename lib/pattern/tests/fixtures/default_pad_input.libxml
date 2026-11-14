@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Library Type="DipTrace-PatternLibrary" Version="5.3.5.1" Units="mm" Name="Default pad scalars" Hint="Synthetic control">
+<PadStyles><PadStyle Name="Default" Type="Through" Side="Top" HoleType="Round" Hole="0.4">
+<MainStack Shape="Rectangle" Width="2" Height="1" Corner="37" XOff="0.21" YOff="-0.13"/>
+</PadStyle></PadStyles>
+<Patterns><Pattern Type="Free"><Name>Example</Name><DefPad Style="Default"/>
+<Pads><Pad Id="1" Style="Default" X="0" Y="0"><Number>1</Number></Pad></Pads>
+</Pattern></Patterns></Library>

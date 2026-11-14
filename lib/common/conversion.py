@@ -180,7 +180,7 @@ def export_diagnostics(destination=None):
             key = destination or kwargs.get('format')
             if key is None:
                 from pathlib import Path
-                path = args[1] if len(args)>1 else kwargs.get('path')
+                path = file(args, kwargs)
                 key = Path(path).suffix if path is not None else 'unknown'
             key = key.lower().lstrip('.')
             start = len(report.notices) if report is not None else 0

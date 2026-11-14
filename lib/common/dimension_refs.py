@@ -2,6 +2,50 @@
 from .references import Guard, Index
 
 
+def matches_local_attachment(pattern, mode, anchor, target):
+    """Check an attachment's physical domain in a single footprint frame."""
+    parent = target.parent
+    if parent is None:
+        return False
+    if mode == 0:
+        return target.kind == 'Pad' and parent is pattern.child('Pads')
+    if mode == 2:
+        return target.kind == 'Hole' and parent is pattern.child('Holes') and target['Enabled']
+    if mode == 1:
+        shape = target if target.kind == 'Shape' else parent.parent if parent.kind == 'Points_New' else None
+        if shape is None or shape.parent is not pattern.child('Shapes'):
+            return False
+        return (target.kind == 'pt' if shape['Type'] in (8, 9)
+                else target is shape and shape['Type'] > 0)
+    if mode == 3:
+        terminal = (target if target.kind == 'PadTerminal'
+                    else parent.parent if parent.kind == 'ShapePoints' else None)
+        pad = terminal.parent if terminal is not None else None
+        if pad is None or pad.kind != 'Pad' or pad.parent is not pattern.child('Pads'):
+            return False
+        polygon_vertex = terminal['Type'] == 3 and anchor > 0
+        return target.kind == 'pt' if polygon_vertex else target is terminal
+    return False
+
+
+def local_scopes(pattern, dimension, side, objects):
+    """Collections that constrain an available or unresolved local selector."""
+    mode = dimension['Connected'+side]
+    collection = pattern.child({0: 'Pads', 1: 'Shapes', 2: 'Holes', 3: 'Pads'}.get(mode, ''))
+    scopes = [collection] if collection is not None else []
+    if mode == 1:
+        shape = objects[1].get(dimension['SubObject'+side])
+        if shape is not None and (points := shape.child('Points_New')) is not None:
+            scopes.append(points)
+    elif mode == 3:
+        pad = objects[0].get(dimension['Object'+side])
+        if pad is not None:
+            scopes.append(pad)
+            scopes.extend(points for terminal in pad.children('PadTerminal')
+                          if (points := terminal.child('ShapePoints')) is not None)
+    return tuple(scopes)
+
+
 def _integer(value):
     if isinstance(value, bool):
         return None

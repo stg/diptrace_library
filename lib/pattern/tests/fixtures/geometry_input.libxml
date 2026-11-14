@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Library Type="DipTrace-PatternLibrary" Name="Geometry example" Hint="Independent attachment fixture" Version="4.3.0.5" Units="mm">
+<PadStyles><PadStyle Name="Default" Type="Surface" Side="Top" HoleType="Round" Hole="0">
+<MainStack Shape="Rectangle" Width="2" Height="1" XOff="0" YOff="0"/>
+</PadStyle></PadStyles>
+<Patterns><Pattern Type="Free" RefDes="R" Width="10" Height="5">
+<Name>Example footprint</Name><Value>Example value</Value>
+<Suppliers><PartNumber>Demo-123</PartNumber><Supplier>Example supplier</Supplier><Currency>EUR</Currency></Suppliers>
+<Groups><Group Id="8" X="1" Y="2"/></Groups>
+<DefPad Style="Default"/>
+<Pads><Pad Id="7" Style="Default" X="1" Y="2" Group="8"><Number>1</Number></Pad>
+<Pad Id="17" Style="Default" X="3" Y="4"><Number>2</Number></Pad></Pads>
+<Shapes><Shape Id="30" Type="Line" PadId="17" Group="8" LineWidth="0.2">
+<Points><Item X="0" Y="0"/><Item X="1" Y="1"/></Points>
+</Shape></Shapes>
+<Holes><Hole Id="21" X="4" Y="2" Diam="2" HoleDiam="1" Group="8"/></Holes>
+<Dimensions>
+<Dimension Type="Horizontal" Connected1="Pad" Object1="0" SubObject1="7" Point1="0" Connected2="Pad" Object2="0" SubObject2="17" Point2="0" Layer="Top Dimension" X1="1" Y1="2" X2="3" Y2="4" XD="1" YD="5"/>
+<Dimension Type="Free" Connected1="Shape" Object1="0" SubObject1="30" Point1="0" Connected2="Hole" Object2="0" SubObject2="21" Point2="0" Layer="Top Dimension" X1="0" Y1="0" X2="4" Y2="2" XD="0" YD="5" Group="8"/>
+</Dimensions>
+</Pattern></Patterns></Library>

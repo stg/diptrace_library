@@ -117,8 +117,8 @@ def loads(text: str, *, source: str | None = None, document_factory=Document, re
     return doc
 
 
-def loads_bytes(data, *, source=None, encoding=None, document_factory=Document, retain_source=True) -> Document:
-    """Decode an ASC byte buffer using the same policy as file input."""
+def decode_text(data, *, encoding=None):
+    """Decode ASC bytes and return the text and selected character encoding."""
     if not isinstance(data, (bytes, bytearray, memoryview)):
         raise TypeError('ASC input must be bytes, bytearray or memoryview')
     data = bytes(data)
@@ -130,8 +130,14 @@ def loads_bytes(data, *, source=None, encoding=None, document_factory=Document, 
         text = decode(data)
     else:
         text = data.decode(encoding)
+    return text, encoding
+
+
+def loads_bytes(data, *, source=None, encoding=None, document_factory=Document, retain_source=True) -> Document:
+    """Decode an ASC byte buffer using the same policy as file input."""
+    text, encoding = decode_text(data, encoding=encoding)
     doc = loads(text, source=source, document_factory=document_factory, retain_source=retain_source)
-    doc._source_bytes, doc._source_encoding = data if retain_source else None, encoding
+    doc._source_bytes, doc._source_encoding = bytes(data) if retain_source else None, encoding
     return doc
 
 

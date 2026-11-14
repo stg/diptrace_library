@@ -157,11 +157,38 @@ calculate its fill.
 
 ## Components
 
-Unpublished, experimental, and not ready for use.
+ELI, component ASC and ELIXML all read and write the same editable component
+library. Components own their descriptions, symbol parts and optional physical
+patterns. Pin-to-pad selections, folders and catalogue choices use managed
+references, so reordering or renaming their targets keeps the data coordinated.
+
+| Format | Input | Output |
+| --- | --- | --- |
+| Binary component library (`.eli`) | Schemas 23–33 | Schemas 31–33; default 33 |
+| ASCII component library (`.asc`) | Component dialect 31 | Component dialect 31 |
+| XML component library (`.elixml`) | DipTrace 4.3, 4.9 and 5.3 vocabulary | Releases 4.3.0.5, 4.9.5.0 and 5.3.5.1; default 5.3.5.1 |
+
+Start with [the library guide](doc/LIBRARIES.md), the
+[component catalogue](doc/COMPONENT.md) or the
+[component example](examples/component/create.py). Editing a library reference
+does not load another library or replace an attached pattern.
 
 ## Patterns
 
-Unpublished, experimental, and not ready for use.
+LIB, pattern ASC and LIBXML read and write reusable footprint definitions,
+including pads, drawings, dimensions, 3D attachments and authoring settings.
+The same field, query and reference API applies. Changing a template parameter
+edits that setting; it does not redraw the footprint.
+
+| Format | Input | Output |
+| --- | --- | --- |
+| Binary pattern library (`.lib`) | Schemas 17–26 | Schemas 24–26; default 26 |
+| ASCII pattern library (`.asc`) | Pattern dialect 24 | Pattern dialect 24 |
+| XML pattern library (`.libxml`) | DipTrace 4.3, 4.9, 5.2 and 5.3 vocabulary | Releases 4.3.0.5, 4.9.5.0, 5.2.0.1 and 5.3.5.1; default 5.3.5.1 |
+
+See [the library guide](doc/LIBRARIES.md), the
+[pattern catalogue](doc/PATTERN.md) and the
+[pattern example](examples/pattern/create.py).
 
 ## Validation
 
@@ -178,9 +205,11 @@ The private reference corpus contains:
 | Total disk space | 53.4 GB |
 | Schematics (schema 28–48) | 560 |
 | PCB layouts (schema 31–58) | 714 |
+| Component libraries (schema 23–31) | 633 |
+| Pattern libraries (schema 17–24) | 665 |
 | Source timestamps | 2011–2026 |
 
-The schematic and PCB readers have been checked against original designs and
+The readers have been checked against original designs and library files and
 their canonical exports. Automated checks cover format and version conversion,
 repeated writer/reopen cycles, model behavior and edge cases.
 

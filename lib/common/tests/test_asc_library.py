@@ -1,5 +1,7 @@
 """Library catalogues and explicit path pairs share ASC boundary helpers."""
 import unittest
+from lib.common import asc
+from lib.common.asc_library import loads_library, loads_library_bytes
 
 from lib.common.asc_library import project_catalogs, project_library_paths
 from lib.common.model import Element
@@ -46,6 +48,35 @@ class AscLibraryOutputTests(unittest.TestCase):
         paths.add('Lib','parts.eli').add('Unexpected',1)
         with self.assertRaises(ValueError):
             project_library_paths(paths,'Lib')
+
+
+class LibrarySyntaxTests(unittest.TestCase):
+    def test_byte_input_shares_the_ASC_encoding_and_source_policy(self):
+        for data,expected in ((b'(Library (Name "caf\xe9"))()','caf\u00e9'),
+                              ('\ufeff(Library (Name "\u03a9"))()'.encode('utf-8'),'\u03a9')):
+            with self.subTest(expected=expected):
+                detailed = loads_library_bytes(data)
+                lean = loads_library_bytes(memoryview(data), retain_source=False)
+                self.assertEqual(expected, detailed.one('/Library/Name').values[0])
+                self.assertEqual(expected, lean.one('/Library/Name').values[0])
+                self.assertEqual(data, detailed._source_bytes)
+                self.assertIsNone(lean._source_bytes)
+                self.assertIsNone(lean._source_text)
+
+    def test_canonical_empty_terminator_is_not_an_authored_record(self):
+        text = '(Source "DipTrace-ComLibrary" 24)\n(Library (Name "Example"))\n()\n'
+        document = loads_library(text, retain_source=False)
+        self.assertEqual(('Example',), document.one('/Library/Name').values)
+        self.assertEqual(['Source', 'Library'], [node.kind for node in document.root.children()])
+        with self.assertRaises(ValueError):
+            asc.loads(text)
+
+    def test_optional_marker_does_not_change_quoted_parentheses_or_accept_inner_empty_data(self):
+        document = loads_library('(Library (Name "Example ()"))')
+        self.assertEqual(('Example ()',), document.one('/Library/Name').values)
+        for text in ('(Library ())()', '(Library)()()', '()()', '(Library (Name "unfinished)()'):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                loads_library(text)
 
 
 if __name__ == '__main__':

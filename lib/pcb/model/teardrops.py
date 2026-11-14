@@ -3,7 +3,7 @@ from ...common.drawing_records import POINTS, POINT
 from ...common.references import ReferenceError
 from ...common.schema import Child, Field, Record
 from .board_rules import LAYER_FIELDS
-from .relationships import reference_field, index_field
+from ...common.relationship_fields import reference_field, index_field
 
 
 ROLE = 'trace-teardrop'

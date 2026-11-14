@@ -2,6 +2,8 @@
 from decimal import Decimal
 import unittest
 
+from lib.common.tests.numeric_assertions import assert_float_facts
+
 from lib.common.asc import dumps as model_text
 from lib.common.conversion import ConversionReport
 from lib.common.references import ReferenceError
@@ -83,7 +85,7 @@ class XmlMarkingOutputTests(unittest.TestCase):
             if component.schema.fields[name].getter is None:
                 self.assertEqual(actual.get(name), component.get(name), name)
         self.assertEqual(len(actual.select('Pattern/Shapes/Shape')), 1)
-        self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), expected_cache)
+        assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), expected_cache)
         self.assertIn('generated-marking-geometry', {notice.rule for notice in report.infos})
         self.assertEqual(report.warnings, [])
         self.assertEqual(model_text(document, preserve=False), before)

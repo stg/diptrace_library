@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 
 from lib import ConversionReport, document_family, format_capabilities, read, serialize
-from apps.common.cli import Console, PROCESSING_ERRORS, add_report_argument
+from apps.common.cli import Console, PROCESSING_ERRORS, add_report_argument, version_argument
 from apps.common.paths import require_distinct_paths
 from .context import load_context
 
@@ -37,7 +37,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="diptrace_convert", description=__doc__)
     parser.add_argument("input", type=Path, help="design to read; content identifies its format")
     parser.add_argument("output", type=Path, help="design to write; extension selects its format")
-    parser.add_argument("--version", type=int, help="destination schema; defaults to the library's output version")
+    parser.add_argument("--version", type=version_argument,
+                        help="destination schema or application version; defaults to the library's output version")
     parser.add_argument("--context", type=Path, help="optional export overrides in JSON")
     parser.add_argument(
         "--windows-fonts", action="store_true",

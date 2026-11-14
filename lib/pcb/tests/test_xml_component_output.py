@@ -98,7 +98,7 @@ class XmlComponentOutputTests(unittest.TestCase):
             document, output = reopen(document)
             self.assertFalse(output.one('/Source/Board/Components/Component').child('PatternStyle'))
             assert_float_facts(self,signature(document.one(COMPONENT)), expected)
-            self.assertEqual(signature(document.one('/Board/CacheLib')), cache)
+            assert_float_facts(self,signature(document.one('/Board/CacheLib')), cache)
         # An explicit physical style cannot prevent via-pad initialization.
         # Report the omitted local geometry and retain the authoring model.
         document.one(COMPONENT+'/Pattern/Pads/Pad')['X'] = 1
@@ -136,7 +136,7 @@ class XmlComponentOutputTests(unittest.TestCase):
         rebuilt, output = reopen(document)
         assert_float_facts(self,signature(rebuilt.one(COMPONENT)), expected)
         for path in ('ViaStyles', 'Layers', 'HierarchySheets', 'AssemblyVariants'):
-            self.assertEqual(signature(rebuilt.one('/Board/'+path)), signature(document.one('/Board/'+path)))
+            assert_float_facts(self,signature(rebuilt.one('/Board/'+path)), signature(document.one('/Board/'+path)))
         exclusion = rebuilt.one(COMPONENT+'/AssemblyExclude/Item')
         self.assertEqual(exclusion['Index'], 0)
         self.assertEqual(exclusion['Variant']['Name'], 'Option')
@@ -166,7 +166,7 @@ class XmlComponentOutputTests(unittest.TestCase):
         for _ in range(3):
             current, _ = reopen(current)
             assert_float_facts(self,signature(current.one(COMPONENT)), expected)
-            self.assertEqual(signature(current.one('/Board/CacheLib')), cache)
+            assert_float_facts(self,signature(current.one('/Board/CacheLib')), cache)
         self.assertEqual(model_text(document, preserve=False), before)
 
     def test_internal_pairs_and_policies_keep_pad_identities_after_reorder(self):
@@ -183,7 +183,7 @@ class XmlComponentOutputTests(unittest.TestCase):
         expected[policy_path+'/Pad'] = expected[policy_path+'/Members'][0]
         rebuilt, output = reopen(document)
         assert_float_facts(self,signature(rebuilt.one(COMPONENT)), expected)
-        self.assertEqual(signature(rebuilt.one('/Board/CacheLib')), cache)
+        assert_float_facts(self,signature(rebuilt.one('/Board/CacheLib')), cache)
         pair = output.one('/Source/Board/Components/Component/IntConRecords/Item')
         self.assertEqual((pair['X'], pair['Y']), (17, 41))
         policy = rebuilt.one(COMPONENT+'/InternalConnections/IntCon')

@@ -1,0 +1,46 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Library Type="DipTrace-ComponentLibrary" Version="5.3.5.1" Name="Component parameter controls" Hint="Independently authored symbol and footprint" Units="mm"><Library Type="DipTrace-PatternLibrary" Version="5.3.5.1" Units="mm">
+<Categories />
+<PadStyles>
+<PadStyle Name="Pad0" Type="Through" Side="Top" HoleType="Obround" Hole="0.33" HoleH="0.44">
+<MainStack Shape="Rectangle" Width="2.35" Height="1.25" Corner="12.5" XOff="0.11" YOff="0.22" />
+<Terminals><Terminal Shape="Rectangle" X="0.12" Y="0.23" Angle="0.34" Width="0.75" Height="0.85" Corner="11" /></Terminals><MaskPaste TopMask="Open" BotMask="Tented" TopPaste="Segments" BotPaste="Solder" Segment_Percent="33" Segment_EdgeGap="0.44" Segment_Gap="0.55" Segment_Side="0.66" CustomSwell="0.12" CustomShrink="0.23"><TopSegments><Item X1="0.1" Y1="0.2" X2="0.3" Y2="0.4" /></TopSegments><BotSegments /></MaskPaste></PadStyle>
+</PadStyles>
+<Patterns>
+<Pattern Type="Free" Mounting="None" Orientation="0" LockTypeChange="N" Width="6.0" Height="1.0" Float1="1.1" Float2="2.2" Float3="3.3" Int1="3" Int2="4" PatternStyle="Physical0">
+<Name>Example package</Name>
+<Origin X="0.123" Y="0.234" Cross="N" Circle="Y" Common="Show" Courtyard="Hide" />
+<DefPad Style="Pad0" />
+<Pads>
+<Pad Id="1" Style="Pad0" Angle="0.0" Locked="N" Side="Top" DefStyle="Y" X="-2.0" Y="-0.0">
+<Number>1</Number>
+</Pad>
+<Pad Id="2" Style="Pad0" Angle="0.0" Locked="N" Side="Top" DefStyle="Y" X="2.0" Y="-0.0">
+<Number>2</Number>
+</Pad>
+</Pads>
+<Shapes>
+<Shape Id="1" Type="Text" Locked="Y" Layer="Top Silk" FontVector="Y" FontName="Tahoma" FontScale="1.5" LineSpacing="1.4" FontWidth="-2.0" FontSize="7" FontSizeFloat="7.25" FontMono="Y" TextShow="Any Text" Angle="0.0" HorzAlign="Left" VertAlign="Top" TextAlign="Left" AllLayers="N" PadId="2">
+<Lines>
+<Item>First line</Item>
+<Item>Second line</Item>
+</Lines>
+<Points>
+<Item X="0.0" Y="-0.0" />
+</Points>
+</Shape>
+</Shapes>
+<Holes />
+<Dimensions />
+<Model3D Mirror="Y" NoSearch="Y" Units="mm" IPC_XOff="1.0999999999999999" IPC_YOff="2.1999999999999997" AutoHeight="3.3000000000000003" AutoColor="1193046" Type="File" KeepPins="Y">
+<Filename>
+<Path>example.step</Path>
+<Var>example.step</Var>
+</Filename>
+<Rotate X="11.0" Y="22.0" Z="33.0" />
+<Offset X="4.3999999999999995" Y="5.5" Z="6.6000000000000005" />
+<Zoom X="1.1" Y="1.2" Z="1.3" />
+</Model3D>
+<Name_Description>Independent physical control</Name_Description><Name_Unique>Example-package</Name_Unique><Manufacturer>Example footprint maker</Manufacturer><RecoveryCode Generator="N" Model="N">Example-R1</RecoveryCode></Pattern>
+</Patterns>
+</Library><Components><Component><Part RefDes="U" PartType="Normal" Type="Free" Int1="5" Int2="6" Width="8" Height="6" LockTypeChange="Y" SubFolderIndex="-1"><Name>Example component</Name><PartName>Gate A</PartName><Value>Control value</Value><Manufacturer>Example maker</Manufacturer><Datasheet>https://example.invalid/device</Datasheet><Origin X="0.15" Y="0.25" /><Pins><Pin X="-1" Y="0" PadId="1" Length="2.5" Orientation="0" Type="Default" ElectricType="Passive" Locked="N" ShowName="Y"><Name>Input</Name><PadNumber>1</PadNumber><NameFont Size="3" FontSizeFloat="3.25" FontMono="Y" Width="-1" Scale="1.2" /></Pin><Pin X="1" Y="0" PadId="2" Length="2.5" Orientation="0" Type="Default" ElectricType="Passive" Locked="N" ShowName="Y"><Name>Output</Name><PadNumber>2</PadNumber><NameFont Size="3" FontSizeFloat="3.25" FontMono="Y" Width="-1" Scale="1.2" /></Pin></Pins><Shapes><Shape Type="Line" LineWidth="0.25" Locked="N"><Points><Item X="0" Y="0" /><Item X="1" Y="0" /></Points></Shape></Shapes><Pattern Style="Physical0" /></Part></Component></Components></Library>

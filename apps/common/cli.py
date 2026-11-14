@@ -6,6 +6,15 @@ LEVELS = {"info": 0, "warning": 1, "error": 2}
 PROCESSING_ERRORS = (OSError, ValueError, TypeError, LookupError, NotImplementedError)
 
 
+def version_argument(value):
+    """Keep schema numbers numeric and application releases as text.
+
+    The selected adapter decides which versions exist; command-line parsing
+    only preserves the two kinds of version selector it accepts.
+    """
+    return int(value) if value.isascii() and value.isdecimal() else value
+
+
 def add_report_argument(parser, *, default="warning"):
     parser.add_argument(
         "--report-level", choices=LEVELS, default=default,

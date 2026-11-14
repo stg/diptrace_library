@@ -3,6 +3,7 @@ import math
 from ..numbers import calculation_number
 from ..geometry import aligned_text_box
 from .vector import builtin_vector_metrics
+from .vector import TextMetrics
 
 
 def _vector_pen(size, width_choice):
@@ -15,6 +16,16 @@ def _vector_pen(size, width_choice):
 
 def _scaled_width(width, scale):
     return width*scale if round(scale*100) != 100 and width >= .0001 else width
+
+
+def pin_name_metrics(pin, *, font=None):
+    """Vector pin-name dimensions, independent of pin placement/orientation."""
+    size = float(pin['NameFontSize'])
+    pen = _vector_pen(size, float(pin['NameFontWidth']))
+    measured = (font or builtin_vector_metrics()).measure(pin['Name'], size=size/1.3,
+        spacing=pen*2, monospaced=pin.get('NameFontMono', False))
+    return TextMetrics(max(0., _scaled_width(measured.width, float(pin['NameFontScale']))+pen),
+                       measured.height+pen)
 
 
 def _text_inputs(shape, kind):

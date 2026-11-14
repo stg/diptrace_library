@@ -5,7 +5,8 @@ import unittest
 from lib.common.model import Element
 from lib.common.footprint_objects import new_pattern, new_pad
 from lib.common.footprint_records import TERMINAL
-from lib.pcb.formats.assembly.pad_defaults import matches_defaults, normalize_standard_pads
+from lib.common.pad_defaults import matches_defaults
+from lib.pcb.formats.assembly.pad_defaults import normalize_standard_pads
 from lib.pcb.formats.assembly.assemble import assemble_core
 from lib.pcb.formats.dip.legacy_geometry import rebase_components
 from lib.pcb.tests.test_core_assembly import fixture as core_fixture

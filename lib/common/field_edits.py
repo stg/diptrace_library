@@ -139,6 +139,21 @@ class ReferenceValueEdit:
             graph.finish_structure((self.parent,))
 
 
+def prepare_reference_attachment(document, base, *, specifications=(), issues=()):
+    """Combine structural edits and new scoped relationships before attachment."""
+    from .references import UnresolvedReference
+    from .reference_edits import preview_references
+    if not specifications and not issues:
+        return base
+    graph = document.references
+    with preview_slots(base.values):
+        additions = graph._prepare_additions(specifications, structure=base)
+        with preview_references(graph, {entry.reference.uid: entry.reference for entry in additions.bindings}):
+            for source, message, indices, collections, guards in issues:
+                graph._validate_reference_guards(UnresolvedReference(source, message, indices, collections, guards), {})
+    return ReferenceValueEdit(document, additions, None, tuple(issues))
+
+
 def prepare_reference_edit(document, record, field, values, *, created, base,
                            specifications=(), issues=()):
     """Preflight values and newly activated links as one atomic named edit."""

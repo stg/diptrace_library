@@ -5,7 +5,7 @@ An unavailable calculation returns None; unresolved identities remain errors.
 """
 from ...common.geometry import transform_point
 from .dimensions import LOCAL_ROLES, BOARD_ROLES, BOARD_VERTEX_TYPES
-from .relationships import linked
+from ...common.relationship_fields import linked
 
 
 def _point(node):

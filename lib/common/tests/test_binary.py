@@ -249,6 +249,20 @@ class BinaryTests(unittest.TestCase):
         self.assertEqual(reader.pos, len(data))
         self.assertEqual(BinaryReader(bytes.fromhex('0002 d800 0041')).text(), '\ud800A')
 
+    def test_one_byte_ansi_lengths_preserve_the_following_field(self):
+        reader = BinaryReader(b'\x03A\x81\x9f\x01', unicode_text=False, ansi_length_bytes=1)
+        self.assertEqual('A\x81\u0178', reader.text())
+        self.assertEqual(4, reader.pos)
+        self.assertTrue(reader.boolean())
+        # Selecting the older length prefix must not change UTF-16 decoding.
+        reader = BinaryReader(bytes.fromhex('0002 d800 0041'), ansi_length_bytes=1)
+        self.assertEqual('\ud800A', reader.text())
+
+    def test_ansi_length_configuration_is_explicit(self):
+        for value in (0, 2, 4, True, '1'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                BinaryReader(b'', ansi_length_bytes=value)
+
     def test_bad_fields_raise_family_error_without_consuming_following_data(self):
         class BadInput(ValueError):
             pass

@@ -14,13 +14,18 @@ python -m apps.diptrace_check design.dch --format dch --format asc --format dchx
 The input is detected from its content and is never overwritten. By default the
 check exercises that same format using the library's default output version.
 `--format` selects another serialization; it can be repeated. `--version` selects
-an exact supported output schema when checking one format. No generated design
+an exact supported output schema or application release when checking one
+format. No generated design
 files are saved: each round trip happens in memory.
 
-Schematics and PCB layouts are supported through the same family-neutral library
-API. Component and pattern checks become available when those adapters are
-published. An unavailable family or version produces the library's normal error;
-the command does not enable experimental adapters.
+The same command checks schematics, PCB layouts, component libraries and pattern
+libraries through the common library API. Format and version support comes from
+the [library's capability tables](../../README.md), with no separate app limits.
+An unavailable family or version produces the library's normal error.
+
+```sh
+python -m apps.diptrace_check parts.eli --format elixml --version 5.3.5.1
+```
 
 ## Compare with DipTrace exports
 

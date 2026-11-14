@@ -29,3 +29,16 @@ def map_key(owner, name, key, mapping):
     keys = owner.child('UnresolvedKeys') or owner.add('UnresolvedKeys')
     keys.add('Key', name, key)
     return -1
+
+
+def public_keys(records, reserved=(), *, start=0):
+    """Allocate ordered output keys without giving a missing key a target."""
+    used = set(reserved)
+    result = {}
+    for index, _ in enumerate(records, start):
+        key = index
+        while key in used:
+            key += 1
+        result[index] = key
+        used.add(key)
+    return result

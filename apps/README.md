@@ -20,8 +20,9 @@ pathspecs, ownership, hooks and day-to-day use.
 
 ## Format and version conversion
 
-`diptrace_convert` recognizes the input format, chooses the output format from
-its extension and can select an output version. See
+`diptrace_convert` recognizes designs and library definitions, chooses the output
+format from its extension and can select an output version. It works with all
+four document families. See
 [conversion options](diptrace_convert/README.md).
 
 ```sh

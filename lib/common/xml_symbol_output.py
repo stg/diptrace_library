@@ -75,7 +75,9 @@ def project_symbol_drawing(shape, *, units, group=-1, fractional_font=True, phys
 
 
 def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(), connections=(),
-                   pattern_style=None, datasheet='', report=None, _factory=Element):
+                   pattern_style=None, datasheet='', report=None, description=None,
+                   include_resources=True, group_tag='Item', group_enabled=False,
+                   include_empty_folder=False, _factory=Element):
     """Serialize content selected by the owning family adapter.
 
     Groups are (key, x, y) tuples; connections are public pad-key pairs.
@@ -92,9 +94,10 @@ def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(),
         warn(report, 'cached-drawing-flags', destination,
              'XML omits cached symbol visibility and generation flags', flagged,
              recoverability='drawing geometry and text remain; these flags default to false on import')
+    description = part if description is None else description
     result = _factory('Part')
-    if part.values[1]:
-        set_attribute(result, 'RefDes', part.arguments[1])
+    if description['RefDes']:
+        set_attribute(result, 'RefDes', description['RefDes'])
     set_attribute(result, 'PartType', enum_text(part.scalar('PartType'), PART_TYPES))
     if part.scalar('ShowNumbers') > 0:
         set_attribute(result, 'ShowNumbers', enum_text(part.scalar('ShowNumbers'), SHOW))
@@ -104,15 +107,15 @@ def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(),
     for name in ('Width', 'Height'):
         set_attribute(result, name, numeric(units.length(part._field_arguments(name)[0])))
     set_attribute(result, 'LockTypeChange', part.scalar('LockProperties'))
-    if part.scalar('SubfolderIndex', -1) >= 0:
-        set_attribute(result, 'SubFolderIndex', part.scalar('SubfolderIndex'))
-    if part.values[0]:
-        field(result, 'Name', part.arguments[0])
+    if include_empty_folder or description.scalar('SubfolderIndex', -1) >= 0:
+        set_attribute(result, 'SubFolderIndex', description.scalar('SubfolderIndex'))
+    if description['Name']:
+        field(result, 'Name', description['Name'])
     field(result, 'PartName', part.scalar('PartName'))
     if part.scalar('Value'):
         field(result, 'Value', part.scalar('Value'))
     point_attributes(result.add('Origin'), part._field_arguments('Origin_X')[0], part._field_arguments('Origin_Y')[0], units)
-    datasheet = part.scalar('Datasheet', datasheet)
+    datasheet = description.scalar('Datasheet', datasheet)
     if datasheet:
         field(result, 'Datasheet', datasheet)
     model = result.add('SpiceModel')
@@ -123,12 +126,12 @@ def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(),
         details = model.add('Details')
         for line in part.select('ModelBody/Line'):
             field(details, 'Item', line.arguments[0])
-    if part.scalar('Manufacturer'):
-        field(result, 'Manufacturer', part.scalar('Manufacturer'))
-    category = project_category(part, _factory=_factory)
+    if description.scalar('Manufacturer'):
+        field(result, 'Manufacturer', description.scalar('Manufacturer'))
+    category = project_category(description, _factory=_factory)
     if category is not None:
         result.append(category)
-    suppliers = part.child('Suppliers')
+    suppliers = description.child('Suppliers') if include_resources else None
     fields = ('PartNumber', 'Manufacturer', 'Pattern', 'Supplier', 'Currency')
     if suppliers is not None and any(suppliers.scalar(name) for name in fields):
         target = result.add('Suppliers')
@@ -145,10 +148,12 @@ def project_symbol(part, *, units, destination, pins=(), drawings=(), groups=(),
     if groups:
         target = result.add('Groups')
         for key, x, y in groups:
-            item = target.add('Item')
+            item = target.add(group_tag)
+            if group_enabled:
+                set_attribute(item, 'Enabled', True)
             set_attribute(item, 'Id', key)
             point_attributes(item, x, y, units)
-    users = part.select('UserFields/UserField')
+    users = description.select('UserFields/UserField') if include_resources else ()
     if users:
         target = result.add('AddFields')
         for user in users:

@@ -15,6 +15,7 @@ from ..locking import internal_commands
 from ..setup import change_selection, install, uninstall
 from ..sync import candidates, synchronize
 from .. import sync as engine
+import lib
 from lib import ConversionNotice
 
 
@@ -239,23 +240,56 @@ class InstallationTests(unittest.TestCase):
         self.assertTrue(self.text.exists())
 
     def test_unavailable_component_and_pattern_families_report_library_identity(self):
-        change_selection(self.repo, ['*'], enabled=False)
-        for native, family in (('eli', 'component'), ('lib', 'pattern')):
-            source = self.root / ('unavailable.' + native)
-            source.write_bytes(b'unavailable family fixture')
-            for fmt in ('asc', 'xml'):
-                config = load_config(self.repo)
-                config['text_format'] = fmt
-                config['rules'] = [{'pathspecs': [source.name], 'enabled': True}]
-                (self.root / CONFIG).write_bytes(json_bytes(config))
-                before = self.snapshot(source)
-                errors = io.StringIO()
-                with redirect_stderr(errors), redirect_stdout(io.StringIO()):
-                    self.assertEqual(main(['--repo', str(self.root), 'sync']), 1)
-                self.assertIn(family, errors.getvalue())
-                self.assertIn(native, errors.getvalue())
-                self.assertEqual(self.snapshot(source), before)
-                self.assertFalse((self.root / (source.name + '.git.json')).exists())
+        # Exercise an unavailable adapter explicitly as built-in support grows.
+        available = {family: adapter for family, adapter in lib._FAMILY_ADAPTERS.items()
+                     if family not in ('component', 'pattern')}
+        with patch.dict(lib._FAMILY_ADAPTERS, available, clear=True):
+            change_selection(self.repo, ['*'], enabled=False)
+            for native, family in (('eli', 'component'), ('lib', 'pattern')):
+                source = self.root / ('unavailable.' + native)
+                source.write_bytes(b'unavailable family fixture')
+                for fmt in ('asc', 'xml'):
+                    config = load_config(self.repo)
+                    config['text_format'] = fmt
+                    config['rules'] = [{'pathspecs': [source.name], 'enabled': True}]
+                    (self.root / CONFIG).write_bytes(json_bytes(config))
+                    before = self.snapshot(source)
+                    errors = io.StringIO()
+                    with redirect_stderr(errors), redirect_stdout(io.StringIO()):
+                        self.assertEqual(main(['--repo', str(self.root), 'sync']), 1)
+                    self.assertIn(family, errors.getvalue())
+                    self.assertIn(native, errors.getvalue())
+                    self.assertEqual(self.snapshot(source), before)
+                    self.assertFalse((self.root / (source.name + '.git.json')).exists())
+
+    def test_library_xml_export_and_rebuild_use_their_own_version_selectors(self):
+        from lib.component import new_library as components, new_component
+        from lib.pattern import new_library as patterns, new_pattern
+
+        self.binary.unlink()
+        for native, version, factory, collection, item in (
+                ('eli', 31, components, '/Library/Components', new_component),
+                ('lib', 24, patterns, '/Library/Patterns', new_pattern)):
+            with self.subTest(native=native):
+                change_selection(self.repo, ['*'], enabled=False)
+                change_selection(self.repo, ['*.' + native], enabled=True)
+                document = factory('Examples')
+                document.one(collection).append(item('Example'))
+                binary = self.root / ('parts.' + native)
+                text = self.root / (binary.name + '.git.xml')
+                metadata = self.root / (binary.name + '.git.json')
+                lib.write(document, binary, version=version)
+                original = self.snapshot(binary)
+                self.export(stage=True)
+                self.assertEqual(self.snapshot(binary), original)
+                self.assertEqual(lib.input_identity(text.read_bytes()).version,
+                                 lib.format_capabilities(native + 'xml').default_write_version)
+                self.assertEqual(json.loads(metadata.read_bytes())['binary']['version'], version)
+                binary.unlink()
+                self.export()
+                self.assertEqual(lib.input_identity(binary.read_bytes()).version, version)
+                rebuilt = lib.read(binary)
+                self.assertEqual(rebuilt.one(collection + '/*')['Name'], 'Example')
 
     def pcb_git_workflow(self, text_format):
         from lib import ConversionReport, input_identity, read, serialize

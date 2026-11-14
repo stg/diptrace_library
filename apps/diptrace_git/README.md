@@ -82,12 +82,15 @@ If native files are already tracked, use `enable --untrack '*.dch'`, or
 `sync --untrack --stage` after selecting them. This removes native files from the
 index while preserving local files and existing history.
 
-Schematics (`.dch`) and PCB layouts (`.dip`) are supported with ASC or XML
-artifacts. Use `enable '*.dip'` to select layouts. Dispatch is also prepared for
-component (`.eli`) and pattern (`.lib`) libraries; those adapters remain
-unavailable. Unsupported families and reconstruction versions produce library
-errors. See the [schematic](../../README.md#schematics) and
-[PCB](../../README.md#pcb-layouts) support tables.
+Schematics (`.dch`), PCB layouts (`.dip`), component libraries (`.eli`) and pattern
+libraries (`.lib`) support ASC or XML artifacts. Select each with its native
+extension, such as `enable '*.lib'`. Unsupported families and reconstruction
+versions produce library errors. See the [library's family support tables](../../README.md)
+for the supported formats and versions.
+
+The companion uses a matching XML version when the adapter supports the binary
+schema as a selector; otherwise it uses that XML adapter's default. Reconstruction
+still uses the binary version recorded in the JSON companion.
 
 ### After cloning
 

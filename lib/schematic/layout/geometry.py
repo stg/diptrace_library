@@ -2,49 +2,7 @@
 import math
 
 from ...common.geometry import (Bounds, circular_arc_bounds)
-
-
-def _enabled(node, field):
-    return node.scalar(field) in (True, 'Y')
-
-
-def symbol_bounds(part):
-    """Local symbol bounds from enabled pins and ordinary non-text drawings.
-
-    This is the authoring geometry. Generated markings and text need a font
-    layout service and do not determine this box. The placed position, rotation
-    and pen width are deliberately outside this local coordinate calculation.
-    """
-    from ...common.unit_views import UnitElement
-    if isinstance(part, UnitElement):
-        return part._scope.bounds(symbol_bounds(part.model))
-    boxes = []
-    pins = part.child('Pins')
-    if pins:
-        box = Bounds.from_points(pin.values[1:3] for pin in pins.children('Pin')
-                                 if _enabled(pin, 'Enabled'))
-        if box:
-            boxes.append(box)
-    shapes = part.child('Shapes')
-    for shape in shapes.children('Shape') if shapes else ():
-        if not _enabled(shape, 'Enabled') or _enabled(shape, 'MarkingGenerated') or shape.scalar('Type') == 10:
-            continue
-        geometry = shape.child('Points_New') or shape.child('Points')
-        points = [point.values[:2] for point in geometry.children('pt')] if geometry else []
-        if shape.scalar('Type') == 2:
-            if len(points) != 3:
-                raise ValueError(f'{shape.path}: an arc requires three defining points')
-            box = circular_arc_bounds(*points)
-        else:
-            box = Bounds.from_points(points)
-        if box:
-            boxes.append(box)
-    if not boxes:
-        return None
-    result = boxes[0]
-    for box in boxes[1:]:
-        result = result.union(box)
-    return result
+from ...common.symbol_geometry import symbol_bounds
 
 
 def pattern_bounds(pattern):

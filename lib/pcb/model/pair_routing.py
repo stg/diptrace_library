@@ -3,7 +3,7 @@ from dataclasses import replace
 
 from ...common.reference_edits import preview_references
 from ...common.references import ReferenceError
-from .relationships import linked
+from ...common.relationship_fields import linked
 from .routing import PAIR_NETS, ancestor, pair_net, pad_pair, point_trace, trace_net, is_pair, owned_pair
 
 

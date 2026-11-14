@@ -344,6 +344,8 @@ equal pad geometry while retaining independent default-style choices.
 Mounting=None and dimension Connected=None map to the existing unassigned -1.
 Optional XML TextWidth/TextHeight are calculated extents; imports use editable
 font, text and anchor facts and do not retain redundant historical measurements.
+This includes dimension labels in board and standalone footprint XML. Supplied
+numeric hints do not override their font settings or defining geometry.
 Newer placed BaseName, Manufacturer, Datasheet and PartString fields map directly
 to existing component properties.
 
@@ -1494,6 +1496,22 @@ values, attach it to a pattern pad and convert to ASC. Surface and round variant
 expose the retained settings there. Removing HoleH from the XML distinguishes
 the inherited height from an explicit zero. No external file lookup is needed.
 
+PHYSICAL_RECOVERY_SETTINGS
+-------------------------
+RecoveryCode text and its Generator/Model switches are separate authoring
+settings. XML retains nondefault switches even when the template text is empty;
+an absent RecoveryCode element implies empty text and both switches enabled.
+Do not discard disabled switches merely because no template is currently set.
+The same physical-definition mapping serves standalone libraries and design
+caches. An empty default element may be omitted without losing meaning.
+
+An external derivation imports a small XML footprint with empty RecoveryCode
+text and explicit Generator="N"/Model="N", then saves binary and ASC copies.
+The saved switches distinguish accepted empty content from omitted defaults.
+Repeat with enabled switches and nonempty text, and compare XML exports across
+editor releases; some older exports omit empty text despite accepting its
+explicit settings on import. Our output retains the supported settings.
+
 XML_PAD_INACTIVE_GEOMETRY
 -------------------------
 Pad-style MainStack can retain Corner, XOff, YOff and Points independently of
@@ -1793,6 +1811,22 @@ text exports expose which fields initialize and distinguish the hole's retained
 3D attachment from the via's empty one. Include an ordinary component and a
 cached definition as independent controls. A declared XML via with several
 physical objects distinguishes construction from subsequent classification.
+
+XML_INACTIVE_PASTE_SETTINGS
+---------------------------
+Segment_Percent, Segment_EdgeGap, Segment_Gap and Segment_Side remain editable
+pad-style settings even when neither paste side selects Segments. XML output
+supplies them explicitly, including zero dimensions, and retains existing
+segment lists. Placed overlays additionally supply common states and empty lists
+where necessary to clear inherited template values. No mode change or loss
+diagnostic is needed to retain these supported XML facts.
+
+An external derivation imports a small XML library with Common paste mode and
+distinct segment dimensions, then saves binary and ASC copies. The saved values
+show that import accepts the inactive settings. Repeat with Segments selected,
+both standalone library families and older/current editors. Canonical XML export
+may omit inactive dimensions even though its importer accepts them; that omission
+does not require our writer to discard the settings.
 
 PCB_XML_PAD_INHERITANCE
 -----------------------
@@ -2389,6 +2423,241 @@ This exposes the sign boundary separately from loss of upper bits. It is a
 concrete derivation procedure, not a claim of a fresh application experiment.
 Portable checks cover both family writers, exact bytes, unchanged model values,
 structured warnings and invalid domains.
+
+STANDALONE_PHYSICAL_TEXT_STROKE
+Text footprint drawings use FontWidth for their stroke. Their geometric Width
+slot is inactive, like PenWidth on symbol text, and is absent on normal import
+and construction. Lines and other geometric drawings keep their Width. Writers
+generate required compatibility slots on detached views; they do not add a
+second independently meaningful text stroke to the source model.
+
+An external derivation can vary only the geometric Width in an ordinary ASC
+text drawing while retaining FontWidth, text and font settings. Conversions
+expose the resulting stroke slots, text extents and group envelopes. The
+geometric slot can reset to the receiver's default with unchanged text geometry;
+that default is environment-dependent, not a universal model constant.
+
+STANDALONE_DEFAULT_PAD_GEOMETRY
+Default pad corner percentage and X/Y copper offsets are separate facts, using
+PadCorner, PadShape_X and PadShape_Y. Standalone LIB revisions20 onward carry
+the three consecutive scalar cells in that order; earlier input supplies their
+construction defaults. Ordinary XML with distinct Corner/XOff/YOff values,
+canonical binary/ASC conversions and scalar encoding correlation establish
+their meanings without requiring application implementation details.
+
+STANDALONE_LIBRARY_GROUP_CENTRES
+--------------------------------
+Standalone group identity and membership are model facts. Id is the current
+local position; X/Y are calculated centres of the current member-selection
+envelope. There is no stored second position or previous-geometry cache. Import
+consumes serialized centres without requiring font measurement. Reordering groups
+updates positional projections; editing a member, its text/points or membership
+updates calculated consumers through the normal reference dependency system.
+
+Physical groups use main pad geometry, separate holes, drawing/arc bounds, full
+text boxes and dimension defining points with their selection clearance. Tested
+remote pad terminals remain authored data without enlarging the main-pad group
+envelope. Symbol groups include pin connection lines, symbol reach and pin names;
+pin-number labels do not enter that group calculation. Names remain readable in
+the four pin directions. The alternate name orientation rotates around the text
+start corner, with authored shifts retained. Strokes do not expand these bounds.
+
+Every output regenerates group centres after destination adaptation, using the
+receiver's text profile. ExportContext.text_layout can override calculations in
+binary, ASC and XML, without becoming model data. Ordinary model access uses the
+current library profile. Vector measurements are self-contained; system-font
+boxes use the existing optional measurement provider. An empty group has centre
+zero because it has no contributing geometry, not because zero marks a missing
+cache. Unsupported calculations still fail explicitly rather than replaying an
+old centre or silently supplying a guessed one.
+
+An external derivation groups a known distant marker with an isolated member.
+Exercise the editor's group-selection refresh with a controlled drag, rotate the
+refreshed group a quarter turn, and export the changed member coordinates. Those
+coordinates reveal the rotation pivot independently of saved cache slots. Twice
+the pivot minus the marker's known extreme and translation recovers the tested
+member's opposite envelope extreme. Repeat with the opposite marker corner.
+Known text widths/heights separate label clearances and alignment from font
+measurement; independently changing name shifts/orientation isolates placement.
+A calibrated visible selection rectangle provides an alternative observation.
+Simply saving/exporting does not establish that a cached centre was refreshed.
+
+STANDALONE_LIBRARY_CATALOGUE_SELECTIONS
+--------------------------------------
+Standalone pattern and component entries select their primary catalogue Category
+by identity. Classification rows select TypeDefinition and SubTypeDefinition;
+the public Type and SubType fields remain their familiar text labels. Declared
+keys and labels project from the selected definitions and follow renames or key
+changes. Reordering does not change a declared key. Type selections belong to
+the chosen category; subtype selections belong to the chosen type. Clear child
+selections before changing to an incompatible parent. These checks are atomic.
+
+Assigning a primary category name/key, or a classification name/key, deliberately
+selects a unique matching definition in that scope. Detached construction can
+still supply both raw fields before attachment. A missing or conflicting pair
+imports as an explicit unresolved selection, without guessing which field wins.
+Its raw fields remain inspectable; reading the relationship raises ReferenceError.
+Resolve or clear it before editing its guarded catalogue scope. Ordinary named
+edits, complete-entry attachments, copies and clones maintain these relationships.
+Component parts forward shared descriptions to their owning component. Physical
+classifications on an attached footprint use a separate scope and are not bound
+to that component's logical catalogue.
+
+Standalone XML import resolves nonempty classification labels by name and adds
+definitions for previously unknown names. An empty primary category label is
+unassigned. library-catalogue-normalization reports these equivalent changes as
+info. The model retains existing declared resource keys rather than requiring
+the receiving editor's particular resource allocation order. Binary/ASC imports
+retain conflicting or empty key/label pairs explicitly; they do not infer labels
+from keys. Their outputs can retain those unresolved pairs. XML output adapts
+them through its named catalogue and reports library-catalogue-selection as a
+warning; this also covers an unnamed primary selection, which XML import makes
+unassigned. The original source model remains unchanged.
+
+An external derivation uses two categories with different names and sparse keys,
+then two types and subtypes in each category. Independently vary selected names
+and keys in ordinary XML and binary files. Canonical save/export distinguishes
+retained binary pairs from XML's name-based resolution and creation of new names.
+Readable outputs expose the selected definitions and their scoped keys. Rename,
+reorder, copy and repeat-conversion tests exercise our coordinated editing and
+detached projection independently of that import behavior.
+
+STANDALONE_COMPONENT_USER_FIELDS
+--------------------------------
+User fields belong to the component and are shared by its parts. A text drawing's
+UserField selection follows that field's identity; its FontType20+ projection
+updates when fields reorder. Clear UserField to select literal text, or choose
+another built-in FontType after clearing. Neither field edits nor retargeting
+replace authored TextLine content: the selection describes later placement.
+
+An unavailable20+ selector remains explicit in FontType with a scoped unresolved
+relationship. Binary, ASC and XML retain it without unassignment. Import reports
+the unresolved constraint. Resolve or clear the selection before changing its
+user-field collection or moving it to another component. Normal named edits,
+attachments, copies and clones establish selections without a rebuild.
+
+An external derivation uses two named user fields with distinguishable values
+and template text selecting20/21. Readable exports expose the ordinal selectors;
+placing the definition in a schematic exposes which user-field value is selected.
+Save copies with unavailable selectors such as42 to distinguish retained choices
+from literal text. Canonical binary/ASC/XML conversions preserve these selectors
+and independent template lines in older/current editors.
+
+STANDALONE_COMPONENT_PIN_SELECTIONS
+-----------------------------------
+A symbol pin's StringNumber is its authored label. Its Pad identity selects a
+physical pad, whose StringNumber is an independent label. Number and PadId are
+calculated pad keys. Retargeting a pin, renaming a physical pad, or reordering
+the pads does not replace the symbol pin label. Shared descriptions still belong
+to the component; these two labels belong to their respective pin and pad.
+
+An external derivation gives two XML symbol pins labels1/2 and the selected
+physical pads labels11/22. Save binary, ASC and XML copies in older/current
+editors, then repeat with the two PadId assignments swapped while leaving all
+labels unchanged. The resulting files distinguish label text from pad identity.
+
+STANDALONE_LIBRARY_OUTPUT_PROFILES
+---------------------------------
+Unavailable local targets remain explicit editable references. Standalone XML
+output allocates actual pad, drawing, hole and group keys around missing keys,
+then projects every resolved selection through those same maps. A missing
+dimension vertex retains its resolved containing drawing rather than making
+that drawing unavailable. Terminal owners and vertices keep the library XML
+positional conventions. Re-import must never resolve a missing public key to a
+different object's compacted slot.
+
+Positional LIB/ELI/ASC output cannot represent every missing public selection.
+Its detached view unassigns unavailable links or the affected dimension endpoint
+with unresolved-local-reference warnings. An incomplete electrical internal
+connection is omitted with unresolved-internal-connection. Source unresolved
+selectors, coordinates and valid opposite endpoints remain unchanged.
+Standalone pattern formats do not carry electrical internal connections;
+pattern-internal-connections warns when those component-style facts are omitted.
+Unsupported fields and unknown relationship roles remain errors, even when
+their surrounding record would otherwise be omitted. Import and export use
+the same conversion-report policy in both library families.
+
+These key rules follow the public XML resource/selector relationships and the
+positional formats' slot declarations. Readable fixtures with sparse keys, a
+missing key equal to another object's compacted position, and missing polyline
+vertices distinguish genuine identities from numeric coincidences. Repeated
+conversion and source-immutability checks cover the library's own projection;
+these checks do not imply that the canonical editor preserves malformed links.
+
+The component-library implementation is still an unpublished adapter. Its
+current internal ELI writers cover revisions 31, 32 and 33; standalone ASC uses
+revision 31. Pattern-library ASC uses revision 24. An ASC revision alone does
+not identify the receiving editor's font support: older readers require integral
+font sizes, while the 5.3 application family accepts fractional sizes without
+changing the ASC revision. The optional target_application setting selects the
+receiver's conventions. Older targets round font sizes on the detached export
+view with fractional-font-size warnings. The source model remains fractional.
+ASC omits monospacing and drawing-to-pad selections with existing warnings.
+
+Component XML output targets the declared 4.3, 4.9 and 5.3 application profiles.
+Older profiles explicitly encode an unassigned SubFolderIndex and physical
+category index; omitting those fields can produce zero instead of unassigned
+in those editors. Current standalone XML groups use Group records with Enabled
+set explicitly. These rules can be established by varying only the omitted
+field, group tag or enabled attribute in otherwise equal readable fixtures,
+reopening each through the corresponding editor and comparing saved binaries.
+
+The 5.3 editor's component XML path ignores folder organization that its binary
+and ASC paths retain. XML output keeps the folder declarations and selections
+for consumers that support them, and warns with receiver-library-folders.
+Its XML import also regenerates ordinal catalogue keys; receiver-category-keys
+is information because names and coordinated classification selections remain.
+Disposable libraries with distinguishable folders, sparse catalogue keys and
+selected classifications expose these differences across canonical conversions.
+This is a receiving-editor limitation, not a reason to erase those facts from
+the common editable model or from otherwise capable XML files.
+
+Standalone symbol text uses FontWidth for its stroke. A geometric PenWidth slot
+on text does not affect the rendered text and is absent from the owned component
+text model. Required binary/ASC slots are generated on the export view. Conversely,
+geometric symbol drawings retain PenWidth and do not acquire inactive text style.
+An external measurement uses two equal text objects at different positions,
+equal font properties and very different LineWidth values. Canonical binary
+exports expose the changed slots; equal rendered masks after translation and
+the XML font/stroke fields distinguish active font width from inactive geometry.
+This procedure uses ordinary files, editor rendering and canonical conversions.
+
+Standalone library ASC compatibility text boxes use the selected receiving
+application's layout profile. The checked 4.3/4.9 profiles use proportional vector
+row height 1.492; the checked 5.3 profile uses 1.618 at the same normalized size.
+Character advances agree in these controls. The profile changes calculated
+corners, never the authored anchor, size, spacing, content or full text angle.
+An explicit TextLayout with vector_metrics overrides that default. Generic text
+layout keeps its existing profile unless a caller supplies another measurement
+service; no source-version annotation chooses its behavior.
+
+An external derivation places two-line vector text and a distant square pad in
+one group. The pad fixes one pair of envelope extrema; the saved group centre
+then exposes the opposite text extrema. Repeat with the pad in the other corner,
+and compare one-line/multiline text, different line spacings and an angled copy.
+Canonical conversions with each receiving version distinguish glyph advances,
+row height and spacing. Derive normalized row height by removing the known stroke
+and interline advance from the measured full height. These pattern controls do
+not establish symbol-group cache refresh: component import/save can retain the
+supplied group centre even after ordinary regrouping.
+
+Pattern-library XML declares category, type and subtype resource keys as Number;
+the pattern's category/type selections use Index. Component-library resources
+use Index. The shared model keeps its named Index key in either family, and each
+writer maps it to the appropriate public spelling. Readers accept the established
+Number/Index aliases, rejecting contradictory dual declarations. A sparse-key
+category/type/subtype fixture and canonical public exports expose this mapping;
+empty catalogues alone cannot verify it.
+
+Standalone components select library folders through Folder identity. The
+SubfolderIndex compatibility accessor and each part's alias follow the selected
+folder's current position automatically. Reordering or renaming a folder does
+not change which folder the component selects. A missing imported selection has
+one explicit UnresolvedSubfolderIndex and a scoped diagnostic; it never binds a
+different folder by coincidence. Resolve Folder or assign None before editing
+that unavailable selection's collection. Detached outputs unassign unavailable
+folders with an unresolved-library-folder warning, keeping the source selection
+intact. XML receiver-specific folder omissions remain a separate capability rule.
 
 BINARY_DISPLAY_SCALE_PRECISION
 ----------------------------

@@ -1,5 +1,5 @@
 """Resolve omitted placement style declarations after XML side installation."""
-from ..assembly.pad_defaults import matches_defaults
+from ....common.pad_defaults import matches_defaults
 from ....common.conversion import warn
 
 

@@ -732,7 +732,7 @@ class References:
         self._validate_requested_values(calculated_values, plan, additions=extras.values())
         return plan
 
-    def _plan_reference_changes(self, changes, *, extra=None, structure=None, excluded_issues=()):
+    def _plan_reference_changes(self, changes, *, extra=None, structure=None, excluded_issues=(), values=None):
         replacements = structure.replacements if structure is not None else ()
         if replacements:
             changes = {**{binding.reference.uid: binding.reference for binding in replacements}, **changes}
@@ -753,6 +753,8 @@ class References:
             for binding, _, selected in structure:
                 users.add(binding.reference.uid)
                 selections[binding.reference.uid] = selected
+        if values:
+            overrides.update(values)
         with preview_references(self, changes):
             for issue in issues.difference(excluded_issues):
                 self._validate_reference_guards(issue, {})
@@ -1169,7 +1171,8 @@ class References:
                 raise ReferenceError(f'{reference.role}: an index must be an unqualified integer')
         self._validate_reference_guards(reference, {})
 
-    def _prepare_binding(self, source, target, indices, *, role, guards, preserve, structure=None):
+    def _prepare_binding(self, source, target, indices, *, role, guards, preserve, structure=None,
+                         excluded_issues=()):
         if self._binding_orders is not None and not preserve:
             raise ReferenceError('binding batches require preserve=True')
         reference = self.document._prepare_reference_binding(
@@ -1188,9 +1191,9 @@ class References:
         plan = ()
         if self.document._automatic_structure:
             plan = self._plan_reference_changes({reference.uid: reference}, extra=None if preserve else binding,
-                                                 structure=structure)
+                                                 structure=structure, excluded_issues=excluded_issues)
         elif not preserve:
-            plan = self._plan_value_overrides({}, extra=binding)
+            plan = self._plan_value_overrides({}, extra=binding, excluded_issues=excluded_issues)
         return binding, slots, plan
 
     def _register_binding(self, binding, slots, plan, *, preserve):

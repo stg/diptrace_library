@@ -15,7 +15,7 @@ def read_points(record, *, units, name='Points', kind=('Item', 'Point')):
 
 def read_groups(record, owner, *, units, container='Groups'):
     rows, ids, inactive = [], {}, []
-    for index, source in enumerate(record.rows('Groups', 'Item')):
+    for index, source in enumerate(record.rows('Groups', ('Item', 'Group'))):
         identified = source.has('Id')
         key = source.integer('Id', index)
         if source.has('Number'):
@@ -69,13 +69,25 @@ def read_category(source, owner):
     source.finish()
 
 
-def read_user_fields(record, owner, *, placed=False):
+def read_user_fields(record, owner, *, placed=False, symbol_choices=True):
     for item in record.rows('AddFields', 'AddField'):
         values = [item.text('Name', ''), item.text('Text', ''), enum_value(item.value('Type', 'Text'), ('Text', 'Link'))]
-        if owner.kind == 'Part' and not placed:
+        if owner.kind == 'Part' and not placed and symbol_choices:
             values.extend((0,)*7)
         owner.one('UserFields').add('UserField', *values)
         item.finish()
+
+
+def read_supplier(record, target=None):
+    """Read public supplier search details shared by symbols and patterns."""
+    if record is None:
+        return None
+    if target is None:
+        target = Element('Suppliers')
+    for name in ('PartNumber', 'Manufacturer', 'Pattern', 'Supplier', 'Currency'):
+        target.set_field(name, record.text(name, ''))
+    record.finish()
+    return target
 
 
 def read_path(record):
@@ -159,6 +171,64 @@ def resolve_category(owner, categories):
         subtype = next((item for item in kind.children('Subtype') if item.values[1] == row.values[3]), None)
         if subtype is not None and not row.values[1]:
             row.set_argument(1, subtype.arguments[0])
+
+
+def modernize_library_category(owner, categories):
+    """Resolve standalone XML selections by their authored catalogue labels.
+
+    XML imports can introduce new names. Existing declared resource keys remain
+    valid in our model; a newly introduced definition receives an unused key.
+    Ambiguous duplicate labels are left for explicit selection rather than guessed.
+    """
+    prefix = 'Pattern' if owner.kind == 'Pattern' else 'Component'
+    changed = []
+
+    def definition(scope, kind, label):
+        matches = [item for item in scope.children(kind) if item.values[0] == label]
+        if len(matches) > 1:
+            return None
+        if matches:
+            return matches[0]
+        used = {item.values[1] for item in scope.children(kind)}
+        key = 0
+        while key in used:
+            key += 1
+        result = scope.add(kind, label, key)
+        changed.append(result)
+        return result
+
+    def update(record, name, value):
+        if record[name] != value:
+            record[name] = value
+            changed.append(record)
+
+    label = owner[prefix+'_CategoryName']
+    if not label:
+        update(owner, prefix+'_CategoryIndex', -1)
+        category = None
+    else:
+        category = definition(categories, 'Category', label)
+        if category is not None:
+            update(owner, prefix+'_CategoryIndex', category.values[1])
+    if category is not None:
+        for row in owner.one(prefix+'_CategoryTypes').children():
+            if not row.values[0]:
+                continue
+            kind = definition(category, 'Type', row.values[0])
+            if kind is None:
+                continue
+            if row.values[2] != kind.values[1]:
+                row.set_argument(2, kind.values[1])
+                changed.append(row)
+            if row.values[1]:
+                subtype = definition(kind, 'Subtype', row.values[1])
+                if subtype is not None and row.values[3] != subtype.values[1]:
+                    row.set_argument(3, subtype.values[1])
+                    changed.append(row)
+    if changed:
+        import_notice('info', 'library-catalogue-normalization',
+            'Resolved standalone XML catalogue selections by name.', changed,
+            recoverability='classification labels and current catalogue definitions are retained')
 
 
 def read_library_header(record, kind, units):

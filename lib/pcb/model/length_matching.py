@@ -6,7 +6,7 @@ from ...common.references import ReferenceError
 from ...common.reference_edits import preview_references
 from ...common.schema import Child, Field, Record
 from .membership import component_of, get_net
-from .relationships import linked, reference_field, index_field
+from ...common.relationship_fields import linked, reference_field, index_field
 from .pad_links import pad_fields
 
 

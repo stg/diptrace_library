@@ -7,18 +7,7 @@ from ....common.asc_footprints import unpack_model, unpack_terminals, unpack_pat
 from ....common.pad_masks import mask_state
 
 
-def unpack_symbol_shape(shape):
-    """Keep current text and physical points; discard superseded point views."""
-    for name in ('Points',):
-        field = shape.child(name)
-        if field is not None:
-            field.detach()
-    if shape.child('Points_New') is None:
-        shape.add('Points_New')
-    if shape.child('TextLine') is None:
-        lines = shape.add('TextLine')
-        if shape.scalar('Name', ''):
-            lines.add('pt', shape.scalar('Name'))
+from ....common.asc_symbols import unpack_symbol_shape
 
 
 from ...model.pads import (empty_pad)

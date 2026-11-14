@@ -1,0 +1,10 @@
+"""Standalone component revisions, independent of cached symbol revisions."""
+
+BINARY_READ_VERSIONS = tuple(range(23, 34))
+BINARY_WRITE_VERSIONS = (31, 32, 33)
+BINARY_DEFAULT_WRITE_VERSION = 33
+ASCII_READ_VERSIONS = (31,)
+ASCII_WRITE_VERSIONS = (31,)
+XML_READ_FAMILIES = ((4, 3), (4, 9), (5, 3))
+APPLICATION_VERSIONS = ('4.3.0.5', '4.9.5.0', '5.3.5.1')
+XML_WRITE_VERSIONS = APPLICATION_VERSIONS

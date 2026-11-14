@@ -1,5 +1,6 @@
 """Ownership and anchor constraints for PCB dimension attachments."""
 from ...common.references import ReferenceError
+from ...common.dimension_refs import matches_local_attachment as _matches
 
 
 LOCAL_ROLES = ('pattern-dimension-1', 'pattern-dimension-2')
@@ -9,31 +10,6 @@ BOARD_VERTEX_TYPES = (0, 1, 8, 9)
 
 def _owner(source):
     return source.parent.parent if source.parent is not None else None
-
-
-def _matches(pattern, mode, anchor, target):
-    parent = target.parent
-    if parent is None:
-        return False
-    if mode == 0:
-        return target.kind == 'Pad' and parent is pattern.child('Pads')
-    if mode == 2:
-        return target.kind == 'Hole' and parent is pattern.child('Holes') and target['Enabled']
-    if mode == 1:
-        shape = target if target.kind == 'Shape' else parent.parent if parent.kind == 'Points_New' else None
-        if shape is None or shape.parent is not pattern.child('Shapes'):
-            return False
-        return (target.kind == 'pt' if shape['Type'] in (8, 9)
-                else target is shape and shape['Type'] > 0)
-    if mode == 3:
-        terminal = (target if target.kind == 'PadTerminal'
-                    else parent.parent if parent.kind == 'ShapePoints' else None)
-        pad = terminal.parent if terminal is not None else None
-        if pad is None or pad.kind != 'Pad' or pad.parent is not pattern.child('Pads'):
-            return False
-        polygon_vertex = terminal['Type'] == 3 and anchor > 0
-        return target.kind == 'pt' if polygon_vertex else target is terminal
-    return False
 
 
 def validate_reference(document, reference, target):

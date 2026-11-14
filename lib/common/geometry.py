@@ -16,6 +16,23 @@ _CARDINALS = {Decimal(str(angle)): components for angle, components in (
     (0, (1, 0)), (math.pi/2, (0, 1)), (math.pi, (-1, 0)), (3*math.pi/2, (0, -1)))}
 
 
+def stable_midpoint(first, last):
+    """Take a midpoint without repeatedly rebasing binary64 rounding residue.
+
+    Endpoint rounding contributes (ulp(a)+ulp(b))/4 to midpoint resolution.
+    Storage and projection can each round the envelope again; allow those three
+    passes when a body straddles zero. A body wholly on one side still carries
+    its displacement, including the smallest representable nonzero coordinate.
+    """
+    first, last = float(first), float(last)
+    if not math.isfinite(first) or not math.isfinite(last):
+        raise ValueError('frame bounds require finite floats')
+    total = first+last
+    midpoint = total/2 if math.isfinite(total) else first/2+last/2
+    resolution = (math.ulp(first)+math.ulp(last))*3/4
+    return 0.0 if first <= 0 <= last and abs(midpoint) <= resolution else midpoint
+
+
 def decimal_precision(values):
     """Precision for exact coordinate sums plus binary64 angular factors."""
     numbers = [value if isinstance(value, Decimal) else Decimal(str(value))

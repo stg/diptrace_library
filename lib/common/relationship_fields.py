@@ -1,7 +1,7 @@
-"""Named access to PCB identity roles, shared by its model record families."""
-from ...common.references import ReferenceError
-from ...common.schema import Field
-from ...common.reference_edits import resolve_unavailable_reference
+"""Named relationship fields over the shared document reference graph."""
+from .references import ReferenceError
+from .schema import Field
+from .reference_edits import resolve_unavailable_reference
 
 
 def linked(source, role):
@@ -18,7 +18,7 @@ def linked(source, role):
 def assign(source, role, target):
     document = source._owner()
     if document is None:
-        raise ReferenceError('attach the record to a PCB before assigning a relationship')
+        raise ReferenceError('attach the record to a document before assigning a relationship')
     current = linked(source, role)
     if current is target:
         return
@@ -45,7 +45,7 @@ def index_field(name, role, *, offset=0):
         reference_dependencies=lambda node: ((node, role, 'outgoing'),))
 
 
-def optional_reference_fields(name, index, role):
+def optional_reference_fields(name, index, role, *, offset=0):
     """A nullable identity with a derived index or one explicit unresolved index."""
     missing = 'Unresolved'+index
     dependencies = dict(reference_dependencies=lambda node: ((node, role, 'outgoing'),),
@@ -65,7 +65,7 @@ def optional_reference_fields(name, index, role):
         if node.child(missing) is not None:
             return node[missing]
         target = selected(node)
-        return target._ordinal() if target is not None else -1
+        return target._ordinal()+offset if target is not None else -1
     return {
         name: Field(name, 'reference', nullable=True, getter=selected, setter=set_selected, **dependencies),
         index: Field(index, 'integer', getter=position,

@@ -1,12 +1,39 @@
 """Typed XML text can depend on ownership when public tag names overlap."""
 import unittest
 
-from lib.common.xml import XmlDialect, loads, dumps
+from lib.common.xml import XmlDialect, loads, dumps, dumps_plan, set_attribute
+from lib.common.xml_plan import XmlBuilder
 
 
 class XmlDialectTests(unittest.TestCase):
     dialect = XmlDialect(boolean_text=frozenset({('Assembly', 'Silk'), 'Visible'}),
                          number_text=frozenset({('LineWidth', 'Silk')}))
+
+    def test_library_root_is_selected_by_the_dialect(self):
+        dialect = XmlDialect(root_tag='Library', source_type='Example')
+        document = loads('<Library Type="Example"><Name>Demo</Name></Library>', dialect=dialect)
+        restored = loads(dumps(document, dialect=dialect), dialect=dialect)
+        self.assertEqual(('Demo',), restored.one('/Library/Name').values)
+        with self.assertRaises(ValueError):
+            loads('<Source Type="Example"/>', dialect=dialect)
+        with self.assertRaises(ValueError):
+            loads('<Library Type="Other"/>', dialect=dialect)
+
+    def test_generated_plan_uses_the_same_declared_root(self):
+        dialect = XmlDialect(root_tag='Library', source_type='Example')
+        builder = XmlBuilder('Library')
+        set_attribute(builder, 'Type', 'Example')
+        builder.add('Name', 'Demo')
+        document = loads(dumps_plan(builder.freeze(), dialect=dialect), dialect=dialect)
+        self.assertEqual(('Demo',), document.one('/Library/Name').values)
+        with self.assertRaises(ValueError):
+            dumps_plan(builder.freeze())
+
+    def test_source_remains_the_default_root(self):
+        document = loads('<Source/>')
+        self.assertIn('<Source/>', dumps(document))
+        with self.assertRaises(ValueError):
+            loads('<Library/>')
 
     def test_scoped_boolean_and_numeric_text_with_the_same_name_round_trip(self):
         text = '<Source><Assembly><Silk>Y</Silk></Assembly><LineWidth><Silk>0.25</Silk></LineWidth><Visible>N</Visible></Source>'

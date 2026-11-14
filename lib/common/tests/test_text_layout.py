@@ -4,7 +4,7 @@ import unittest
 
 from lib.common.footprint_objects import new_pattern_drawing
 from lib.common.text.layout import TextLayout
-from lib.common.text.vector import TextMetrics
+from lib.common.text.vector import TextMetrics, VectorFontMetrics
 from lib.common.text.vector_layout import pattern_vector_text_bounds
 
 
@@ -21,6 +21,17 @@ def drawing(*, vector=True):
 
 
 class TextLayoutTests(unittest.TestCase):
+    def test_vector_metrics_are_injectable_without_a_platform_backend(self):
+        shape = drawing()
+        shape['TextAngle'], shape['FontSize'], shape['FontWidth'] = 0, 1.3, .5
+        shape.one('TextLine/pt[2]').detach()
+        shape.one('TextLine/pt').set_values('A')
+        metrics = VectorFontMetrics({ord('A'): 3}, line_height=2, unit_scale=1)
+        self.assertEqual(((3, 4), (6.5, 6.5)), TextLayout(vector_metrics=metrics).pattern_bounds(shape))
+        shape['Type'] = 10
+        self.assertEqual(((3, 4), (6.5, 6.5)), TextLayout(vector_metrics=metrics).symbol_bounds(shape))
+        self.assertEqual((3, 4), shape.one('Points_New/pt').values)
+
     def test_full_footprint_and_symbol_bounds_share_text_math(self):
         shape = drawing()
         before = shape.clone()

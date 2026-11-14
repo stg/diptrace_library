@@ -1,6 +1,6 @@
 """Custom-layer choices retain identity even while another layer family is used."""
 from ...common.references import ReferenceError
-from .relationships import optional_reference_fields
+from ...common.relationship_fields import optional_reference_fields
 
 
 ROLE = 'non-signal-layer'

@@ -1,7 +1,7 @@
 """Placed-pad layer overrides and teardrop settings."""
 from ...common.schema import Child, Field, Record
 from ...common.references import ReferenceError
-from .relationships import reference_field, index_field
+from ...common.relationship_fields import reference_field, index_field
 
 
 LAYER_FIELDS = {'Layer': reference_field('Layer', 'copper-layer'),

@@ -48,18 +48,18 @@ def world_pads(document):
 
 class FootprintFrameTests(unittest.TestCase):
     def test_computed_center_does_not_chase_endpoint_roundoff(self):
-        from lib.pcb.formats.placement_frames import _center_coordinate
+        from lib.common.geometry import stable_midpoint
         for scale in (2.0**-100, 1.0, 2.0**100):
             with self.subTest(scale=scale):
-                self.assertEqual(_center_coordinate(-scale, math.nextafter(scale, math.inf)), 0)
+                self.assertEqual(stable_midpoint(-scale, math.nextafter(scale, math.inf)), 0)
                 second_rounding = math.nextafter(math.nextafter(scale, math.inf), math.inf)
-                self.assertEqual(_center_coordinate(-scale, second_rounding), 0)
+                self.assertEqual(stable_midpoint(-scale, second_rounding), 0)
                 shift = 4*math.ulp(scale)
-                self.assertEqual(_center_coordinate(-scale+shift, scale+shift), shift)
+                self.assertEqual(stable_midpoint(-scale+shift, scale+shift), shift)
         smallest = math.ulp(0.0)
-        self.assertEqual(_center_coordinate(smallest, smallest), smallest)
-        self.assertEqual(_center_coordinate(-smallest, -smallest), -smallest)
-        self.assertEqual(_center_coordinate(1e308, 1e308), 1e308)
+        self.assertEqual(stable_midpoint(smallest, smallest), smallest)
+        self.assertEqual(stable_midpoint(-smallest, -smallest), -smallest)
+        self.assertEqual(stable_midpoint(1e308, 1e308), 1e308)
 
     def test_local_reframing_keeps_board_geometry_and_reference_identity(self):
         document = plain()

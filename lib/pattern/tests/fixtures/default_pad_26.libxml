@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Library Type="DipTrace-PatternLibrary" Version="5.3.5.1" Name="Default pad scalars" Hint="Synthetic control" UID32="323162500" Units="inch">
+<PadStyles>
+<PadStyle Name="PadT0" Type="Through" HoleType="Round" Hole="0.015748">
+<MainStack Shape="Rectangle" Width="0.07874" Height="0.03937" XOff="0.008268" YOff="-0.005118" Corner="37" />
+</PadStyle>
+</PadStyles>
+<Patterns>
+<Pattern Id="0" Mounting="None" Width="0.07874" Height="0.03937" Orientation="0" LockTypeChange="N" Type="Free" Float1="0" Float2="0" Float3="0" Int1="0" Int2="0">
+<Name>Example</Name>
+<Origin X="-0.008268" Y="0.005118" Cross="Y" Circle="Y" Common="Hide" Courtyard="Show" />
+<DefPad Style="PadT0" />
+<Pads>
+<Pad Id="1" Style="PadT0" DefStyle="Y" X="-0.008268" Y="0.005118" Angle="0" Locked="N" Side="Top">
+<Number>1</Number>
+</Pad>
+</Pads>
+<Model3D Mirror="N" NoSearch="N" Units="Wings" IPC_XOff="-0.008268" IPC_YOff="0.005118" AutoHeight="0" AutoColor="4934475" Type="File" KeepPins="N">
+<Rotate X="0" Y="0" Z="0" />
+<Offset X="0" Y="0" Z="0" />
+<Zoom X="1" Y="1" Z="1" />
+</Model3D>
+</Pattern>
+</Patterns>
+</Library>

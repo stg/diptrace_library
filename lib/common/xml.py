@@ -28,6 +28,7 @@ class XmlDialect:
     boolean_attributes: frozenset[str | tuple[str, str]] = field(default_factory=frozenset)
     boolean_text: frozenset[str | tuple[str, str]] = field(default_factory=frozenset)
     number_text: frozenset[tuple[str, str]] = field(default_factory=frozenset)
+    root_tag: str = 'Source'
 
 
 DEFAULT_DIALECT = XmlDialect()
@@ -156,9 +157,10 @@ def loads(data, *, source=None, dialect=DEFAULT_DIALECT, document_factory=Docume
         parser.Parse(data, True)
     except expat.ExpatError as error:
         raise ValueError(f'invalid {dialect.format.upper()} at line {error.lineno}, column {error.offset}: {error}') from error
-    root = document.root.child('Source')
+    root = document.root.child(dialect.root_tag)
     if root is None or dialect.source_type is not None and root.scalar('Type') != dialect.source_type:
-        raise ValueError(f'expected Source Type="{dialect.source_type}"' if dialect.source_type else 'expected Source element')
+        raise ValueError(f'expected {dialect.root_tag} Type="{dialect.source_type}"'
+                         if dialect.source_type else f'expected {dialect.root_tag} element')
     for node in document.root.walk(include_self=True):
         node._dirty = node._reordered = False
     document.metadata.update(source_format=dialect.format, source_path=source,
@@ -255,14 +257,14 @@ def dumps(document, *, newline='\n', dialect=DEFAULT_DIALECT, canonical_numbers=
     """Reconstruct XML from current typed data; no source-text replay."""
     if newline not in ('\n', '\r\n'):
         raise ValueError('XML newline must be LF or CRLF')
-    root = document.root.child('Source')
+    root = document.root.child(dialect.root_tag)
     if root is None or dialect.source_type is not None and root.scalar('Type') != dialect.source_type:
-        raise ValueError(f'{dialect.format.upper()} output requires a Source element'
+        raise ValueError(f'{dialect.format.upper()} output requires a {dialect.root_tag} element'
                          + (f' with Type="{dialect.source_type}"' if dialect.source_type else ''))
     elements = [node for node in document.root.children()
                 if syntax_role(node) not in ('comment', 'instruction')]
     if elements != [root] or any(str(value.value).strip() for value in document.root.arguments):
-        raise ValueError('XML output requires one Source element and no text outside it')
+        raise ValueError(f'XML output requires one {dialect.root_tag} element and no text outside it')
     document._synchronize(force=False)
     return '<?xml version="1.0" encoding="utf-8"?>'+newline+newline.join(
         _render(node, newline, dialect, canonical_numbers) for node in document.root.children())+newline
@@ -322,11 +324,11 @@ def render_plan(plan, *, newline='\n', dialect=DEFAULT_DIALECT, canonical_number
 
 
 def dumps_plan(source, *, newline='\n', dialect=DEFAULT_DIALECT, canonical_numbers=False):
-    """Emit a complete generated document from a Source plan."""
-    if (not isinstance(source, XmlPlan) or source.kind != 'Source'
+    """Emit a complete generated document from its declared root plan."""
+    if (not isinstance(source, XmlPlan) or source.kind != dialect.root_tag
             or dialect.source_type is not None
             and getattr(dict(source.attributes).get('Type'), 'value', None) != dialect.source_type):
-        raise ValueError(f'{dialect.format.upper()} output requires a Source element'
+        raise ValueError(f'{dialect.format.upper()} output requires a {dialect.root_tag} element'
                          + (f' with Type="{dialect.source_type}"' if dialect.source_type else ''))
     return '<?xml version="1.0" encoding="utf-8"?>'+newline+render_plan(
         source, newline=newline, dialect=dialect, canonical_numbers=canonical_numbers)+newline

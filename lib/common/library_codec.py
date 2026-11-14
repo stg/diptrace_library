@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .model import Element, SourceSpan
-from .catalog_codec import read_category_types, read_possible_names, write_category_types
-from .symbol_codec import read_cached_pins, write_cached_pins
+from .catalog_codec import read_categories, read_category_types, read_possible_names, write_category_types
+from .symbol_codec import (read_cached_pins, write_cached_pins,
+                           read_symbol_parameters, write_symbol_parameters)
 
 
 @dataclass(frozen=True)
@@ -48,14 +49,7 @@ def read_definition(r, slot, variant, codecs):
     start = r.pos
     definition = r.add(slot, "Definition", variant)
     part = r.add(definition, "Part")
-    for kind, name in [("boolean", "Enabled"), ("integer", "PartType"),
-                       ("text", "PartName"), ("integer", "ShowNumbers"),
-                       ("integer", "Type"), ("integer", "Number1"), ("integer", "Number2"),
-                       ("number", "Width"), ("number", "Height")]:
-        r.field_into(part, name, kind)
-    part.set_values(r.argument('text'), r.argument('text'))
-    r.field_into(part, "Value", "text")
-    r.field_into(part, "LockProperties", "boolean")
+    read_symbol_parameters(r, part)
     pattern = r.add(definition, "Pattern")
     connections = r.add(pattern, "InternalConnections")
     for _ in range(r.count("cached internal connections")):
@@ -124,13 +118,7 @@ def read_library_cache(r, owner, codecs):
     for _ in range(count):
         r.add_into(links, "Link", r.argument('integer'))
     cache = r.add(owner, "CacheLib")
-    categories = r.add(cache, "Categories")
-    for _ in range(r.count("cache categories")):
-        category = r.add(categories, "Category", r.argument('text'), r.argument('integer'))
-        for _ in range(r.count("cache category types")):
-            kind = r.add(category, "Type", r.argument('text'), r.argument('integer'))
-            for _ in range(r.count("cache subtypes")):
-                r.add_into(kind, "Subtype", r.argument('text'), r.argument('integer'))
+    read_categories(r, cache)
     folders = r.add(cache, "Subfolders")
     for _ in range(r.count("cache subfolders")):
         r.add_into(folders, "Folder", r.argument('text'))
@@ -148,13 +136,7 @@ def read_library_cache(r, owner, codecs):
 def write_definition(writer, definition, codecs):
     """Shared definition envelope with family-owned physical/symbol codecs."""
     part, pattern = definition.one('Part'), definition.one('Pattern')
-    writer.field(part, 'Enabled', 'boolean')
-    writer.field(part, 'PartType', 'integer')
-    writer.field(part, 'PartName', 'text')
-    writer.fields(part, 'integer', 'ShowNumbers Type Number1 Number2')
-    writer.fields(part, 'number', 'Width Height')
-    writer.fields(part, 'text', 'Name RefDes Value')
-    writer.field(part, 'LockProperties', 'boolean')
+    write_symbol_parameters(writer, part)
     writer.rows(pattern.child('InternalConnections'), 'IntCon', 'integer integer')
     codecs.pattern_parameters(writer, pattern)
     writer.fields(part, 'number', 'Origin_X Origin_Y')

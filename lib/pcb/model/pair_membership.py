@@ -3,7 +3,7 @@ from dataclasses import replace
 
 from ...common.reference_edits import preview_references
 from ...common.references import ReferenceError
-from .relationships import linked
+from ...common.relationship_fields import linked
 from .routing import ancestor, point_trace
 from .pair_routing import center_segment, segment_trace, SEGMENT_TRACES
 

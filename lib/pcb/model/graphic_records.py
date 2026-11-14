@@ -5,7 +5,7 @@ from ...common.schema import Child, Field, Record, with_units
 from ...common.measurements import nonnegative_length
 from ...common.drawing_records import POINT, TEXT_LINE, POINTS, TEXT_LINES
 from ...common import footprint_records
-from .relationships import reference_field, index_field, linked
+from ...common.relationship_fields import reference_field, index_field, linked
 from . import pour_regions
 from .non_signal_layers import SELECTION_FIELDS
 

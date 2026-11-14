@@ -1,5 +1,7 @@
 """Text restrictions shared by ASC document-family writers."""
 import codecs
+from decimal import Decimal
+import math
 
 from .conversion import info, warn
 from .model import Value
@@ -73,3 +75,16 @@ def project_text(document, *, encoding='cp1252', report=None,
         warn(report, 'asc-reader-text-normalization', 'asc',
              'the receiving application replaces literal ! with spaces in these text fields', receiver_text,
              recoverability='literal ! remains in the ASC file and this library preserves it; binary/XML formats avoid this receiver conversion')
+
+
+def number_text(value: int | float | Decimal) -> str:
+    """Number text."""
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("ASC numbers must be finite")
+    scaled = round(number * 10_000)
+    whole, fraction = divmod(abs(scaled), 10_000)
+    rendered = str(whole)
+    if fraction:
+        rendered += '.' + f'{fraction:04d}'.rstrip('0')
+    return ('-' if scaled < 0 else '') + rendered

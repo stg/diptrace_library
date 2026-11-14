@@ -4,7 +4,9 @@ This guide takes a schematic through a small read, inspect, edit and save
 workflow. You can start with a binary DCH file or an ASC/DCHXML export; the
 editing code is the same for all three. The shared workflow also applies to PCB
 layouts; use [the PCB guide](PCB_GUIDE.md) for their collections, relationships
-and constructors. This tutorial uses a schematic as its concrete example.
+and constructors. For component and pattern definitions, use
+[the library guide](LIBRARIES.md). This tutorial uses a schematic as its
+concrete example.
 
 If you want a command-line converter rather than a Python API, use the
 [format converter](../apps/diptrace_convert/README.md).

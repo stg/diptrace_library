@@ -5,10 +5,10 @@ document family. Documents, records, fields, ownership, queries and identity-bas
 relationships use the common model. A family defines its record types, units,
 relationships and format adapters.
 
-Schematics and PCB layouts use this infrastructure with their own records and
+All four families use this infrastructure with their own records and
 constraints. The first part of this guide describes the common model; the
-[schematic](#schematic-documents) and [PCB](#pcb-documents) sections describe each
-family's organization. Component and pattern libraries remain experimental.
+family sections describe schematic documents, PCB layouts, component libraries
+and pattern libraries.
 
 - [Documents and records](#documents-and-records)
 - [Field access](#field-access)
@@ -18,6 +18,8 @@ family's organization. Component and pattern libraries remain experimental.
 - [Import and export](#import-and-export)
 - [Schematic documents](#schematic-documents)
 - [PCB documents](#pcb-documents)
+- [Component libraries](#component-libraries)
+- [Pattern libraries](#pattern-libraries)
 
 ## Documents and records
 
@@ -341,3 +343,40 @@ These data operations do not route traces, follow moved components, recalculate
 pour fill or rerun design checks. Supplied results remain explicit data; missing
 calculated geometry remains absent. Export adapts unavailable results to its
 destination without changing the design being edited.
+
+## Component libraries
+
+ELI, component ASC and ELIXML import into the same model with
+`representation == "component"`. `/Library` owns Categories, Subfolders and
+Components. Each Component owns shared descriptions, Parts, optional physical
+Pattern, UserFields and Suppliers. A Part owns its symbol Pins, Shapes, Groups
+and part-specific settings. Shared description access through a part refers to
+its component's value.
+
+Pins select physical pads by identity. Their authored StringNumber labels stay
+independent of that selection. Folder and catalogue selections also use managed
+identities. A definition's RefDes is a default for later placement, so placed
+RefDes uniqueness rules do not apply to library entries.
+
+Use [the library guide](LIBRARIES.md) for workflows and
+[COMPONENT.md](COMPONENT.md) for every field and ownership rule. These definitions
+have no placed net membership or routed geometry.
+
+## Pattern libraries
+
+LIB, pattern ASC and LIBXML import into the same model with
+`representation == "pattern"`. `/Library` owns Categories and Patterns. A Pattern
+owns pads, drawings, holes, dimensions, groups, user fields and a 3D attachment.
+Physical records and local attachment rules are shared with component patterns
+where their constraints agree.
+
+Group membership is stored; group indices and geometry-dependent centres are
+calculated. Default pad settings and template parameters are editable authoring
+data. Changing those parameters does not generate a new footprint. Electrical
+internal connections belong to component definitions; standalone pattern
+formats omit them with a warning if present in the model.
+
+Symbols and footprints have local coordinate frames. Import can normalize a
+frame while updating its origins, preserving the same definition. Shared lengths
+use three units per millimetre; angle domains remain explicit per field.
+See [the library guide](LIBRARIES.md) and [PATTERN.md](PATTERN.md).

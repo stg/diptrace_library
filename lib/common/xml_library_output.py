@@ -5,6 +5,18 @@ from .model import Element
 from .conversion import warn
 
 
+def project_library_supplier(source, target, *, destination, report=None):
+    """The standalone library supplier subset and its unrepresentable details."""
+    if source is None:
+        return
+    result = target.add('Suppliers')
+    for name in ('PartNumber', 'Manufacturer', 'Pattern', 'Supplier', 'Currency'):
+        field(result, name, source.get(name, ''))
+    if source.get('SourceLocator') or source.get('MainSupplier') or source.select('Prices/Quote'):
+        warn(report, 'supplier-details', destination,
+             'XML omits supplier source, primary choice and price breaks', (source,))
+
+
 def report_slot_omissions(slots, *, destination, report=None):
     """Report metadata with no XML definition that can own it.
 

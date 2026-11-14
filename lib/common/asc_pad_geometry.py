@@ -6,7 +6,7 @@ and legacy dimension rules here must not be used as physical design bounds.
 """
 from dataclasses import dataclass
 import math
-from ....common.geometry import (polar_rotate)
+from .geometry import polar_rotate
 
 
 @dataclass(frozen=True)
